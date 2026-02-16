@@ -166,7 +166,7 @@ if show_fig:
 #####################################
 #####################################
 
-tof_weights = np.zeros(img_dim[direction])
+tof_plane_weights = np.zeros(img_dim[direction]) # just for visualization, not really needed for the integral calculation
 tof_sum = 0.0
 tof_integral = 0.0
 
@@ -184,7 +184,7 @@ for i in range(istart, iend + 1):
         #interp_img_val = bilinear_interp_fixed0(img, n0, n1, n2, i0, i1_f, i2_f);
         interp_img_val = 2.3
         tof_integral += tof_weight * interp_img_val
-        tof_weights[i] = tof_weight
+        tof_plane_weights[i] = tof_weight # just for visualization, not really needed for the integral calculation
 
     it_f += at
     i1_f += a1
@@ -203,8 +203,8 @@ print(f"TOF integral before corr: {tof_integral}, after corr: {tof_integral_corr
 
 if show_fig:
     fig2, ax2 = plt.subplots(1,2,figsize=(10, 5), layout="constrained")
-    ax2[0].plot(tof_weights, "o-")
-    ax2[0].plot(tof_weights * tof_weight_sum_corr_factor, ".-")
+    ax2[0].plot(tof_plane_weights, "o-")
+    ax2[0].plot(tof_plane_weights * tof_weight_sum_corr_factor, ".-")
     ax2[0].axvline(istart, color="g", linestyle="--")
     ax2[0].axvline(iend, color="r", linestyle="--")
     ax2[0].set_xlabel("Plane index")
