@@ -79,3 +79,8 @@ template void handle_cuda_input_array<unsigned char>(unsigned char *, unsigned c
 
 template void handle_cuda_input_array<bool>(const bool *, bool **, size_t, bool &, int, cudaMemoryAdvise);
 template void handle_cuda_input_array<bool>(bool *, bool **, size_t, bool &, int, cudaMemoryAdvise);
+
+template void handle_cuda_input_array<short>(const short *, short **, size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<short>(short *, short **, size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<unsigned short>(const unsigned short *, unsigned short **, size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<unsigned short>(unsigned short *, unsigned short **, size_t, bool &, int, cudaMemoryAdvise);

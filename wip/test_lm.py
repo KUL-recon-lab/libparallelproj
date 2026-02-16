@@ -167,7 +167,7 @@ if show_fig:
 #####################################
 
 tof_plane_weights = np.zeros(img_dim[direction]) # just for visualization, not really needed for the integral calculation
-tof_sum = 0.0
+tof_plane_sum = 0.0
 tof_integral = 0.0
 
 for i in range(istart, iend + 1):
@@ -176,25 +176,24 @@ for i in range(istart, iend + 1):
     # we have to calculate the TOF weight for all planes, to get the normalization right,
     # but we only add the contribution to the integral for planes that are inside the image
 
-    dist = abs(it_f - it) * tofbin_width
-    tof_weight = effective_tof_kernel(dist, sigma_tof, tofbin_width)
-    tof_sum += tof_weight
+    tof_plane_weight = effective_tof_kernel(abs(it_f - it) * tofbin_width, sigma_tof, tofbin_width)
+    tof_plane_sum += tof_plane_weight
 
     if i >= 0 and i < img_dim[direction]:
         #interp_img_val = bilinear_interp_fixed0(img, n0, n1, n2, i0, i1_f, i2_f);
         interp_img_val = 2.3
-        tof_integral += tof_weight * interp_img_val
-        tof_plane_weights[i] = tof_weight # just for visualization, not really needed for the integral calculation
+        tof_integral += tof_plane_weight * interp_img_val
+        tof_plane_weights[i] = tof_plane_weight # just for visualization, not really needed for the integral calculation
 
     it_f += at
     i1_f += a1
     i2_f += a2
 
 expected_tof_sum = (tofbin_width / (cf*voxsize[direction]))
-tof_weight_sum_corr_factor = expected_tof_sum  / tof_sum
+tof_weight_sum_corr_factor = expected_tof_sum  / tof_plane_sum
 tof_integral_corr = tof_integral * tof_weight_sum_corr_factor
 
-print("Sum of unnorm. TOF weights:", tof_sum)
+print("Sum of unnorm. TOF weights:", tof_plane_sum)
 print("Expected approx. sum:", tofbin_width / (cf*voxsize[direction]))
 print(f"TOF weight sum corr factor:", tof_weight_sum_corr_factor)
 print(f"TOF integral before corr: {tof_integral}, after corr: {tof_integral_corr}")

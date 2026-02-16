@@ -22,7 +22,7 @@ else()
 endif()
 
 # Add an option to build the Python interface
-option(BUILD_PYTHON "Build the Python interface using pybind11" OFF)
+option(BUILD_PYTHON "Build the Python interface using nanobind" OFF)
 
 # Add an option to build the tests
 option(BUILD_TESTS "Build the tests" ON)
@@ -103,6 +103,7 @@ if(USE_CUDA)
         src/joseph3d_back.cu
         src/joseph3d_tof_sino_fwd.cu
         src/joseph3d_tof_sino_back.cu
+        src/joseph3d_tof_lm_fwd.cu
         src/cuda_utils.cu
     )
 
@@ -123,6 +124,7 @@ else()
         src/joseph3d_back.cpp
         src/joseph3d_tof_sino_fwd.cpp
         src/joseph3d_tof_sino_back.cpp
+        src/joseph3d_tof_lm_fwd.cpp
     )
 
     find_package(OpenMP REQUIRED)
