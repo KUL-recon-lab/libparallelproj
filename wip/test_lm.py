@@ -16,8 +16,8 @@ def effective_tof_kernel(dx: float, sigma_t: float, tbin_width: float) -> float:
 img_dim = (280, 270, 280)
 voxsize = (1, 1, 1)
 
-xstart = (-300, 0, 0)
-xend = (300, 0, 0)
+xstart = (300, 0, 0)
+xend = (-300, 0, 0)
 
 sigma_tof: float = 24.0
 tofbin_width: float = 0.25*sigma_tof
@@ -38,7 +38,7 @@ if num_tofbins is None:
     )
     num_tofbins = math.ceil(ray_length / tofbin_width)
 
-it = int(0.8*num_tofbins)
+it = int(0.3*num_tofbins)
 
 n0, n1, n2 = img_dim
 
@@ -191,13 +191,12 @@ for i in range(istart, iend + 1):
     i2_f += a2
 
 expected_tof_sum = (tofbin_width / (cf*voxsize[direction]))
-tof_weight_corr_factor = expected_tof_sum  / tof_sum
-#tof_weights_corr = tof_weights * tof_weight_corr_factor
-tof_integral_corr = tof_integral * tof_weight_corr_factor
+tof_weight_sum_corr_factor = expected_tof_sum  / tof_sum
+tof_integral_corr = tof_integral * tof_weight_sum_corr_factor
 
 print("Sum of unnorm. TOF weights:", tof_sum)
 print("Expected approx. sum:", tofbin_width / (cf*voxsize[direction]))
-print(f"TOF corr factor:", tof_weight_corr_factor)
+print(f"TOF weight sum corr factor:", tof_weight_sum_corr_factor)
 print(f"TOF integral before corr: {tof_integral}, after corr: {tof_integral_corr}")
 
 
@@ -205,8 +204,8 @@ print(f"TOF integral before corr: {tof_integral}, after corr: {tof_integral_corr
 if show_fig:
     fig2, ax2 = plt.subplots(1,2,figsize=(10, 5), layout="constrained")
     ax2[0].plot(tof_weights, "o-")
-    ax2[0].plot(tof_weights * tof_weight_corr_factor, ".-")
-    ax2[0].axvline(istart, color="r", linestyle="--")
+    ax2[0].plot(tof_weights * tof_weight_sum_corr_factor, ".-")
+    ax2[0].axvline(istart, color="g", linestyle="--")
     ax2[0].axvline(iend, color="r", linestyle="--")
     ax2[0].set_xlabel("Plane index")
     ax2[0].set_ylabel(f"TOF weight w.r.t TOF bin {it}/{num_tofbins}")
