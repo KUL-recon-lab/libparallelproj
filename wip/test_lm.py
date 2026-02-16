@@ -16,21 +16,17 @@ def effective_tof_kernel(dx: float, sigma_t: float, tbin_width: float) -> float:
 img_dim = (280, 270, 280)
 voxsize = (1, 1, 1)
 
-xstart = (300, 0, 0)
-xend = (-300, 0, 0)
+xstart = (-300, 0, 0)
+xend = (300, 0, 0)
 
-tofbin_width: float = 2.0
-sigma_tof: float = 12.0
+sigma_tof: float = 24.0
+tofbin_width: float = 0.25*sigma_tof
 num_sigmas: float = 3.0
 tof_center_offset: float = 0.0
 
-norm_tof_weights: bool = True
 show_fig = True
 
 num_tofbins: int | None = None
-
-# unsigned TOF bin of LM event
-it = 141
 
 ###########################################
 
@@ -42,6 +38,7 @@ if num_tofbins is None:
     )
     num_tofbins = math.ceil(ray_length / tofbin_width)
 
+it = int(0.8*num_tofbins)
 
 n0, n1, n2 = img_dim
 
@@ -121,6 +118,8 @@ bt: float = (img_origin[direction] - tof_origin) / tof_slope
 istart = math.floor(((it - sign*num_sigmas*sigma_tof/tofbin_width) - bt) / at)
 iend = math.floor(((it + sign*num_sigmas*sigma_tof/tofbin_width) - bt) / at)
 
+print(f"istart: {istart}, iend: {iend}")
+
 i1_f = istart * a1 + b1
 i2_f = istart * a2 + b2
 
@@ -168,27 +167,55 @@ if show_fig:
 #####################################
 
 tof_weights = np.zeros(img_dim[direction])
+tof_sum = 0.0
+tof_integral = 0.0
 
 for i in range(istart, iend + 1):
-    # print(f"{i0:03}, {i1_f:7.2f}, {i2_f:7.2f}, {x0_f:7.2f}, {x1_f:7.2f}, {x2_f:7.2f}")
-    # p[i] += bilinear_interp_fixed0(img, n0, n1, n2, i0, i1_f, i2_f);
+    # we sum over all planes that are within num_sigmas*sigma_tof of the current TOF bin center
+    # it can be that part of those planes are outside the image
+    # we have to calculate the TOF weight for all planes, to get the normalization right,
+    # but we only add the contribution to the integral for planes that are inside the image
 
     dist = abs(it_f - it) * tofbin_width
-    tof_weights[i] = effective_tof_kernel(dist, sigma_tof, tofbin_width)
-    #print(i, it_f, tof_weights[i])
+    tof_weight = effective_tof_kernel(dist, sigma_tof, tofbin_width)
+    tof_sum += tof_weight
 
+    if i >= 0 and i < img_dim[direction]:
+        #interp_img_val = bilinear_interp_fixed0(img, n0, n1, n2, i0, i1_f, i2_f);
+        interp_img_val = 2.3
+        tof_integral += tof_weight * interp_img_val
+        tof_weights[i] = tof_weight
+
+    it_f += at
     i1_f += a1
     i2_f += a2
-    it_f += at
 
-print("Sum of unnorm. TOF weights:", np.sum(tof_weights))
+expected_tof_sum = (tofbin_width / (cf*voxsize[direction]))
+tof_weight_corr_factor = expected_tof_sum  / tof_sum
+#tof_weights_corr = tof_weights * tof_weight_corr_factor
+tof_integral_corr = tof_integral * tof_weight_corr_factor
+
+print("Sum of unnorm. TOF weights:", tof_sum)
 print("Expected approx. sum:", tofbin_width / (cf*voxsize[direction]))
+print(f"TOF corr factor:", tof_weight_corr_factor)
+print(f"TOF integral before corr: {tof_integral}, after corr: {tof_integral_corr}")
+
 
 
 if show_fig:
-    fig2, ax2 = plt.subplots(figsize=(8, 6), layout="constrained")
-    ax2.plot(tof_weights, "o-")
-    ax2.axvline(istart, color="r", linestyle="--")
-    ax2.axvline(iend, color="r", linestyle="--")
+    fig2, ax2 = plt.subplots(1,2,figsize=(10, 5), layout="constrained")
+    ax2[0].plot(tof_weights, "o-")
+    ax2[0].plot(tof_weights * tof_weight_corr_factor, ".-")
+    ax2[0].axvline(istart, color="r", linestyle="--")
+    ax2[0].axvline(iend, color="r", linestyle="--")
+    ax2[0].set_xlabel("Plane index")
+    ax2[0].set_ylabel(f"TOF weight w.r.t TOF bin {it}/{num_tofbins}")
+
+    # plot the TOF kernel
+    dist = tofbin_width*(np.arange(num_tofbins) - num_tofbins//2 + 0.5)
+    y = effective_tof_kernel(dist, sigma_tof, tofbin_width)
+    ax2[1].plot(dist / tofbin_width, y, "o-")
+    ax2[1].set_xlabel("TOF bin")
+    ax2[1].set_ylabel("Effective TOF kernel value")
 
     plt.show()
