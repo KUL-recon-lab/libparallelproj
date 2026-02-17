@@ -9,5 +9,19 @@ The library implements the Joseph 3D ray-driven projection algorithm with suppor
 - **TOF sinogram projections**: Time-Of-Flight sinogram-based projections
 - **TOF listmode projections**: Time-Of-Flight listmode (event-by-event) projections
 
-.. doxygenfile:: parallelproj.h
-   :project: parallelproj
+API Documentation
+=================
+
+.. toctree::
+   :maxdepth: 2
+
+   python_api
+   c_api
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
+

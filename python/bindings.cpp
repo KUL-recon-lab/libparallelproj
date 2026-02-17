@@ -598,13 +598,64 @@ NB_MODULE(parallelproj_backend, m)
         "xstart"_a.noconvert(), "xend"_a.noconvert(), "img"_a.noconvert(),
         "img_origin"_a.noconvert(), "voxsize"_a.noconvert(), "p"_a.noconvert(),
         "device_id"_a = 0, "threadsperblock"_a = 64,
-        "Missing DOCSTRING for joseph3d_fwd");
+        R"pbdoc(
+        Forward projection using the Joseph 3D algorithm.
+
+        Parameters
+        ----------
+        xstart : ndarray
+            Array of shape (..., 3) with coordinates of LOR start points.
+        xend : ndarray
+            Array of shape (..., 3) with coordinates of LOR end points.
+        img : ndarray
+            3D image array of shape (n0, n1, n2) for forward projection.
+        img_origin : ndarray
+            Array of shape (3,) with coordinates of [0,0,0] voxel center.
+        voxsize : ndarray
+            Array of shape (3,) with voxel sizes.
+        p : ndarray
+            Output array for projection results, shape must match xstart.shape[:-1].
+        device_id : int, optional
+            Device ID for computation (default: 0).
+        threadsperblock : int, optional
+            Number of threads per block for GPU (default: 64).
+
+        Notes
+        -----
+        All arrays must be on the same device (CPU or GPU) with matching device IDs.
+        )pbdoc");
 
   m.def("joseph3d_back", &joseph3d_back_py,
         "xstart"_a.noconvert(), "xend"_a.noconvert(), "img"_a.noconvert(),
         "img_origin"_a.noconvert(), "voxsize"_a.noconvert(), "p"_a.noconvert(),
         "device_id"_a = 0, "threadsperblock"_a = 64,
-        "Missing DOCSTRING for joseph3d_back");
+        R"pbdoc(
+        Backprojection using the Joseph 3D algorithm.
+
+        Parameters
+        ----------
+        xstart : ndarray
+            Array of shape (..., 3) with coordinates of LOR start points.
+        xend : ndarray
+            Array of shape (..., 3) with coordinates of LOR end points.
+        img : ndarray
+            3D image array of shape (n0, n1, n2) to accumulate backprojection into.
+        img_origin : ndarray
+            Array of shape (3,) with coordinates of [0,0,0] voxel center.
+        voxsize : ndarray
+            Array of shape (3,) with voxel sizes.
+        p : ndarray
+            Input values to backproject, shape must match xstart.shape[:-1].
+        device_id : int, optional
+            Device ID for computation (default: 0).
+        threadsperblock : int, optional
+            Number of threads per block for GPU (default: 64).
+
+        Notes
+        -----
+        Values are accumulated into the existing img array (not overwritten).
+        All arrays must be on the same device (CPU or GPU) with matching device IDs.
+        )pbdoc");
 
   m.def("joseph3d_tof_sino_fwd", &joseph3d_tof_sino_fwd_py,
         "xstart"_a.noconvert(), "xend"_a.noconvert(), "img"_a.noconvert(),
@@ -615,7 +666,38 @@ NB_MODULE(parallelproj_backend, m)
         "n_tofbins"_a,
         "n_sigmas"_a = 3.0f,
         "device_id"_a = 0, "threadsperblock"_a = 64,
-        "Missing DOCSTRING for joseph3d_tof_sino_fwd");
+        R"pbdoc(
+        TOF sinogram forward projection using the Joseph 3D algorithm.
+
+        Parameters
+        ----------
+        xstart : ndarray
+            Array of shape (..., 3) with coordinates of LOR start points.
+        xend : ndarray
+            Array of shape (..., 3) with coordinates of LOR end points.
+        img : ndarray
+            3D image array of shape (n0, n1, n2) for forward projection.
+        img_origin : ndarray
+            Array of shape (3,) with coordinates of [0,0,0] voxel center.
+        voxsize : ndarray
+            Array of shape (3,) with voxel sizes.
+        p : ndarray
+            Output array for TOF sinogram, shape (..., n_tofbins).
+        tofbin_width : float
+            Width of TOF bins in spatial units.
+        sigma_tof : ndarray
+            TOF resolution (sigma) in spatial units. Shape (1,) or (...,) for LOR-dependent.
+        tofcenter_offset : ndarray
+            Offset of central TOF bin from LOR midpoint. Shape (1,) or (...,).
+        n_tofbins : int
+            Number of TOF bins.
+        n_sigmas : float, optional
+            Number of sigmas for TOF kernel calculation (default: 3.0).
+        device_id : int, optional
+            Device ID for computation (default: 0).
+        threadsperblock : int, optional
+            Number of threads per block for GPU (default: 64).
+        )pbdoc");
 
   m.def("joseph3d_tof_sino_back", &joseph3d_tof_back_fwd_py,
         "xstart"_a.noconvert(), "xend"_a.noconvert(), "img"_a.noconvert(),
@@ -626,7 +708,42 @@ NB_MODULE(parallelproj_backend, m)
         "n_tofbins"_a,
         "n_sigmas"_a = 3.0f,
         "device_id"_a = 0, "threadsperblock"_a = 64,
-        "Missing DOCSTRING for joseph3d_tof_sino_back");
+        R"pbdoc(
+        TOF sinogram backprojection using the Joseph 3D algorithm.
+
+        Parameters
+        ----------
+        xstart : ndarray
+            Array of shape (..., 3) with coordinates of LOR start points.
+        xend : ndarray
+            Array of shape (..., 3) with coordinates of LOR end points.
+        img : ndarray
+            3D image array of shape (n0, n1, n2) to accumulate backprojection into.
+        img_origin : ndarray
+            Array of shape (3,) with coordinates of [0,0,0] voxel center.
+        voxsize : ndarray
+            Array of shape (3,) with voxel sizes.
+        p : ndarray
+            Input TOF sinogram to backproject, shape (..., n_tofbins).
+        tofbin_width : float
+            Width of TOF bins in spatial units.
+        sigma_tof : ndarray
+            TOF resolution (sigma) in spatial units. Shape (1,) or (...,) for LOR-dependent.
+        tofcenter_offset : ndarray
+            Offset of central TOF bin from LOR midpoint. Shape (1,) or (...,).
+        n_tofbins : int
+            Number of TOF bins.
+        n_sigmas : float, optional
+            Number of sigmas for TOF kernel calculation (default: 3.0).
+        device_id : int, optional
+            Device ID for computation (default: 0).
+        threadsperblock : int, optional
+            Number of threads per block for GPU (default: 64).
+
+        Notes
+        -----
+        Values are accumulated into the existing img array (not overwritten).
+        )pbdoc");
 
   m.def("joseph3d_tof_lm_fwd", &joseph3d_tof_lm_fwd_py,
         "xstart"_a.noconvert(), "xend"_a.noconvert(), "img"_a.noconvert(),
@@ -638,5 +755,38 @@ NB_MODULE(parallelproj_backend, m)
         "n_tofbins"_a,
         "n_sigmas"_a = 3.0f,
         "device_id"_a = 0, "threadsperblock"_a = 64,
-        "Missing DOCSTRING for joseph3d_tof_lm_sino_fwd");
+        R"pbdoc(
+        TOF listmode forward projection using the Joseph 3D algorithm.
+
+        Parameters
+        ----------
+        xstart : ndarray
+            Array of shape (..., 3) with coordinates of event LOR start points.
+        xend : ndarray
+            Array of shape (..., 3) with coordinates of event LOR end points.
+        img : ndarray
+            3D image array of shape (n0, n1, n2) for forward projection.
+        img_origin : ndarray
+            Array of shape (3,) with coordinates of [0,0,0] voxel center.
+        voxsize : ndarray
+            Array of shape (3,) with voxel sizes.
+        p : ndarray
+            Output array for event projections, shape matches xstart.shape[:-1].
+        tofbin_width : float
+            Width of TOF bins in spatial units.
+        sigma_tof : ndarray
+            TOF resolution (sigma) in spatial units. Shape (1,) or (...,) for event-dependent.
+        tofcenter_offset : ndarray
+            Offset of central TOF bin from LOR midpoint. Shape (1,) or (...,).
+        tofbin : ndarray
+            TOF bin centers for each event in spatial units, shape matches xstart.shape[:-1].
+        n_tofbins : int
+            Number of TOF bins.
+        n_sigmas : float, optional
+            Number of sigmas for TOF kernel calculation (default: 3.0).
+        device_id : int, optional
+            Device ID for computation (default: 0).
+        threadsperblock : int, optional
+            Number of threads per block for GPU (default: 64).
+        )pbdoc");
 }

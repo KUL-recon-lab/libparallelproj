@@ -18,10 +18,11 @@ help:
 doxygen:
 	@echo "Generating Doxygen XML..."
 	@cd .. && mkdir -p build && cd build && \
-		cmake .. -DBUILD_DOCS=ON -DBUILD_TESTS=OFF && \
-		make doxygen-docs
+		cmake .. -DBUILD_DOCS=ON -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF && \
+		make doxygen-docs && \
+		make parallelproj_backend
 
-# Build HTML with Doxygen first
+# Build HTML with Doxygen and Python module first
 html: doxygen
 	@$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 	@echo ""
