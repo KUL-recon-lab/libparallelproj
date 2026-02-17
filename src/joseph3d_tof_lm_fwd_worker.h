@@ -190,8 +190,8 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(size_t i,
 
   // the tof-weighted interpolated values has to be corrected for the non-TOF correction factor (cf)
   // and also for the the fact that we truncated the plane range based on num sigmas
-  // the expected sum of the TOF weights is (tofbin_width / (cf * voxsize[direction]))
+  // the expected sum of the TOF weights is (tofbin_width / cf)
 
-  // p[i] = toAdd * cf * (tofbin_width / (cf * voxsize[direction])) / tof_plane_weights_sum;
-  p[i] = toAdd * tofbin_width / (voxsize[direction] * tof_plane_weights_sum);
+  // p[i] = toAdd * cf * (tofbin_width / cf) / tof_plane_weights_sum;
+  p[i] = toAdd * tofbin_width / tof_plane_weights_sum;
 }
