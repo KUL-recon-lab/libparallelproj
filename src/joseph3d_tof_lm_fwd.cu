@@ -95,7 +95,7 @@ void joseph3d_tof_lm_fwd(const float *xstart,
     handle_cuda_input_array(voxsize, &d_voxsize, sizeof(float) * 3, free_voxsize, device_id, cudaMemAdviseSetReadMostly);
 
     // Handle p (write access) - size depends on tofbins
-    size_t p_size = sizeof(float) * nlors * n_tofbins;
+    size_t p_size = sizeof(float) * nlors;
     float *d_p = nullptr;
     bool free_p = false;
     handle_cuda_input_array(p, &d_p, p_size, free_p, device_id, cudaMemAdviseSetAccessedBy);

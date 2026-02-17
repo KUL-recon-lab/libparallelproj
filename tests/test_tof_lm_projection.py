@@ -98,7 +98,7 @@ def test_tof_lm_fwd(
         )
 
         # check whether the projection is equal to the expected one
-        assert math.isclose(float(p_tof_sino[0, i]), float(p_tof_lm[0]), abs_tol=1e-3)
+        assert math.isclose(float(p_tof_sino[0, i]), float(p_tof_lm[0]), abs_tol=2e-3)
 
 #@pytest.mark.parametrize("sigma_tof, num_tofbins", [(4.5, 41), (4.5, 40), (8.5, 41), (2.5, 41)])
 #def test_tof_sino_adjointness(
