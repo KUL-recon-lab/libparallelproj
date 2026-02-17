@@ -6,6 +6,10 @@
 
 - @ref joseph3d_fwd " joseph3d_fwd(): non-TOF Joseph forward projector"
 - @ref joseph3d_back "joseph3d_back(): non-TOF Joseph back projector"
+- @ref joseph3d_tof_sino_fwd "joseph3d_tof_sino_fwd(): TOF sinogram Joseph forward projector"
+- @ref joseph3d_tof_sino_back "joseph3d_tof_sino_back(): TOF sinogram Joseph back projector"
+- @ref joseph3d_tof_lm_fwd "joseph3d_tof_lm_fwd(): TOF listmode Joseph forward projector"
+- @ref joseph3d_tof_lm_back "joseph3d_tof_lm_back(): TOF listmode Joseph back projector"
  */
 
 #pragma once
@@ -105,7 +109,7 @@ extern "C"
 
   /*! @brief 3D sinogram TOF Joseph forward projector
 
-  note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
+  @note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
 
   @param xstart pointer to array of shape [3*nlors] with the coordinates of the start points of the LORs.
                 The start coordinates of the n-th LOR are at xstart[n*3 + i] with i = 0,1,2.
@@ -242,7 +246,7 @@ extern "C"
 
   /*! @brief 3D listmode TOF Joseph forward projector
 
-  note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
+  @note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
 
   @param xstart pointer to array of shape [3*nlors] with the coordinates of the start points of the event LORs.
                 The start coordinates of the n-th event are at xstart[n*3 + i] with i = 0,1,2.
@@ -307,7 +311,7 @@ extern "C"
 
   /*! @brief 3D listmode TOF Joseph back projector
 
-  note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
+  @note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
 
   @param xstart pointer to array of shape [3*nlors] with the coordinates of the start points of the event LORs.
                 The start coordinates of the n-th event are at xstart[n*3 + i] with i = 0,1,2.
