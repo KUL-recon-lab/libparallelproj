@@ -104,6 +104,7 @@ if(USE_CUDA)
         src/joseph3d_tof_sino_fwd.cu
         src/joseph3d_tof_sino_back.cu
         src/joseph3d_tof_lm_fwd.cu
+        src/joseph3d_tof_lm_back.cu
         src/cuda_utils.cu
     )
 
@@ -125,6 +126,7 @@ else()
         src/joseph3d_tof_sino_fwd.cpp
         src/joseph3d_tof_sino_back.cpp
         src/joseph3d_tof_lm_fwd.cpp
+        src/joseph3d_tof_lm_back.cpp
     )
 
     find_package(OpenMP REQUIRED)

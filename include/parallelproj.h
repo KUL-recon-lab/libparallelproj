@@ -299,3 +299,69 @@ extern "C"
 #ifdef __cplusplus
 }
 #endif
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+  /*! @brief 3D listmode TOF Joseph back projector
+
+  note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
+
+  @param xstart pointer to array of shape [3*nlors] with the coordinates of the start points of the event LORs.
+                The start coordinates of the n-th event are at xstart[n*3 + i] with i = 0,1,2.
+                Units are the ones of voxsize.
+  @param xend   pointer array of shape [3*nlors] with the coordinates of the end points of the events LORs.
+                The end coordinates of the n-th LOR are at xend[n*3 + i] with i = 0,1,2.
+                Units are the ones of voxsize.
+  @param img    Pointer to array of shape [n0*n1*n2] containing the 3D image to add backprojected
+                contributions into. The element (i,j,k) is stored at index n1*n2*i + n2*j + k.
+                Values are added to the existing contents of this array.
+  @param img_origin  pointer array [x0_0,x0_1,x0_2] of coordinates of the center of the [0,0,0] voxel.
+  @param voxsize     pointer array [vs0, vs1, vs2] of the voxel sizes.
+  @param p           pointer to array of values to be backprojected (length num_events / nlors)
+  @param nlors       number of events
+  @param img_dim     array with dimensions of image [n0,n1,n2]
+  @param tofbin_width     width of the TOF bins in spatial units (units of xstart and xend)
+  @param sigma_tof        pointer to array of length 1 or number of events (depending on lor_dependent_sigma_tof)
+                          with the TOF resolution (sigma) for each event in spatial units
+                          (units of xstart and xend)
+  @param tofcenter_offset pointer to array of length 1 or number of events (depending on lor_dependent_tofcenter_offset)
+                          with the offset of the central TOF bin from the midpoint of each LOR in spatial units.
+                          A positive value means a shift towards the end point of the LOR.
+  @param n_sigmas         number of sigmas to consider for calculation of TOF kernel
+  @param tofbin           pointer to array of length number of events with the TOF bin centers for each event in spatial units (units of xstart and xend)
+  @param n_tofbins        number of TOF bins
+  @param lor_dependent_sigma_tof unsigned char 0 or 1
+                                 0 means that the first value in the sigma_tof array is used for all LORs
+                                 1 (non-zero) means that the TOF resolutions are LOR dependent
+  @param lor_dependent_tofcenter_offset unsigned char 0 or 1
+                                        0 means that the first value in the tofcenter_offset array is used for all LORs
+                                        1 (non-zero) means that the TOF center offsets are LOR dependent
+  @param device_id ID of the device to use for computation (default: 0).
+  @param threadsperblock Number of threads per block for GPU computation (default: 64).
+  */
+
+  PARALLELPROJ_API void joseph3d_tof_lm_back(const float *xstart,
+                                             const float *xend,
+                                             float *img,
+                                             const float *img_origin,
+                                             const float *voxsize,
+                                             const float *p,
+                                             size_t nlors,
+                                             const int *img_dim,
+                                             float tofbin_width,
+                                             const float *sigma_tof,
+                                             const float *tofcenter_offset,
+                                             float n_sigmas,
+                                             const short *tofbin,
+                                             short n_tofbins,
+                                             unsigned char lor_dependent_sigma_tof,
+                                             unsigned char lor_dependent_tofcenter_offset,
+                                             int device_id = 0,
+                                             int threadsperblock = 64);
+
+#ifdef __cplusplus
+}
+#endif
