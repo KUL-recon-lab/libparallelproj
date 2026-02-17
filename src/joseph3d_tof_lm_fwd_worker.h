@@ -85,8 +85,8 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(size_t i,
   // in LM processing, we don't step through all planes, but only those that are within n_sigmas*sig_tof of the TOF bin of the ray
   // NOTE: that istart and iend can be outside the image boundaries
   // NOTE: we need to loop over all planes between istart and iend even if they are outside the image boundaries, to make sure the TOF weights are normalized correctly
-  istart = (int)floorf(((it - sign * n_sigmas * sig_tof / tofbin_width) - bt) / at);
-  iend = (int)ceilf(((it + sign * n_sigmas * sig_tof / tofbin_width) - bt) / at);
+  istart = static_cast<int>(floorf(((it - sign * n_sigmas * sig_tof / tofbin_width) - bt) / at));
+  iend = static_cast<int>(ceilf(((it + sign * n_sigmas * sig_tof / tofbin_width) - bt) / at));
 
   float it_f = istart * at + bt;
 

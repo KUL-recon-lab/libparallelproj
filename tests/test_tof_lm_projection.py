@@ -8,14 +8,14 @@ from .config import pytestmark
 
 
 @pytest.mark.parametrize("direc, sigma_tof, num_tofbins, tof_center_offset", [
-    (0, 4.5, 41, 0.0),
-    (1, 4.5, 41, 0.0),
-    (2, 4.5, 41, 0.0),
-    (0, 3.5, 41, 0.0),
-    (0, 3.5, 40, 0.0),
-    (0, 8.5, 41, 0.0),
-    (0, 3.5, 41, -2.5),
-    (0, 3.5, 41, 2.5),
+    (0, 12.0, 29, 0.0),
+    (1, 12.0, 29, 0.0),
+    (2, 12.0, 29, 0.0),
+    (0, 12.0, 29, 0.0),
+    (0, 12.0, 28, 0.0),
+    (0, 10.0, 29, 0.0),
+    (0, 12.0, 29, -2.5),
+    (0, 12.0, 29, 2.5),
 ])
 def test_tof_lm_fwd(
     xp: ModuleType,
@@ -24,11 +24,11 @@ def test_tof_lm_fwd(
     sigma_tof: float,
     num_tofbins: int,
     tof_center_offset: float,
-    voxsize: tuple[float, float, float] = (2.2, 2.5, 2.7),
-    vox_num: int = 7,
-    tofbin_width: float = 3.0,
-    num_sigmas: float = 3.0,
-    nvox: int = 19,
+    voxsize: tuple[float, float, float] = (1.5, 1.7, 1.6),
+    vox_num: int = 29,
+    tofbin_width: float = 4.0,
+    num_sigmas: float = 4.0, # we use pm 4 sigma here, since the truncation is slightly different between sino and LM projectors
+    nvox: int = 59,
     verbose: bool = False,
 ):
 
@@ -80,25 +80,28 @@ def test_tof_lm_fwd(
         n_sigmas=num_sigmas,
     )
 
-    for i in range(num_tofbins):
-        p_tof_lm = xp.zeros(1, dtype=xp.float32, device=dev)
-        ppb.joseph3d_tof_lm_fwd(
-        xp.asarray([xstart], dtype=xp.float32, device=dev),
-        xp.asarray([xend], dtype=xp.float32, device=dev),
-            img,
-            xp.asarray(img_origin, dtype=xp.float32, device=dev),
-            xp.asarray(voxsize, dtype=xp.float32, device=dev),
-            p_tof_lm,
-            tofbin_width,
-            xp.asarray([sigma_tof], dtype=xp.float32, device=dev),
-            xp.asarray([tof_center_offset], dtype=xp.float32, device=dev),
-            xp.asarray([i], dtype=xp.int16, device=dev),
-            num_tofbins,
-            n_sigmas=num_sigmas,
-        )
+    p_tof_lm = xp.zeros(num_tofbins, dtype=xp.float32, device=dev)
+    ppb.joseph3d_tof_lm_fwd(
+        xp.tile(xp.asarray([xstart], dtype=xp.float32, device=dev), (num_tofbins, 1)),
+        xp.tile(xp.asarray([xend], dtype=xp.float32, device=dev), (num_tofbins, 1)),
+        img,
+        xp.asarray(img_origin, dtype=xp.float32, device=dev),
+        xp.asarray(voxsize, dtype=xp.float32, device=dev),
+        p_tof_lm,
+        tofbin_width,
+        xp.tile(xp.asarray([sigma_tof], dtype=xp.float32, device=dev), (num_tofbins,)),
+        xp.tile(xp.asarray([tof_center_offset], dtype=xp.float32, device=dev), (num_tofbins,)),
+        xp.arange(num_tofbins, dtype=xp.int16, device=dev),
+        num_tofbins,
+        n_sigmas=num_sigmas,
+    )
 
+    for i in range(num_tofbins):
         # check whether the projection is equal to the expected one
-        assert math.isclose(float(p_tof_sino[0, i]), float(p_tof_lm[0]), abs_tol=2e-3)
+        sino_val = float(p_tof_sino[0, i])
+        lm_val = float(p_tof_lm[i])
+
+        assert math.isclose(sino_val, lm_val, abs_tol=1e-4)
 
 #@pytest.mark.parametrize("sigma_tof, num_tofbins", [(4.5, 41), (4.5, 40), (8.5, 41), (2.5, 41)])
 #def test_tof_sino_adjointness(
