@@ -65,7 +65,8 @@ int main()
 {
     constexpr int n0 = 2, n1 = 3, n2 = 4;
     constexpr int N = n0 * n1 * n2;
-    constexpr float eps = 1e-4f;
+    // maybe_unused to silence unused‐variable warnings of unused eps
+    [[maybe_unused]] constexpr float eps = 1e-4f;
 
     // Build a simple host image x = [0,1,2,...]
     std::vector<float> host_x(N);
