@@ -37,13 +37,10 @@ breathe_default_project = "parallelproj"
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = "sphinx_rtd_theme"
+html_theme = "furo"
 
 # Theme options
 html_theme_options = {
-    "navigation_depth": 4,
-    "collapse_navigation": False,
-    "sticky_navigation": True,
-    "includehidden": True,
-    "titles_only": False,
+    "navigation_with_keys": True,
+     "top_of_page_buttons": ["view", "edit"],
 }

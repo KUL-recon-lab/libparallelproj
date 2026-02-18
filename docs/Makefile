@@ -18,7 +18,7 @@ help:
 doxygen:
 	@echo "Generating Doxygen XML..."
 	@cd .. && mkdir -p build && cd build && \
-		cmake .. -DBUILD_DOCS=ON -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF && \
+		cmake .. -DBUILD_DOCS=ON -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF -DUSE_CUDA=OFF && \
 		make doxygen-docs && \
 		make parallelproj_backend
 
