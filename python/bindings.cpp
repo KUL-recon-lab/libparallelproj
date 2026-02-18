@@ -576,6 +576,129 @@ void joseph3d_tof_lm_fwd_py(ConstFloatNDArray xstart,
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
+// Wrapper for joseph3d_tof_lm_back
+void joseph3d_tof_lm_back_py(ConstFloatNDArray xstart,
+                             ConstFloatNDArray xend,
+                             Float3DArray img,
+                             ConstFloat1D3ELArray img_origin,
+                             ConstFloat1D3ELArray voxsize,
+                             ConstFloatNDArray p,
+                             float tofbin_width,
+                             ConstFloatNDArray sigma_tof,
+                             ConstFloatNDArray tofcenter_offset,
+                             ConstShortNDArray tofbin,
+                             short n_tofbins,
+                             float n_sigmas = 3.0f,
+                             int device_id = 0,
+                             int threadsperblock = 64)
+{
+  bool lor_dependent_sigma_tof;
+  bool lor_dependent_tofcenter_offset;
+
+  // 1 check that ndim of xstart and xend are equal to 2
+  if (xstart.ndim() != 2 || xend.ndim() != 2)
+    throw std::invalid_argument("xstart and xend must have 2 dimensions");
+  if (xstart.shape(1) != 3 || xend.shape(1) != 3)
+    throw std::invalid_argument("xstart and xend must have shape (..., 3)");
+  if (xstart.shape(0) != xend.shape(0))
+    throw std::invalid_argument("xstart and xend must have the same number of LORs (shape[0])");
+
+  size_t nlors = xstart.shape(0);
+
+  // 3 check dims and shapes p amd tof_bin
+  if (p.ndim() != 1)
+    throw std::invalid_argument("p.ndim must be 1");
+  if (p.shape(0) != nlors)
+    throw std::invalid_argument("p.shape[0] must match xstart.shape[0]");
+
+  if (tofbin.ndim() != 1)
+    throw std::invalid_argument("tofbin.ndim must be 1");
+  if (tofbin.shape(0) != nlors)
+    throw std::invalid_argument("tofbin.shape[0] must match xstart.shape[0]");
+
+  // 4 check that xstart, xend, img, img_origin, voxsize, p have the same device type
+  if (xstart.device_type() != xend.device_type() ||
+      xstart.device_type() != img.device_type() ||
+      xstart.device_type() != img_origin.device_type() ||
+      xstart.device_type() != voxsize.device_type() ||
+      xstart.device_type() != p.device_type() ||
+      xstart.device_type() != tofbin.device_type())
+  {
+    throw std::invalid_argument("All input arrays must be on the same device type");
+  }
+
+  // 5 check that xstart, xend, img, img_origin, voxsize, p have the same device ID
+  if (xstart.device_id() != xend.device_id() ||
+      xstart.device_id() != img.device_id() ||
+      xstart.device_id() != img_origin.device_id() ||
+      xstart.device_id() != voxsize.device_id() ||
+      xstart.device_id() != p.device_id() ||
+      xstart.device_id() != tofbin.device_id())
+  {
+    throw std::invalid_argument("All input arrays must be on the same device ID");
+  }
+
+  // 6 check that img_origin and voxsize have length 3
+  if (img_origin.shape(0) != 3)
+    throw std::invalid_argument("img_origin must be a 1D array with 3 elements");
+  if (voxsize.shape(0) != 3)
+    throw std::invalid_argument("voxsize must be a 1D array with 3 elements");
+
+  int img_dim[3] = {static_cast<int>(img.shape(0)),
+                    static_cast<int>(img.shape(1)),
+                    static_cast<int>(img.shape(2))};
+
+  // check that the shape of sigma_tof is either [1,] or xstart.shape[:-1]
+  if (sigma_tof.ndim() == 1 && sigma_tof.shape(0) == 1)
+  {
+    lor_dependent_sigma_tof = false;
+  }
+  else if (sigma_tof.ndim() == 1 && sigma_tof.shape(0) == nlors)
+  {
+    lor_dependent_sigma_tof = true;
+  }
+  else
+  {
+    throw std::invalid_argument("shape of sigma_tof must be [1,] or [nlors,]");
+  }
+
+  // check that the shape of tofcenter_offset is either [1,] or xstart.shape[:-1]
+  if (tofcenter_offset.ndim() == 1 && tofcenter_offset.shape(0) == 1)
+  {
+    lor_dependent_tofcenter_offset = false;
+  }
+  else if (tofcenter_offset.ndim() == 1 && tofcenter_offset.shape(0) == nlors)
+  {
+    lor_dependent_tofcenter_offset = true;
+  }
+  else
+  {
+    throw std::invalid_argument("shape of tofcenter_offset must be [1,] or [nlors,]");
+  }
+
+  joseph3d_tof_lm_back(xstart.data(),
+                       xend.data(),
+                       img.data(),
+                       img_origin.data(),
+                       voxsize.data(),
+                       p.data(),
+                       nlors,
+                       img_dim,
+                       tofbin_width,
+                       sigma_tof.data(),
+                       tofcenter_offset.data(),
+                       n_sigmas,
+                       tofbin.data(),
+                       n_tofbins,
+                       static_cast<unsigned char>(lor_dependent_sigma_tof ? 1 : 0),
+                       static_cast<unsigned char>(lor_dependent_tofcenter_offset ? 1 : 0),
+                       device_id,
+                       threadsperblock);
+}
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
 NB_MODULE(parallelproj_backend, m)
 {
   m.doc() = "Python bindings for parallelproj backend";
@@ -788,5 +911,54 @@ NB_MODULE(parallelproj_backend, m)
             Device ID for computation (default: 0).
         threadsperblock : int, optional
             Number of threads per block for GPU (default: 64).
+        )pbdoc");
+
+  m.def("joseph3d_tof_lm_back", &joseph3d_tof_lm_back_py,
+        "xstart"_a.noconvert(), "xend"_a.noconvert(), "img"_a.noconvert(),
+        "img_origin"_a.noconvert(), "voxsize"_a.noconvert(), "p"_a.noconvert(),
+        "tofbin_width"_a,
+        "sigma_tof"_a.noconvert(),
+        "tofcenter_offset"_a.noconvert(),
+        "tofbin"_a.noconvert(),
+        "n_tofbins"_a,
+        "n_sigmas"_a = 3.0f,
+        "device_id"_a = 0, "threadsperblock"_a = 64,
+        R"pbdoc(
+        TOF listmode backprojection using the Joseph 3D algorithm.
+
+        Parameters
+        ----------
+        xstart : ndarray
+            Array of shape (nlors, 3) with coordinates of event LOR start points.
+        xend : ndarray
+            Array of shape (nlors, 3) with coordinates of event LOR end points.
+        img : ndarray
+            3D image array of shape (n0, n1, n2) to accumulate backprojection into.
+        img_origin : ndarray
+            Array of shape (3,) with coordinates of [0,0,0] voxel center.
+        voxsize : ndarray
+            Array of shape (3,) with voxel sizes.
+        p : ndarray
+            Input array to be back projected, shape (nlors,)
+        tofbin_width : float
+            Width of TOF bins in spatial units.
+        sigma_tof : ndarray
+            TOF resolution (sigma) in spatial units. Shape (1,) or (nlors,) for event-dependent.
+        tofcenter_offset : ndarray
+            Offset of central TOF bin from LOR midpoint. Shape (1,) or (nlors,).
+        tofbin : ndarray
+            TOF bin indices for each event, shape (nlors,).
+        n_tofbins : int
+            Number of TOF bins.
+        n_sigmas : float, optional
+            Number of sigmas for TOF kernel calculation (default: 3.0).
+        device_id : int, optional
+            Device ID for computation (default: 0).
+        threadsperblock : int, optional
+            Number of threads per block for GPU (default: 64).
+
+        Notes
+        -----
+        Values are accumulated into the existing img array (not overwritten).
         )pbdoc");
 }

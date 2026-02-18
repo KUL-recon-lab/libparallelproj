@@ -269,7 +269,7 @@ extern "C"
                           with the offset of the central TOF bin from the midpoint of each LOR in spatial units.
                           A positive value means a shift towards the end point of the LOR.
   @param n_sigmas         number of sigmas to consider for calculation of TOF kernel
-  @param tofbin           pointer to array of length number of events with the TOF bin centers for each event in spatial units (units of xstart and xend)
+  @param tofbin           pointer to array of length number of events with the TOF bin numbers
   @param n_tofbins        number of TOF bins
   @param lor_dependent_sigma_tof unsigned char 0 or 1
                                  0 means that the first value in the sigma_tof array is used for all LORs
@@ -335,7 +335,7 @@ extern "C"
                           with the offset of the central TOF bin from the midpoint of each LOR in spatial units.
                           A positive value means a shift towards the end point of the LOR.
   @param n_sigmas         number of sigmas to consider for calculation of TOF kernel
-  @param tofbin           pointer to array of length number of events with the TOF bin centers for each event in spatial units (units of xstart and xend)
+  @param tofbin           pointer to array of length number of events with the TOF bin numbers
   @param n_tofbins        number of TOF bins
   @param lor_dependent_sigma_tof unsigned char 0 or 1
                                  0 means that the first value in the sigma_tof array is used for all LORs

@@ -15,9 +15,10 @@ if cupy_available:
 
 # %%
 
+xp_dev_list = []
+
 ###########
 # add numpy
-xp_dev_list = []
 xp_dev_list.append((np, "cpu"))
 
 ###########

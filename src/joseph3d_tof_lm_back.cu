@@ -147,9 +147,10 @@ void joseph3d_tof_lm_back(const float *xstart,
         cudaFree(d_xstart);
     if (free_xend)
         cudaFree(d_xend);
-    if (free_img)
+    if (free_img) {
         cudaMemcpy(img, d_img, sizeof(float) * nvoxels, cudaMemcpyDeviceToHost);
         cudaFree(d_img);
+    }
     if (free_img_origin)
         cudaFree(d_img_origin);
     if (free_voxsize)
