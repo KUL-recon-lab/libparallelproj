@@ -47,7 +47,7 @@ jobs:
       - name: Run Tests
         shell: bash -el {0}
         run: |
-          micromamba activate parallelproj_backend
+          micromamba activate libparallelproj
           cd build
           ctest --output-on-failure
 
@@ -55,7 +55,7 @@ jobs:
       - name: Install
         shell: bash -el {0}
         run: |
-          micromamba activate parallelproj_backend
+          micromamba activate libparallelproj
           cd build
           cmake --install .
 
