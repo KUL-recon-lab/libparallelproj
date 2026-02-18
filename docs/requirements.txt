@@ -1,3 +1,4 @@
 sphinx
 breathe
 furo
+nanobind

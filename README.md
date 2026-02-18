@@ -1,6 +1,6 @@
-# parallelproj Backend
+# parallelproj-backend
 
-parallelproj (backend) is a high-performance library for 3D forward and backward projection, 
+parallelproj (backend) is a high-performance library for 3D forward and backward projection,
 supporting both CUDA and non-CUDA builds and a minimal python interface.
 
 ## Table of Contents
@@ -87,7 +87,7 @@ To run the tests after building the project:
 
 ## Python Interface
 
-If you want to build the Python interface, ensure that `pybind11` and `DLPack` are installed. 
+If you want to build the Python interface, ensure that `nanobind` is installed.
 Then, configure the project with the `BUILD_PYTHON` option:
 
 1. Configure the project:
