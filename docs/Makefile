@@ -19,8 +19,8 @@ doxygen:
 	@echo "Generating Doxygen XML..."
 	@cd .. && mkdir -p build && cd build && \
 		cmake .. -DBUILD_DOCS=ON -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF -DUSE_CUDA=OFF && \
-		make doxygen-docs && \
-		make parallelproj_backend
+		cmake --build . --target doxygen-docs && \
+		cmake --build .
 
 # Build HTML with Doxygen and Python module first
 html: doxygen

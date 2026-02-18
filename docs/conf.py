@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath("../build"))
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "parallelproj-backend"
+project = "libparallelproj"
 copyright = "2026, parallelproj team"
 author = "parallelproj team"
 release = "2.0.0"
@@ -42,5 +42,5 @@ html_theme = "furo"
 # Theme options
 html_theme_options = {
     "navigation_with_keys": True,
-     "top_of_page_buttons": ["view", "edit"],
+    "top_of_page_buttons": ["view", "edit"],
 }

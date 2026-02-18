@@ -1,6 +1,6 @@
 # Documentation
 
-This directory contains the Sphinx documentation for parallelproj-backend, including both C and Python APIs.
+This directory contains the Sphinx documentation for libparallelproj, including both C and Python APIs.
 
 ## Building the Documentation
 

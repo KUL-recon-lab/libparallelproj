@@ -1,9 +1,9 @@
-.. parallelproj-backend documentation master file
+.. libparallelproj documentation master file
 
-parallelproj-backend docs
-=========================
+libparallelproj docs
+====================
 
-parallelproj-backend is a high-performance library for 3D forward and backward projection,
+libparallelproj is a high-performance library for 3D forward and backward projection,
 supporting both CUDA and non-CUDA builds with a minimal Python interface.
 
 The library implements the Joseph 3D ray-driven projection algorithm with support for:

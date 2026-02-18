@@ -1,4 +1,4 @@
-name: parallelproj_backend_cuda
+name: libparallelproj_cuda
 
 channels:
   - conda-forge

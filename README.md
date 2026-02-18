@@ -1,6 +1,6 @@
-# parallelproj-backend
+# libparallelproj
 
-parallelproj (backend) is a high-performance library for 3D forward and backward projection,
+libparallelproj is a high-performance library for 3D forward and backward projection,
 supporting both CUDA and non-CUDA builds and a minimal python interface.
 
 ## Table of Contents
