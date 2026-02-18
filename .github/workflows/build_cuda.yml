@@ -8,6 +8,10 @@ on:
 jobs:
   cuda-build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cuda-version: ['12.6.0', '13.1.0']
+      fail-fast: false
 
     steps:
       - name: Checkout Repository
@@ -17,7 +21,7 @@ jobs:
         id: cuda-toolkit
         uses: Jimver/cuda-toolkit@v0.2.30
         with:
-          cuda: '13.1.0'
+          cuda: ${{ matrix.cuda-version }}
           method: 'local'
 
       - name: Install Build Tools
