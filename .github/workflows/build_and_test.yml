@@ -63,6 +63,6 @@ jobs:
       - name: Uninstall
         shell: bash -el {0}
         run: |
-          micromamba activate parallelproj_backend
+          micromamba activate libparallelproj
           cd build
           cmake --build . --target uninstall
