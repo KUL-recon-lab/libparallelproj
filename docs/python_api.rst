@@ -11,15 +11,6 @@ Module: ``parallelproj_backend``
    :undoc-members:
    :show-inheritance:
 
-Module Attributes
-~~~~~~~~~~~~~~~~~
-
-.. autodata:: parallelproj_backend.__version__
-   :annotation: = version string
-
-.. autodata:: parallelproj_backend.PARALLELPROJ_CUDA
-   :annotation: = 0 or 1 (whether CUDA support is enabled)
-
 Functions
 ~~~~~~~~~
 
@@ -41,3 +32,5 @@ TOF Listmode Projections
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: parallelproj_backend.joseph3d_tof_lm_fwd
+
+.. autofunction:: parallelproj_backend.joseph3d_tof_lm_back

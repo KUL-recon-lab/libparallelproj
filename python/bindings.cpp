@@ -701,7 +701,20 @@ void joseph3d_tof_lm_back_py(ConstFloatNDArray xstart,
 
 NB_MODULE(parallelproj_backend, m)
 {
-  m.doc() = "Python bindings for parallelproj backend";
+  m.doc() = R"pbdoc(
+    Python bindings for parallelproj backend.
+
+    This module provides efficient C++/CUDA implementations of 3D Joseph
+    forward and backward projectors with optional Time-of-Flight (TOF) support.
+
+    Attributes
+    ----------
+    __version__ : str
+        The version of the parallelproj backend library.
+    PARALLELPROJ_CUDA : int
+        Flag indicating if the library was compiled with CUDA support.
+        Returns 1 if CUDA is enabled, 0 otherwise.
+  )pbdoc";
 
   // Expose the project version as __version__
 #ifdef PROJECT_VERSION
