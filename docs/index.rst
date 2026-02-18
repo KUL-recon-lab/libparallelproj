@@ -18,8 +18,8 @@ API Documentation
 .. toctree::
    :maxdepth: 2
 
-   python_api
    c_api
+   python_api
 
 Indices and tables
 ==================

@@ -1,16 +1,6 @@
 /*!
 @file parallelproj.h
-@brief Header file for the parallelproj backend.
-
-@mainpage parallelproj backend documentation
-
-- @ref joseph3d_fwd " joseph3d_fwd(): non-TOF Joseph forward projector"
-- @ref joseph3d_back "joseph3d_back(): non-TOF Joseph back projector"
-- @ref joseph3d_tof_sino_fwd "joseph3d_tof_sino_fwd(): TOF sinogram Joseph forward projector"
-- @ref joseph3d_tof_sino_back "joseph3d_tof_sino_back(): TOF sinogram Joseph back projector"
-- @ref joseph3d_tof_lm_fwd "joseph3d_tof_lm_fwd(): TOF listmode Joseph forward projector"
-- @ref joseph3d_tof_lm_back "joseph3d_tof_lm_back(): TOF listmode Joseph back projector"
- */
+*/
 
 #pragma once
 #include <cstddef>
@@ -178,9 +168,7 @@ extern "C"
   /*!
   @brief TOF sinogram backprojection using the Joseph 3D algorithm.
 
-  @note All pointer arguments may be host pointers, CUDA device pointers, or CUDA managed pointers.
-        The implementation will safely handle host/device/managed memory for small control arrays
-        (e.g. img_dim) and copy or access device memory as required.
+  @note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
 
   @details The function backprojects a TOF sinogram into a 3D image volume using the Joseph
            ray-driven algorithm. The projection data p is organized row-major per LOR:

@@ -1,8 +1,6 @@
 Python API Reference
 ====================
 
-This page documents the Python interface for parallelproj-backend, generated from nanobind bindings.
-
 Module: ``parallelproj_backend``
 ---------------------------------
 
