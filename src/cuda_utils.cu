@@ -1,6 +1,14 @@
 #include "cuda_utils.h"
 #include <iostream>
 
+// Helper function to create cudaMemLocation from device ID (for CUDA 11.2+)
+static inline cudaMemLocation make_mem_location(int device_id) {
+    cudaMemLocation location;
+    location.type = cudaMemLocationTypeDevice;
+    location.id = device_id;
+    return location;
+}
+
 // Overload for constant input_ptr (const T*)
 template <typename T>
 void handle_cuda_input_array(const T *input_ptr, T **device_ptr, size_t size, bool &free_flag, int device_id, cudaMemoryAdvise memory_hint)
@@ -12,8 +20,9 @@ void handle_cuda_input_array(const T *input_ptr, T **device_ptr, size_t size, bo
     if (err == cudaSuccess && attr.type == cudaMemoryTypeManaged)
     {
         // Prefetch and advise for managed memory
-        cudaMemPrefetchAsync(const_cast<void *>(static_cast<const void *>(input_ptr)), size, device_id, 0);
-        cudaMemAdvise(const_cast<void *>(static_cast<const void *>(input_ptr)), size, memory_hint, device_id);
+        cudaMemLocation loc = make_mem_location(device_id);
+        cudaMemPrefetchAsync(const_cast<void *>(static_cast<const void *>(input_ptr)), size, loc, 0, (cudaStream_t)0);
+        cudaMemAdvise(const_cast<void *>(static_cast<const void *>(input_ptr)), size, memory_hint, loc);
     }
 
     if (err == cudaSuccess && (attr.type == cudaMemoryTypeManaged || attr.type == cudaMemoryTypeDevice))
@@ -41,8 +50,9 @@ void handle_cuda_input_array(T *input_ptr, T **device_ptr, size_t size, bool &fr
     if (err == cudaSuccess && attr.type == cudaMemoryTypeManaged)
     {
         // Prefetch and advise for managed memory
-        cudaMemPrefetchAsync(input_ptr, size, device_id, 0);
-        cudaMemAdvise(input_ptr, size, memory_hint, device_id);
+        cudaMemLocation loc = make_mem_location(device_id);
+        cudaMemPrefetchAsync(input_ptr, size, loc, 0, (cudaStream_t)0);
+        cudaMemAdvise(input_ptr, size, memory_hint, loc);
     }
 
     if (err == cudaSuccess && (attr.type == cudaMemoryTypeManaged || attr.type == cudaMemoryTypeDevice))
