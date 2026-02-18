@@ -15,10 +15,10 @@ jobs:
 
       - name: Install CUDA Toolkit
         id: cuda-toolkit
-        uses: Jimver/cuda-toolkit@v0.2.23
+        uses: Jimver/cuda-toolkit@v0.2.30
         with:
-          cuda: '12.6.0'
-          method: 'network'
+          cuda: '13.1.0'
+          method: 'local'
           use-cache: false
 
       - name: Install Build Tools
