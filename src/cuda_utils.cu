@@ -12,7 +12,7 @@ void handle_cuda_input_array(const T *input_ptr, T **device_ptr, size_t size, bo
     if (err == cudaSuccess && attr.type == cudaMemoryTypeManaged)
     {
         // Prefetch and advise for managed memory
-        cudaMemPrefetchAsync(const_cast<void *>(static_cast<const void *>(input_ptr)), size, device_id);
+        cudaMemPrefetchAsync(const_cast<void *>(static_cast<const void *>(input_ptr)), size, device_id, 0);
         cudaMemAdvise(const_cast<void *>(static_cast<const void *>(input_ptr)), size, memory_hint, device_id);
     }
 
@@ -41,7 +41,7 @@ void handle_cuda_input_array(T *input_ptr, T **device_ptr, size_t size, bool &fr
     if (err == cudaSuccess && attr.type == cudaMemoryTypeManaged)
     {
         // Prefetch and advise for managed memory
-        cudaMemPrefetchAsync(input_ptr, size, device_id);
+        cudaMemPrefetchAsync(input_ptr, size, device_id, 0);
         cudaMemAdvise(input_ptr, size, memory_hint, device_id);
     }
 
