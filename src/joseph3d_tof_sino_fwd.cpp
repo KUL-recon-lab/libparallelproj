@@ -1,30 +1,30 @@
 #include "parallelproj.h"
 #include "joseph3d_tof_sino_fwd_worker.h"
 
-void joseph3d_tof_sino_fwd(const float *xstart,
-                           const float *xend,
-                           const float *img,
-                           const float *img_origin,
-                           const float *voxsize,
-                           float *p,
-                           size_t nlors,
-                           const int *img_dim,
-                           float tofbin_width,
-                           const float *sigma_tof,
-                           const float *tofcenter_offset,
-                           float n_sigmas,
-                           short n_tofbins,
-                           unsigned char lor_dependent_sigma_tof,
-                           unsigned char lor_dependent_tofcenter_offset,
+void joseph3d_tof_sino_fwd(const float *lor_start,
+                           const float *lor_end,
+                           const float *image,
+                           const float *image_origin,
+                           const float *voxel_size,
+                           float *projection_values,
+                           size_t num_lors,
+                           const int *image_dim,
+                           float tof_bin_width,
+                           const float *tof_sigma,
+                           const float *tof_center_offset,
+                           float num_sigmas,
+                           short num_tof_bins,
+                           unsigned char is_lor_dependent_tof_sigma,
+                           unsigned char is_lor_dependent_tof_center_offset,
                            int device_id,
-                           int threadsperblock)
+                           int threads_per_block)
 {
 
 #pragma omp parallel for
-  for (long long i = 0; i < static_cast<long long>(nlors); ++i)
+  for (long long i = 0; i < static_cast<long long>(num_lors); ++i)
   {
-    joseph3d_tof_sino_fwd_worker(i, xstart, xend, img, img_origin, voxsize, p, img_dim, tofbin_width,
-                                 sigma_tof, tofcenter_offset, n_sigmas, n_tofbins,
-                                 lor_dependent_sigma_tof, lor_dependent_tofcenter_offset);
+    joseph3d_tof_sino_fwd_worker(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, image_dim, tof_bin_width,
+                                 tof_sigma, tof_center_offset, num_sigmas, num_tof_bins,
+                                 is_lor_dependent_tof_sigma, is_lor_dependent_tof_center_offset);
   }
 }

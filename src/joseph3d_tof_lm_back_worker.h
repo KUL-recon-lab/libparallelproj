@@ -3,30 +3,30 @@
 #include "utils.h"
 
 WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(size_t i,
-                                                         const float *xstart,
-                                                         const float *xend,
-                                                         float *img,
-                                                         const float *img_origin,
-                                                         const float *voxsize,
-                                                         const float *p,
-                                                         const int *img_dim,
-                                                         float tofbin_width,
-                                                         const float *sigma_tof,
-                                                         const float *tofcenter_offset,
-                                                         float n_sigmas,
-                                                         const short *tofbin,
-                                                         short n_tofbins,
-                                                         unsigned char lor_dependent_sigma_tof,
-                                                         unsigned char lor_dependent_tofcenter_offset)
+                                                         const float *lor_start,
+                                                         const float *lor_end,
+                                                         float *image,
+                                                         const float *image_origin,
+                                                         const float *voxel_size,
+                                                         const float *projection_values,
+                                                         const int *image_dim,
+                                                         float tof_bin_width,
+                                                         const float *tof_sigma,
+                                                         const float *tof_center_offset,
+                                                         float num_sigmas,
+                                                         const short *tof_bin_index,
+                                                         short num_tof_bins,
+                                                         unsigned char is_lor_dependent_tof_sigma,
+                                                         unsigned char is_lor_dependent_tof_center_offset)
 {
-  if (p[i] == 0)
+  if (projection_values[i] == 0)
   {
     return;
   }
 
-  int n0 = img_dim[0];
-  int n1 = img_dim[1];
-  int n2 = img_dim[2];
+  int n0 = image_dim[0];
+  int n1 = image_dim[1];
+  int n2 = image_dim[2];
 
   int direction;
   int i0, i1, i2;
@@ -38,11 +38,11 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(size_t i,
 
   int istart = -1;
   int iend = -1;
-  int it = tofbin[i];
+  int it = tof_bin_index[i];
 
-  float d0 = xend[3 * i + 0] - xstart[3 * i + 0];
-  float d1 = xend[3 * i + 1] - xstart[3 * i + 1];
-  float d2 = xend[3 * i + 2] - xstart[3 * i + 2];
+  float d0 = lor_end[3 * i + 0] - lor_start[3 * i + 0];
+  float d1 = lor_end[3 * i + 1] - lor_start[3 * i + 1];
+  float d2 = lor_end[3 * i + 2] - lor_start[3 * i + 2];
 
   float dr;
 
@@ -51,8 +51,8 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(size_t i,
   // if it does, direction is set to the principal axis
   // and istart and iend are set to the first and last voxel planes
   // that are intersected
-  // cf is the correction factor voxsize[dir]/cos[dir]
-  ray_cube_intersection_joseph(xstart + 3 * i, xend + 3 * i, img_origin, voxsize, img_dim, direction, cf, istart, iend);
+  // cf is the correction factor voxel_size[dir]/cos[dir]
+  ray_cube_intersection_joseph(lor_start + 3 * i, lor_end + 3 * i, image_origin, voxel_size, image_dim, direction, cf, istart, iend);
 
   // if the ray does not intersect the image cube, return
   // istart and iend are set to -1
@@ -65,33 +65,33 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(size_t i,
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////
   ////// calculate TOF-related parameters
-  float toAdd = 0.0;                        // variable LM forward projection (to reduce access to p[i])
-  float costheta = voxsize[direction] / cf; // cosine of angle between ray and principal axis
+  float toAdd = 0.0;                           // variable LM forward projection (to reduce access to projection_values[i])
+  float costheta = voxel_size[direction] / cf; // cosine of angle between ray and principal axis
 
-  // get the sigma_tof and tofcenter_offset for this LOR depending on whether they are constant or LOR-dependent
-  float sig_tof = lor_dependent_sigma_tof ? sigma_tof[i] : sigma_tof[0];
-  float tofcen_offset = lor_dependent_tofcenter_offset ? tofcenter_offset[i] : tofcenter_offset[0];
+  // get the tof_sigma and tof_center_offset for this LOR depending on whether they are constant or LOR-dependent
+  float local_tof_sigma = is_lor_dependent_tof_sigma ? tof_sigma[i] : tof_sigma[0];
+  float local_tof_center_offset = is_lor_dependent_tof_center_offset ? tof_center_offset[i] : tof_center_offset[0];
 
   // sign variable that indicated whether TOF bin numbers increase or decrease when
   // through the image along the principal axis direction
-  float sign = (xend[3 * i + direction] >= xstart[3 * i + direction]) ? 1.0 : -1.0;
+  float sign = (lor_end[3 * i + direction] >= lor_start[3 * i + direction]) ? 1.0 : -1.0;
 
   // the center of the first TOF bin (TOF bin 0) projected onto the principal axis
-  float tof_origin = 0.5 * (xstart[3 * i + direction] + xend[3 * i + direction]) - sign * (0.5 * n_tofbins - 0.5) * (tofbin_width * costheta) + tofcen_offset * costheta;
+  float tof_origin = 0.5 * (lor_start[3 * i + direction] + lor_end[3 * i + direction]) - sign * (0.5 * num_tof_bins - 0.5) * (tof_bin_width * costheta) + local_tof_center_offset * costheta;
   // slope of TOF bin number as a function of distance along the principal axis
   // the position of the TOF bins projects onto the principal axis is: tof_origin + tof_bin_number*tof_slope
-  float tof_slope = sign * tofbin_width * costheta;
+  float tof_slope = sign * tof_bin_width * costheta;
 
   // the TOF bin number of intersection point of the ray with a given image plane along the principal axis is it_f = i*at + bt
-  float at = sign * cf / tofbin_width;
-  float bt = (img_origin[direction] - tof_origin) / tof_slope;
+  float at = sign * cf / tof_bin_width;
+  float bt = (image_origin[direction] - tof_origin) / tof_slope;
 
   // recompute istart and iend based on TOF bin and num_sigmas to consider
-  // in LM processing, we don't step through all planes, but only those that are within n_sigmas*sig_tof of the TOF bin of the ray
+  // in LM processing, we don't step through all planes, but only those that are within num_sigmas*local_tof_sigma of the TOF bin of the ray
   // NOTE: that istart and iend can be outside the image boundaries
   // NOTE: we need to loop over all planes between istart and iend even if they are outside the image boundaries, to make sure the TOF weights are normalized correctly
-  istart = static_cast<int>(floorf(((it - sign * n_sigmas * sig_tof / tofbin_width) - bt) / at));
-  iend = static_cast<int>(ceilf(((it + sign * n_sigmas * sig_tof / tofbin_width) - bt) / at));
+  istart = static_cast<int>(floorf(((it - sign * num_sigmas * local_tof_sigma / tof_bin_width) - bt) / at));
+  iend = static_cast<int>(ceilf(((it + sign * num_sigmas * local_tof_sigma / tof_bin_width) - bt) / at));
 
   float it_f = istart * at + bt;
 
@@ -99,18 +99,18 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(size_t i,
   float tof_plane_weights_sum = 0.0;
 
   // first loop over all potentially contributing planes to get the sum of the TOF weights for normalization
-  // this values depends on the number of sigmas, the tof bin width relative to sigma_tof, and the sampling location of the planes
+  // this values depends on the number of sigmas, the TOF bin width relative to tof_sigma, and the sampling location of the planes
   // so far I don't see a more direct way to calculate this normalization factor, so I think we have to loop through the planes first
   // in principle, we could buffer all tof_plane_weights here, but this would require quite some memory when executed in parallel
   for (i0 = istart; i0 <= iend; ++i0)
   {
     // TOF contribution
-    tof_plane_weights_sum += effective_gaussian_tof_kernel(fabsf(it_f - it) * tofbin_width, sig_tof, tofbin_width);
+    tof_plane_weights_sum += effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width);
     it_f += at;
   }
 
   // this is the "corrected" value up to the tof_plane_weight that we have to inject into the planes using the adjoint of the bilinear interpolation
-  toAdd = p[i] * tofbin_width / tof_plane_weights_sum;
+  toAdd = projection_values[i] * tof_bin_width / tof_plane_weights_sum;
 
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////
@@ -120,11 +120,11 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(size_t i,
   {
     dr = d0;
 
-    a1 = (d1 * voxsize[direction]) / (voxsize[1] * dr);
-    b1 = (xstart[3 * i + 1] - img_origin[1] + d1 * (img_origin[direction] - xstart[3 * i + direction]) / dr) / voxsize[1];
+    a1 = (d1 * voxel_size[direction]) / (voxel_size[1] * dr);
+    b1 = (lor_start[3 * i + 1] - image_origin[1] + d1 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[1];
 
-    a2 = (d2 * voxsize[direction]) / (voxsize[2] * dr);
-    b2 = (xstart[3 * i + 2] - img_origin[2] + d2 * (img_origin[direction] - xstart[3 * i + direction]) / dr) / voxsize[2];
+    a2 = (d2 * voxel_size[direction]) / (voxel_size[2] * dr);
+    b2 = (lor_start[3 * i + 2] - image_origin[2] + d2 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[2];
 
     // truncate istart and iend to the image boundaries
     istart = (istart < 0) ? 0 : istart;
@@ -142,8 +142,8 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(size_t i,
     for (i0 = istart; i0 <= iend; ++i0)
     {
       // TOF contribution
-      tof_plane_weight = effective_gaussian_tof_kernel(fabsf(it_f - it) * tofbin_width, sig_tof, tofbin_width);
-      bilinear_interp_adj_fixed0(img, n0, n1, n2, i0, i1_f, i2_f, toAdd * tof_plane_weight);
+      tof_plane_weight = effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width);
+      bilinear_interp_adj_fixed0(image, n0, n1, n2, i0, i1_f, i2_f, toAdd * tof_plane_weight);
 
       i1_f += a1;
       i2_f += a2;
@@ -154,11 +154,11 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(size_t i,
   {
     dr = d1;
 
-    a0 = (d0 * voxsize[direction]) / (voxsize[0] * dr);
-    b0 = (xstart[3 * i + 0] - img_origin[0] + d0 * (img_origin[direction] - xstart[3 * i + direction]) / dr) / voxsize[0];
+    a0 = (d0 * voxel_size[direction]) / (voxel_size[0] * dr);
+    b0 = (lor_start[3 * i + 0] - image_origin[0] + d0 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[0];
 
-    a2 = (d2 * voxsize[direction]) / (voxsize[2] * dr);
-    b2 = (xstart[3 * i + 2] - img_origin[2] + d2 * (img_origin[direction] - xstart[3 * i + direction]) / dr) / voxsize[2];
+    a2 = (d2 * voxel_size[direction]) / (voxel_size[2] * dr);
+    b2 = (lor_start[3 * i + 2] - image_origin[2] + d2 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[2];
 
     // truncate istart and iend to the image boundaries
     istart = (istart < 0) ? 0 : istart;
@@ -176,8 +176,8 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(size_t i,
     for (i1 = istart; i1 <= iend; ++i1)
     {
       // TOF contribution
-      tof_plane_weight = effective_gaussian_tof_kernel(fabsf(it_f - it) * tofbin_width, sig_tof, tofbin_width);
-      bilinear_interp_adj_fixed1(img, n0, n1, n2, i0_f, i1, i2_f, toAdd * tof_plane_weight);
+      tof_plane_weight = effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width);
+      bilinear_interp_adj_fixed1(image, n0, n1, n2, i0_f, i1, i2_f, toAdd * tof_plane_weight);
 
       i0_f += a0;
       i2_f += a2;
@@ -188,11 +188,11 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(size_t i,
   {
     dr = d2;
 
-    a0 = (d0 * voxsize[direction]) / (voxsize[0] * dr);
-    b0 = (xstart[3 * i + 0] - img_origin[0] + d0 * (img_origin[direction] - xstart[3 * i + direction]) / dr) / voxsize[0];
+    a0 = (d0 * voxel_size[direction]) / (voxel_size[0] * dr);
+    b0 = (lor_start[3 * i + 0] - image_origin[0] + d0 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[0];
 
-    a1 = (d1 * voxsize[direction]) / (voxsize[1] * dr);
-    b1 = (xstart[3 * i + 1] - img_origin[1] + d1 * (img_origin[direction] - xstart[3 * i + direction]) / dr) / voxsize[1];
+    a1 = (d1 * voxel_size[direction]) / (voxel_size[1] * dr);
+    b1 = (lor_start[3 * i + 1] - image_origin[1] + d1 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[1];
 
     // truncate istart and iend to the image boundaries
     istart = (istart < 0) ? 0 : istart;
@@ -210,8 +210,8 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(size_t i,
     for (i2 = istart; i2 <= iend; ++i2)
     {
       // TOF contribution
-      tof_plane_weight = effective_gaussian_tof_kernel(fabsf(it_f - it) * tofbin_width, sig_tof, tofbin_width);
-      bilinear_interp_adj_fixed2(img, n0, n1, n2, i0_f, i1_f, i2, toAdd * tof_plane_weight);
+      tof_plane_weight = effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width);
+      bilinear_interp_adj_fixed2(image, n0, n1, n2, i0_f, i1_f, i2, toAdd * tof_plane_weight);
 
       i0_f += a0;
       i1_f += a1;

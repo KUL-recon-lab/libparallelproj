@@ -1,21 +1,21 @@
 #include "parallelproj.h"
 #include "joseph3d_fwd_worker.h"
 
-void joseph3d_fwd(const float *xstart,
-                  const float *xend,
-                  const float *img,
-                  const float *img_origin,
-                  const float *voxsize,
-                  float *p,
-                  size_t nlors,
-                  const int *img_dim,
+void joseph3d_fwd(const float *lor_start,
+                  const float *lor_end,
+                  const float *image,
+                  const float *image_origin,
+                  const float *voxel_size,
+                  float *projection_values,
+                  size_t num_lors,
+                  const int *image_dim,
                   int device_id,
-                  int threadsperblock)
+                  int threads_per_block)
 {
 
 #pragma omp parallel for
-  for (long long i = 0; i < static_cast<long long>(nlors); ++i)
+  for (long long i = 0; i < static_cast<long long>(num_lors); ++i)
   {
-    joseph3d_fwd_worker(i, xstart, xend, img, img_origin, voxsize, p, img_dim);
+    joseph3d_fwd_worker(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, image_dim);
   }
 }

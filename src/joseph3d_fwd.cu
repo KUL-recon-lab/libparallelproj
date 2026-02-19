@@ -6,19 +6,19 @@
 #include <iostream>
 #include <stdexcept>
 
-__global__ void joseph3d_fwd_kernel(const float *xstart,
-                                    const float *xend,
-                                    const float *img,
-                                    const float *img_origin,
-                                    const float *voxsize,
-                                    float *p,
-                                    size_t nlors,
-                                    const int *img_dim)
+__global__ void joseph3d_fwd_kernel(const float *lor_start,
+                                    const float *lor_end,
+                                    const float *image,
+                                    const float *image_origin,
+                                    const float *voxel_size,
+                                    float *projection_values,
+                                    size_t num_lors,
+                                    const int *image_dim)
 {
     size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < nlors)
+    if (i < num_lors)
     {
-        joseph3d_fwd_worker(i, xstart, xend, img, img_origin, voxsize, p, img_dim);
+        joseph3d_fwd_worker(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, image_dim);
     }
 }
 
@@ -26,19 +26,19 @@ __global__ void joseph3d_fwd_kernel(const float *xstart,
 //////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////
 
-void joseph3d_fwd(const float *xstart,
-                  const float *xend,
-                  const float *img,
-                  const float *img_origin,
-                  const float *voxsize,
-                  float *p,
-                  size_t nlors,
-                  const int *img_dim,
+void joseph3d_fwd(const float *lor_start,
+                  const float *lor_end,
+                  const float *image,
+                  const float *image_origin,
+                  const float *voxel_size,
+                  float *projection_values,
+                  size_t num_lors,
+                  const int *image_dim,
                   int device_id,
-                  int threadsperblock)
+                  int threads_per_block)
 {
-    // Calculate nvoxels from img_dim - img_dim can be device pointer!
-    size_t nvoxels = cuda_nvoxels_from_img_dim(img_dim);
+    // Calculate nvoxels from image_dim - image_dim can be device pointer!
+    size_t nvoxels = cuda_nvoxels_from_img_dim(image_dim);
 
     // Set the CUDA device
     if (device_id >= 0)
@@ -52,40 +52,40 @@ void joseph3d_fwd(const float *xstart,
     /////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////
 
-    // Handle xstart (read mostly)
-    float *d_xstart = nullptr;
-    bool free_xstart = false;
-    handle_cuda_input_array(xstart, &d_xstart, sizeof(float) * nlors * 3, free_xstart, device_id, cudaMemAdviseSetReadMostly);
+    // Handle lor_start (read mostly)
+    float *d_lor_start = nullptr;
+    bool free_lor_start = false;
+    handle_cuda_input_array(lor_start, &d_lor_start, sizeof(float) * num_lors * 3, free_lor_start, device_id, cudaMemAdviseSetReadMostly);
 
-    // Handle xend (read mostly)
-    float *d_xend = nullptr;
-    bool free_xend = false;
-    handle_cuda_input_array(xend, &d_xend, sizeof(float) * nlors * 3, free_xend, device_id, cudaMemAdviseSetReadMostly);
+    // Handle lor_end (read mostly)
+    float *d_lor_end = nullptr;
+    bool free_lor_end = false;
+    handle_cuda_input_array(lor_end, &d_lor_end, sizeof(float) * num_lors * 3, free_lor_end, device_id, cudaMemAdviseSetReadMostly);
 
-    // Handle img (read mostly)
-    float *d_img = nullptr;
-    bool free_img = false;
-    handle_cuda_input_array(img, &d_img, sizeof(float) * nvoxels, free_img, device_id, cudaMemAdviseSetReadMostly);
+    // Handle image (read mostly)
+    float *d_image = nullptr;
+    bool free_image = false;
+    handle_cuda_input_array(image, &d_image, sizeof(float) * nvoxels, free_image, device_id, cudaMemAdviseSetReadMostly);
 
-    // Handle img_origin (read mostly)
-    float *d_img_origin = nullptr;
-    bool free_img_origin = false;
-    handle_cuda_input_array(img_origin, &d_img_origin, sizeof(float) * 3, free_img_origin, device_id, cudaMemAdviseSetReadMostly);
+    // Handle image_origin (read mostly)
+    float *d_image_origin = nullptr;
+    bool free_image_origin = false;
+    handle_cuda_input_array(image_origin, &d_image_origin, sizeof(float) * 3, free_image_origin, device_id, cudaMemAdviseSetReadMostly);
 
-    // Handle voxsize (read mostly)
-    float *d_voxsize = nullptr;
-    bool free_voxsize = false;
-    handle_cuda_input_array(voxsize, &d_voxsize, sizeof(float) * 3, free_voxsize, device_id, cudaMemAdviseSetReadMostly);
+    // Handle voxel_size (read mostly)
+    float *d_voxel_size = nullptr;
+    bool free_voxel_size = false;
+    handle_cuda_input_array(voxel_size, &d_voxel_size, sizeof(float) * 3, free_voxel_size, device_id, cudaMemAdviseSetReadMostly);
 
-    // Handle p (write access)
-    float *d_p = nullptr;
-    bool free_p = false;
-    handle_cuda_input_array(p, &d_p, sizeof(float) * nlors, free_p, device_id, cudaMemAdviseSetAccessedBy);
+    // Handle projection_values (write access)
+    float *d_projection_values = nullptr;
+    bool free_projection_values = false;
+    handle_cuda_input_array(projection_values, &d_projection_values, sizeof(float) * num_lors, free_projection_values, device_id, cudaMemAdviseSetAccessedBy);
 
-    // Handle img_dim (read mostly)
-    int *d_img_dim = nullptr;
-    bool free_img_dim = false;
-    handle_cuda_input_array(img_dim, &d_img_dim, sizeof(int) * 3, free_img_dim, device_id, cudaMemAdviseSetReadMostly);
+    // Handle image_dim (read mostly)
+    int *d_image_dim = nullptr;
+    bool free_image_dim = false;
+    handle_cuda_input_array(image_dim, &d_image_dim, sizeof(int) * 3, free_image_dim, device_id, cudaMemAdviseSetReadMostly);
 
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
@@ -100,10 +100,10 @@ void joseph3d_fwd(const float *xstart,
     DEBUG_PRINT("Using CUDA device: %d\n", current_device_id);
 #endif
 
-    int num_blocks = (int)((nlors + threadsperblock - 1) / threadsperblock);
-    joseph3d_fwd_kernel<<<num_blocks, threadsperblock>>>(d_xstart, d_xend, d_img,
-                                                         d_img_origin, d_voxsize,
-                                                         d_p, nlors, d_img_dim);
+    int num_blocks = (int)((num_lors + threads_per_block - 1) / threads_per_block);
+    joseph3d_fwd_kernel<<<num_blocks, threads_per_block>>>(d_lor_start, d_lor_end, d_image,
+                                                           d_image_origin, d_voxel_size,
+                                                           d_projection_values, num_lors, d_image_dim);
     cudaDeviceSynchronize();
 
     ////////////////////////////////////////////////////////////////////////////
@@ -113,21 +113,21 @@ void joseph3d_fwd(const float *xstart,
     ////////////////////////////////////////////////////////////////////////////
 
     // Free device memory if it was allocated
-    if (free_xstart)
-        cudaFree(d_xstart);
-    if (free_xend)
-        cudaFree(d_xend);
-    if (free_img)
-        cudaFree(d_img);
-    if (free_img_origin)
-        cudaFree(d_img_origin);
-    if (free_voxsize)
-        cudaFree(d_voxsize);
-    if (free_p)
+    if (free_lor_start)
+        cudaFree(d_lor_start);
+    if (free_lor_end)
+        cudaFree(d_lor_end);
+    if (free_image)
+        cudaFree(d_image);
+    if (free_image_origin)
+        cudaFree(d_image_origin);
+    if (free_voxel_size)
+        cudaFree(d_voxel_size);
+    if (free_projection_values)
     {
-        cudaMemcpy(p, d_p, sizeof(float) * nlors, cudaMemcpyDeviceToHost);
-        cudaFree(d_p);
+        cudaMemcpy(projection_values, d_projection_values, sizeof(float) * num_lors, cudaMemcpyDeviceToHost);
+        cudaFree(d_projection_values);
     }
-    if (free_img_dim)
-        cudaFree(d_img_dim);
+    if (free_image_dim)
+        cudaFree(d_image_dim);
 }

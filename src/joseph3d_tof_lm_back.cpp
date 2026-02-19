@@ -1,31 +1,31 @@
 #include "parallelproj.h"
 #include "joseph3d_tof_lm_back_worker.h"
 
-void joseph3d_tof_lm_back(const float *xstart,
-                          const float *xend,
-                          float *img,
-                          const float *img_origin,
-                          const float *voxsize,
-                          const float *p,
-                          size_t nlors,
-                          const int *img_dim,
-                          float tofbin_width,
-                          const float *sigma_tof,
-                          const float *tofcenter_offset,
-                          float n_sigmas,
-                          const short *tofbin,
-                          short n_tofbins,
-                          unsigned char lor_dependent_sigma_tof,
-                          unsigned char lor_dependent_tofcenter_offset,
+void joseph3d_tof_lm_back(const float *lor_start,
+                          const float *lor_end,
+                          float *image,
+                          const float *image_origin,
+                          const float *voxel_size,
+                          const float *projection_values,
+                          size_t num_events,
+                          const int *image_dim,
+                          float tof_bin_width,
+                          const float *tof_sigma,
+                          const float *tof_center_offset,
+                          float num_sigmas,
+                          const short *tof_bin_index,
+                          short num_tof_bins,
+                          unsigned char is_lor_dependent_tof_sigma,
+                          unsigned char is_lor_dependent_tof_center_offset,
                           int device_id,
-                          int threadsperblock)
+                          int threads_per_block)
 {
 
 #pragma omp parallel for
-  for (long long i = 0; i < static_cast<long long>(nlors); ++i)
+  for (long long i = 0; i < static_cast<long long>(num_events); ++i)
   {
-    joseph3d_tof_lm_back_worker(i, xstart, xend, img, img_origin, voxsize, p, img_dim, tofbin_width,
-                                sigma_tof, tofcenter_offset, n_sigmas, tofbin, n_tofbins,
-                                lor_dependent_sigma_tof, lor_dependent_tofcenter_offset);
+    joseph3d_tof_lm_back_worker(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, image_dim, tof_bin_width,
+                                tof_sigma, tof_center_offset, num_sigmas, tof_bin_index, num_tof_bins,
+                                is_lor_dependent_tof_sigma, is_lor_dependent_tof_center_offset);
   }
 }

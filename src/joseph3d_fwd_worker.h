@@ -3,17 +3,17 @@
 #include "utils.h"
 
 WORKER_QUALIFIER inline void joseph3d_fwd_worker(size_t i,
-                                                 const float *xstart,
-                                                 const float *xend,
-                                                 const float *img,
-                                                 const float *img_origin,
-                                                 const float *voxsize,
-                                                 float *p,
-                                                 const int *img_dim)
+                                                 const float *lor_start,
+                                                 const float *lor_end,
+                                                 const float *image,
+                                                 const float *image_origin,
+                                                 const float *voxel_size,
+                                                 float *projection_values,
+                                                 const int *image_dim)
 {
-  int n0 = img_dim[0];
-  int n1 = img_dim[1];
-  int n2 = img_dim[2];
+  int n0 = image_dim[0];
+  int n1 = image_dim[1];
+  int n2 = image_dim[2];
 
   int direction;
   int i0, i1, i2;
@@ -26,9 +26,9 @@ WORKER_QUALIFIER inline void joseph3d_fwd_worker(size_t i,
   int istart = -1;
   int iend = -1;
 
-  float d0 = xend[3 * i + 0] - xstart[3 * i + 0];
-  float d1 = xend[3 * i + 1] - xstart[3 * i + 1];
-  float d2 = xend[3 * i + 2] - xstart[3 * i + 2];
+  float d0 = lor_end[3 * i + 0] - lor_start[3 * i + 0];
+  float d1 = lor_end[3 * i + 1] - lor_start[3 * i + 1];
+  float d2 = lor_end[3 * i + 2] - lor_start[3 * i + 2];
 
   float dr;
 
@@ -37,8 +37,8 @@ WORKER_QUALIFIER inline void joseph3d_fwd_worker(size_t i,
   // if it does, direction is set to the principal axis
   // and istart and iend are set to the first and last voxel planes
   // that are intersected
-  // cf is the correction factor voxsize[dir]/cos[dir]
-  ray_cube_intersection_joseph(xstart + 3 * i, xend + 3 * i, img_origin, voxsize, img_dim, direction, cf, istart, iend);
+  // cf is the correction factor voxel_size[dir]/cos[dir]
+  ray_cube_intersection_joseph(lor_start + 3 * i, lor_end + 3 * i, image_origin, voxel_size, image_dim, direction, cf, istart, iend);
 
   // if the ray does not intersect the image cube, return
   // istart and iend are set to -1
@@ -47,17 +47,17 @@ WORKER_QUALIFIER inline void joseph3d_fwd_worker(size_t i,
     return;
   }
 
-  p[i] = 0.0f;
+  projection_values[i] = 0.0f;
 
   if (direction == 0)
   {
     dr = d0;
 
-    a1 = (d1 * voxsize[direction]) / (voxsize[1] * dr);
-    b1 = (xstart[3 * i + 1] - img_origin[1] + d1 * (img_origin[direction] - xstart[3 * i + direction]) / dr) / voxsize[1];
+    a1 = (d1 * voxel_size[direction]) / (voxel_size[1] * dr);
+    b1 = (lor_start[3 * i + 1] - image_origin[1] + d1 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[1];
 
-    a2 = (d2 * voxsize[direction]) / (voxsize[2] * dr);
-    b2 = (xstart[3 * i + 2] - img_origin[2] + d2 * (img_origin[direction] - xstart[3 * i + direction]) / dr) / voxsize[2];
+    a2 = (d2 * voxel_size[direction]) / (voxel_size[2] * dr);
+    b2 = (lor_start[3 * i + 2] - image_origin[2] + d2 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[2];
 
     // get the intersection points of the ray and the start image plane in voxel coordinates
     i1_f = istart * a1 + b1;
@@ -65,7 +65,7 @@ WORKER_QUALIFIER inline void joseph3d_fwd_worker(size_t i,
 
     for (i0 = istart; i0 <= iend; ++i0)
     {
-      p[i] += bilinear_interp_fixed0(img, n0, n1, n2, i0, i1_f, i2_f);
+      projection_values[i] += bilinear_interp_fixed0(image, n0, n1, n2, i0, i1_f, i2_f);
       i1_f += a1;
       i2_f += a2;
     }
@@ -74,11 +74,11 @@ WORKER_QUALIFIER inline void joseph3d_fwd_worker(size_t i,
   {
     dr = d1;
 
-    a0 = (d0 * voxsize[direction]) / (voxsize[0] * dr);
-    b0 = (xstart[3 * i + 0] - img_origin[0] + d0 * (img_origin[direction] - xstart[3 * i + direction]) / dr) / voxsize[0];
+    a0 = (d0 * voxel_size[direction]) / (voxel_size[0] * dr);
+    b0 = (lor_start[3 * i + 0] - image_origin[0] + d0 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[0];
 
-    a2 = (d2 * voxsize[direction]) / (voxsize[2] * dr);
-    b2 = (xstart[3 * i + 2] - img_origin[2] + d2 * (img_origin[direction] - xstart[3 * i + direction]) / dr) / voxsize[2];
+    a2 = (d2 * voxel_size[direction]) / (voxel_size[2] * dr);
+    b2 = (lor_start[3 * i + 2] - image_origin[2] + d2 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[2];
 
     // get the intersection points of the ray and the start image plane in voxel coordinates
     i0_f = istart * a0 + b0;
@@ -86,7 +86,7 @@ WORKER_QUALIFIER inline void joseph3d_fwd_worker(size_t i,
 
     for (i1 = istart; i1 <= iend; ++i1)
     {
-      p[i] += bilinear_interp_fixed1(img, n0, n1, n2, i0_f, i1, i2_f);
+      projection_values[i] += bilinear_interp_fixed1(image, n0, n1, n2, i0_f, i1, i2_f);
       i0_f += a0;
       i2_f += a2;
     }
@@ -95,11 +95,11 @@ WORKER_QUALIFIER inline void joseph3d_fwd_worker(size_t i,
   {
     dr = d2;
 
-    a0 = (d0 * voxsize[direction]) / (voxsize[0] * dr);
-    b0 = (xstart[3 * i + 0] - img_origin[0] + d0 * (img_origin[direction] - xstart[3 * i + direction]) / dr) / voxsize[0];
+    a0 = (d0 * voxel_size[direction]) / (voxel_size[0] * dr);
+    b0 = (lor_start[3 * i + 0] - image_origin[0] + d0 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[0];
 
-    a1 = (d1 * voxsize[direction]) / (voxsize[1] * dr);
-    b1 = (xstart[3 * i + 1] - img_origin[1] + d1 * (img_origin[direction] - xstart[3 * i + direction]) / dr) / voxsize[1];
+    a1 = (d1 * voxel_size[direction]) / (voxel_size[1] * dr);
+    b1 = (lor_start[3 * i + 1] - image_origin[1] + d1 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[1];
 
     // get the intersection points of the ray and the start image plane in voxel coordinates
     i0_f = istart * a0 + b0;
@@ -107,11 +107,11 @@ WORKER_QUALIFIER inline void joseph3d_fwd_worker(size_t i,
 
     for (i2 = istart; i2 <= iend; ++i2)
     {
-      p[i] += bilinear_interp_fixed2(img, n0, n1, n2, i0_f, i1_f, i2);
+      projection_values[i] += bilinear_interp_fixed2(image, n0, n1, n2, i0_f, i1_f, i2);
       i0_f += a0;
       i1_f += a1;
     }
   }
 
-  p[i] *= cf;
+  projection_values[i] *= cf;
 }

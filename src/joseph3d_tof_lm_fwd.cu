@@ -5,29 +5,29 @@
 #include <iostream>
 #include <stdexcept>
 
-__global__ void joseph3d_tof_lm_fwd_kernel(const float *xstart,
-                                           const float *xend,
-                                           const float *img,
-                                           const float *img_origin,
-                                           const float *voxsize,
-                                           float *p,
-                                           size_t nlors,
-                                           const int *img_dim,
-                                           float tofbin_width,
-                                           const float *sigma_tof,
-                                           const float *tofcenter_offset,
-                                           float n_sigmas,
-                                           const short *tofbin,
-                                           short n_tofbins,
-                                           unsigned char lor_dependent_sigma_tof,
-                                           unsigned char lor_dependent_tofcenter_offset)
+__global__ void joseph3d_tof_lm_fwd_kernel(const float *lor_start,
+                                           const float *lor_end,
+                                           const float *image,
+                                           const float *image_origin,
+                                           const float *voxel_size,
+                                           float *projection_values,
+                                           size_t num_events,
+                                           const int *image_dim,
+                                           float tof_bin_width,
+                                           const float *tof_sigma,
+                                           const float *tof_center_offset,
+                                           float num_sigmas,
+                                           const short *tof_bin_index,
+                                           short num_tof_bins,
+                                           unsigned char is_lor_dependent_tof_sigma,
+                                           unsigned char is_lor_dependent_tof_center_offset)
 {
     size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < nlors)
+    if (i < num_events)
     {
-        joseph3d_tof_lm_fwd_worker(i, xstart, xend, img, img_origin, voxsize, p, img_dim, tofbin_width,
-                                     sigma_tof, tofcenter_offset, n_sigmas, tofbin, n_tofbins,
-                                     lor_dependent_sigma_tof, lor_dependent_tofcenter_offset);
+        joseph3d_tof_lm_fwd_worker(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, image_dim, tof_bin_width,
+                                   tof_sigma, tof_center_offset, num_sigmas, tof_bin_index, num_tof_bins,
+                                   is_lor_dependent_tof_sigma, is_lor_dependent_tof_center_offset);
     }
 }
 
@@ -35,27 +35,27 @@ __global__ void joseph3d_tof_lm_fwd_kernel(const float *xstart,
 //////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////
 
-void joseph3d_tof_lm_fwd(const float *xstart,
-                           const float *xend,
-                           const float *img,
-                           const float *img_origin,
-                           const float *voxsize,
-                           float *p,
-                           size_t nlors,
-                           const int *img_dim,
-                           float tofbin_width,
-                           const float *sigma_tof,
-                           const float *tofcenter_offset,
-                           float n_sigmas,
-                           const short *tofbin,
-                           short n_tofbins,
-                           unsigned char lor_dependent_sigma_tof,
-                           unsigned char lor_dependent_tofcenter_offset,
-                           int device_id,
-                           int threadsperblock)
+void joseph3d_tof_lm_fwd(const float *lor_start,
+                         const float *lor_end,
+                         const float *image,
+                         const float *image_origin,
+                         const float *voxel_size,
+                         float *projection_values,
+                         size_t num_events,
+                         const int *image_dim,
+                         float tof_bin_width,
+                         const float *tof_sigma,
+                         const float *tof_center_offset,
+                         float num_sigmas,
+                         const short *tof_bin_index,
+                         short num_tof_bins,
+                         unsigned char is_lor_dependent_tof_sigma,
+                         unsigned char is_lor_dependent_tof_center_offset,
+                         int device_id,
+                         int threads_per_block)
 {
-    // Calculate nvoxels from img_dim - img_dim can be device pointer!
-    size_t nvoxels = cuda_nvoxels_from_img_dim(img_dim);
+    // Calculate nvoxels from image_dim - image_dim can be device pointer!
+    size_t nvoxels = cuda_nvoxels_from_img_dim(image_dim);
 
     // Set the CUDA device
     if (device_id >= 0)
@@ -69,59 +69,59 @@ void joseph3d_tof_lm_fwd(const float *xstart,
     /////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////
 
-    // Handle xstart (read mostly)
-    float *d_xstart = nullptr;
-    bool free_xstart = false;
-    handle_cuda_input_array(xstart, &d_xstart, sizeof(float) * nlors * 3, free_xstart, device_id, cudaMemAdviseSetReadMostly);
+    // Handle lor_start (read mostly)
+    float *d_lor_start = nullptr;
+    bool free_lor_start = false;
+    handle_cuda_input_array(lor_start, &d_lor_start, sizeof(float) * num_events * 3, free_lor_start, device_id, cudaMemAdviseSetReadMostly);
 
-    // Handle xend (read mostly)
-    float *d_xend = nullptr;
-    bool free_xend = false;
-    handle_cuda_input_array(xend, &d_xend, sizeof(float) * nlors * 3, free_xend, device_id, cudaMemAdviseSetReadMostly);
+    // Handle lor_end (read mostly)
+    float *d_lor_end = nullptr;
+    bool free_lor_end = false;
+    handle_cuda_input_array(lor_end, &d_lor_end, sizeof(float) * num_events * 3, free_lor_end, device_id, cudaMemAdviseSetReadMostly);
 
-    // Handle img (read mostly)
-    float *d_img = nullptr;
-    bool free_img = false;
-    handle_cuda_input_array(img, &d_img, sizeof(float) * nvoxels, free_img, device_id, cudaMemAdviseSetReadMostly);
+    // Handle image (read mostly)
+    float *d_image = nullptr;
+    bool free_image = false;
+    handle_cuda_input_array(image, &d_image, sizeof(float) * nvoxels, free_image, device_id, cudaMemAdviseSetReadMostly);
 
-    // Handle img_origin (read mostly)
-    float *d_img_origin = nullptr;
-    bool free_img_origin = false;
-    handle_cuda_input_array(img_origin, &d_img_origin, sizeof(float) * 3, free_img_origin, device_id, cudaMemAdviseSetReadMostly);
+    // Handle image_origin (read mostly)
+    float *d_image_origin = nullptr;
+    bool free_image_origin = false;
+    handle_cuda_input_array(image_origin, &d_image_origin, sizeof(float) * 3, free_image_origin, device_id, cudaMemAdviseSetReadMostly);
 
-    // Handle voxsize (read mostly)
-    float *d_voxsize = nullptr;
-    bool free_voxsize = false;
-    handle_cuda_input_array(voxsize, &d_voxsize, sizeof(float) * 3, free_voxsize, device_id, cudaMemAdviseSetReadMostly);
+    // Handle voxel_size (read mostly)
+    float *d_voxel_size = nullptr;
+    bool free_voxel_size = false;
+    handle_cuda_input_array(voxel_size, &d_voxel_size, sizeof(float) * 3, free_voxel_size, device_id, cudaMemAdviseSetReadMostly);
 
-    // Handle p (write access) - size depends on tofbins
-    size_t p_size = sizeof(float) * nlors;
-    float *d_p = nullptr;
-    bool free_p = false;
-    handle_cuda_input_array(p, &d_p, p_size, free_p, device_id, cudaMemAdviseSetAccessedBy);
+    // Handle projection_values (write access)
+    size_t projection_values_size = sizeof(float) * num_events;
+    float *d_projection_values = nullptr;
+    bool free_projection_values = false;
+    handle_cuda_input_array(projection_values, &d_projection_values, projection_values_size, free_projection_values, device_id, cudaMemAdviseSetAccessedBy);
 
-    // Handle img_dim (read mostly)
-    int *d_img_dim = nullptr;
-    bool free_img_dim = false;
-    handle_cuda_input_array(img_dim, &d_img_dim, sizeof(int) * 3, free_img_dim, device_id, cudaMemAdviseSetReadMostly);
+    // Handle image_dim (read mostly)
+    int *d_image_dim = nullptr;
+    bool free_image_dim = false;
+    handle_cuda_input_array(image_dim, &d_image_dim, sizeof(int) * 3, free_image_dim, device_id, cudaMemAdviseSetReadMostly);
 
-    // Handle sigma_tof (read mostly)
-    float *d_sigma_tof = nullptr;
-    bool free_sigma_tof = false;
-    size_t sigma_tof_size = lor_dependent_sigma_tof ? sizeof(float) * nlors : sizeof(float);
-    handle_cuda_input_array(sigma_tof, &d_sigma_tof, sigma_tof_size, free_sigma_tof, device_id, cudaMemAdviseSetReadMostly);
+    // Handle tof_sigma (read mostly)
+    float *d_tof_sigma = nullptr;
+    bool free_tof_sigma = false;
+    size_t tof_sigma_size = is_lor_dependent_tof_sigma ? sizeof(float) * num_events : sizeof(float);
+    handle_cuda_input_array(tof_sigma, &d_tof_sigma, tof_sigma_size, free_tof_sigma, device_id, cudaMemAdviseSetReadMostly);
 
-    // Handle tofcenter_offset (read mostly)
-    float *d_tofcenter_offset = nullptr;
-    bool free_tofcenter_offset = false;
-    size_t tofcenter_offset_size = lor_dependent_tofcenter_offset ? sizeof(float) * nlors : sizeof(float);
-    handle_cuda_input_array(tofcenter_offset, &d_tofcenter_offset, tofcenter_offset_size, free_tofcenter_offset, device_id, cudaMemAdviseSetReadMostly);
+    // Handle tof_center_offset (read mostly)
+    float *d_tof_center_offset = nullptr;
+    bool free_tof_center_offset = false;
+    size_t tof_center_offset_size = is_lor_dependent_tof_center_offset ? sizeof(float) * num_events : sizeof(float);
+    handle_cuda_input_array(tof_center_offset, &d_tof_center_offset, tof_center_offset_size, free_tof_center_offset, device_id, cudaMemAdviseSetReadMostly);
 
-    // Handle tofbin (read mostly)
-    short *d_tofbin = nullptr;
-    bool free_tofbin = false;
-    size_t tofbin_size = sizeof(short) * nlors;
-    handle_cuda_input_array(tofbin, &d_tofbin, tofbin_size, free_tofbin, device_id, cudaMemAdviseSetReadMostly);
+    // Handle tof_bin_index (read mostly)
+    short *d_tof_bin_index = nullptr;
+    bool free_tof_bin_index = false;
+    size_t tof_bin_index_size = sizeof(short) * num_events;
+    handle_cuda_input_array(tof_bin_index, &d_tof_bin_index, tof_bin_index_size, free_tof_bin_index, device_id, cudaMemAdviseSetReadMostly);
 
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
@@ -129,11 +129,11 @@ void joseph3d_tof_lm_fwd(const float *xstart,
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
 
-    int num_blocks = (int)((nlors + threadsperblock - 1) / threadsperblock);
-    joseph3d_tof_lm_fwd_kernel<<<num_blocks, threadsperblock>>>(
-        d_xstart, d_xend, d_img, d_img_origin, d_voxsize, d_p, nlors, d_img_dim,
-        tofbin_width, d_sigma_tof, d_tofcenter_offset, n_sigmas, d_tofbin, n_tofbins,
-        lor_dependent_sigma_tof, lor_dependent_tofcenter_offset);
+    int num_blocks = (int)((num_events + threads_per_block - 1) / threads_per_block);
+    joseph3d_tof_lm_fwd_kernel<<<num_blocks, threads_per_block>>>(
+        d_lor_start, d_lor_end, d_image, d_image_origin, d_voxel_size, d_projection_values, num_events, d_image_dim,
+        tof_bin_width, d_tof_sigma, d_tof_center_offset, num_sigmas, d_tof_bin_index, num_tof_bins,
+        is_lor_dependent_tof_sigma, is_lor_dependent_tof_center_offset);
     cudaDeviceSynchronize();
 
     ////////////////////////////////////////////////////////////////////////////
@@ -143,26 +143,26 @@ void joseph3d_tof_lm_fwd(const float *xstart,
     ////////////////////////////////////////////////////////////////////////////
 
     // Free device memory if it was allocated
-    if (free_xstart)
-        cudaFree(d_xstart);
-    if (free_xend)
-        cudaFree(d_xend);
-    if (free_img)
-        cudaFree(d_img);
-    if (free_img_origin)
-        cudaFree(d_img_origin);
-    if (free_voxsize)
-        cudaFree(d_voxsize);
-    if (free_p) {
-        cudaMemcpy(p, d_p, p_size, cudaMemcpyDeviceToHost);
-        cudaFree(d_p);
+    if (free_lor_start)
+        cudaFree(d_lor_start);
+    if (free_lor_end)
+        cudaFree(d_lor_end);
+    if (free_image)
+        cudaFree(d_image);
+    if (free_image_origin)
+        cudaFree(d_image_origin);
+    if (free_voxel_size)
+        cudaFree(d_voxel_size);
+    if (free_projection_values) {
+        cudaMemcpy(projection_values, d_projection_values, projection_values_size, cudaMemcpyDeviceToHost);
+        cudaFree(d_projection_values);
     }
-    if (free_img_dim)
-        cudaFree(d_img_dim);
-    if (free_sigma_tof)
-        cudaFree(d_sigma_tof);
-    if (free_tofcenter_offset)
-        cudaFree(d_tofcenter_offset);
-    if (free_tofbin)
-        cudaFree(d_tofbin);
+    if (free_image_dim)
+        cudaFree(d_image_dim);
+    if (free_tof_sigma)
+        cudaFree(d_tof_sigma);
+    if (free_tof_center_offset)
+        cudaFree(d_tof_center_offset);
+    if (free_tof_bin_index)
+        cudaFree(d_tof_bin_index);
 }
