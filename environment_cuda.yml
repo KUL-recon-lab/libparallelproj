@@ -5,7 +5,7 @@ channels:
 
 dependencies:
   - cxx-compiler
-  - cuda-compiler<=12.4
+  - cuda-compiler
   - cmake
   - nanobind
   - numpy

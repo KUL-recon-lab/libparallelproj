@@ -17,8 +17,8 @@ help:
 # Generate Doxygen XML first
 doxygen:
 	@echo "Generating Doxygen XML..."
-	@cd .. && mkdir -p build && cd build && \
-		cmake .. -DBUILD_DOCS=ON -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF -DUSE_CUDA=OFF && \
+	@mkdir -p _build_doxygen && cd _build_doxygen && \
+		cmake ../.. -DBUILD_DOCS=ON -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF -DUSE_CUDA=OFF && \
 		cmake --build . --target doxygen-docs && \
 		cmake --build .
 

@@ -7,7 +7,7 @@ import os
 import sys
 
 # Add the build directory to the path so we can import the Python module
-sys.path.insert(0, os.path.abspath("../build"))
+sys.path.insert(0, os.path.abspath("_build_doxygen"))
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
@@ -31,7 +31,7 @@ templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 # -- Breathe configuration ---------------------------------------------------
-breathe_projects = {"parallelproj": "../build/docs/xml"}
+breathe_projects = {"parallelproj": "_build_doxygen/docs/xml"}
 breathe_default_project = "parallelproj"
 
 # -- Options for HTML output -------------------------------------------------

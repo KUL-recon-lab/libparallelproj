@@ -1,5 +1,6 @@
 # Sphinx build outputs
 _build/
+_build_doxygen/
 _static/
 _templates/
 
