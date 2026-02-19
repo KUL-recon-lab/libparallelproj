@@ -33,14 +33,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r docs/requirements.txt
 
-      - name: Configure CMake
-        run: cmake -S . -B build -DBUILD_DOCS=ON -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF -DUSE_CUDA=OFF
-
-      - name: Build Doxygen XML and Python Module
-        run: cmake --build build --target doxygen-docs parallelproj_backend
-
-      - name: Build Sphinx Documentation
-        run: sphinx-build -b html docs docs/_build/html
+      - name: Build Documentation
+        working-directory: docs
+        run: make html
 
       - name: Upload Documentation Artifact
         uses: actions/upload-artifact@v4
