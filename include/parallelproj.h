@@ -236,10 +236,10 @@ extern "C"
 
   @note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
 
-  @param lor_start pointer to array of shape [3*num_lors] with the coordinates of the start points of the event LORs.
+  @param lor_start pointer to array of shape [3*num_events] with the coordinates of the start points of the event LORs.
                    The start coordinates of the n-th event are at lor_start[n*3 + i] with i = 0,1,2.
                    Units are the ones of voxel_size.
-  @param lor_end   pointer array of shape [3*num_lors] with the coordinates of the end points of the event LORs.
+  @param lor_end   pointer array of shape [3*num_events] with the coordinates of the end points of the event LORs.
                    The end coordinates of the n-th event are at lor_end[n*3 + i] with i = 0,1,2.
                    Units are the ones of voxel_size.
   @param image    pointer array of shape [n0*n1*n2] containing the 3D image to be projected.
@@ -247,7 +247,7 @@ extern "C"
   @param image_origin  pointer array [x0_0,x0_1,x0_2] of coordinates of the center of the [0,0,0] voxel.
   @param voxel_size     pointer array [vs0, vs1, vs2] of the voxel sizes.
   @param projection_values pointer to array of length number of events (output) used to store the projections.
-  @param num_lors       number of events
+  @param num_events       number of events
   @param image_dim     array with dimensions of image [n0,n1,n2]
   @param tof_bin_width     width of the TOF bins in spatial units (units of lor_start and lor_end)
   @param tof_sigma        pointer to array of length 1 or number of events (depending on is_lor_dependent_tof_sigma)
@@ -275,7 +275,7 @@ extern "C"
                                             const float *image_origin,
                                             const float *voxel_size,
                                             float *projection_values,
-                                            size_t num_lors,
+                                            size_t num_events,
                                             const int *image_dim,
                                             float tof_bin_width,
                                             const float *tof_sigma,
@@ -301,10 +301,10 @@ extern "C"
 
   @note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
 
-  @param lor_start pointer to array of shape [3*num_lors] with the coordinates of the start points of the event LORs.
+  @param lor_start pointer to array of shape [3*num_events] with the coordinates of the start points of the event LORs.
                    The start coordinates of the n-th event are at lor_start[n*3 + i] with i = 0,1,2.
                    Units are the ones of voxel_size.
-  @param lor_end   pointer array of shape [3*num_lors] with the coordinates of the end points of the event LORs.
+  @param lor_end   pointer array of shape [3*num_events] with the coordinates of the end points of the event LORs.
                    The end coordinates of the n-th event are at lor_end[n*3 + i] with i = 0,1,2.
                    Units are the ones of voxel_size.
   @param image    Pointer to array of shape [n0*n1*n2] containing the 3D image to add backprojected
@@ -312,8 +312,8 @@ extern "C"
                 Values are added to the existing contents of this array.
   @param image_origin  pointer array [x0_0,x0_1,x0_2] of coordinates of the center of the [0,0,0] voxel.
   @param voxel_size     pointer array [vs0, vs1, vs2] of the voxel sizes.
-  @param projection_values pointer to array of values to be backprojected (length number of events / num_lors)
-  @param num_lors       number of events
+  @param projection_values pointer to array of values to be backprojected (length number of events / num_events)
+  @param num_events       number of events
   @param image_dim     array with dimensions of image [n0,n1,n2]
   @param tof_bin_width     width of the TOF bins in spatial units (units of lor_start and lor_end)
   @param tof_sigma        pointer to array of length 1 or number of events (depending on is_lor_dependent_tof_sigma)
@@ -341,7 +341,7 @@ extern "C"
                                              const float *image_origin,
                                              const float *voxel_size,
                                              const float *projection_values,
-                                             size_t num_lors,
+                                             size_t num_events,
                                              const int *image_dim,
                                              float tof_bin_width,
                                              const float *tof_sigma,
