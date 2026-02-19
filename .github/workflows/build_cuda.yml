@@ -23,6 +23,7 @@ jobs:
         with:
           cuda: ${{ matrix.cuda-version }}
           method: 'local'
+          log-file-suffix: '${{ matrix.cuda-version }}.txt'
 
       - name: Install Build Tools
         run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
