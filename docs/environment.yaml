@@ -4,10 +4,6 @@ channels:
 dependencies:
   - python
   - pip
-  - c-compiler
-  - doxygen
-  - cmake
-  - ninja
   - sphinx>=7,<9
   - breathe
   - furo

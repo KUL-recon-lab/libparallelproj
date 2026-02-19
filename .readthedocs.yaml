@@ -1,16 +1,21 @@
 version: 2
 
 build:
-  os: "ubuntu-lts-latest"
+  os: ubuntu-24.04
   tools:
-    python: "miniconda-latest"
+    python: miniconda-latest
+
   apt_packages:
-      - doxygen
-      - cmake
-      - ninja
-  commands:
-    - mkdir -p docs/_build_doxygen
-    - cd docs/_build_doxygen && cmake ../.. -DBUILD_DOCS=ON -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF -DUSE_CUDA=OFF && cmake --build . --target doxygen-docs && cmake --build .
+    - doxygen
+    - cmake
+    - ninja-build
+
+  jobs:
+    pre_build:
+      - mkdir -p docs/_build_doxygen
+      - cd docs/_build_doxygen && cmake ../.. -DBUILD_DOCS=ON -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF -DUSE_CUDA=OFF
+      - cd docs/_build_doxygen && cmake --build . --target doxygen-docs
+      - cd docs/_build_doxygen && cmake --build .
 
 conda:
   environment: docs/environment.yaml
