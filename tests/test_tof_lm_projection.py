@@ -7,16 +7,19 @@ from types import ModuleType
 from .config import pytestmark
 
 
-@pytest.mark.parametrize("direc, sigma_tof, num_tofbins, tof_center_offset", [
-    (0, 12.0, 29, 0.0),
-    (1, 12.0, 29, 0.0),
-    (2, 12.0, 29, 0.0),
-    (0, 12.0, 29, 0.0),
-    (0, 12.0, 28, 0.0),
-    (0, 10.0, 29, 0.0),
-    (0, 12.0, 29, -2.5),
-    (0, 12.0, 29, 2.5),
-])
+@pytest.mark.parametrize(
+    "direc, sigma_tof, num_tofbins, tof_center_offset",
+    [
+        (0, 12.0, 29, 0.0),
+        (1, 12.0, 29, 0.0),
+        (2, 12.0, 29, 0.0),
+        (0, 12.0, 29, 0.0),
+        (0, 12.0, 28, 0.0),
+        (0, 10.0, 29, 0.0),
+        (0, 12.0, 29, -2.5),
+        (0, 12.0, 29, 2.5),
+    ],
+)
 def test_tof_lm_fwd(
     xp: ModuleType,
     dev: str,
@@ -27,7 +30,7 @@ def test_tof_lm_fwd(
     voxsize: tuple[float, float, float] = (1.5, 1.7, 1.6),
     vox_num: int = 29,
     tofbin_width: float = 4.0,
-    num_sigmas: float = 4.0, # we use pm 4 sigma here, since the truncation is slightly different between sino and LM projectors
+    num_sigmas: float = 4.0,  # we use pm 4 sigma here, since the truncation is slightly different between sino and LM projectors
     nvox: int = 59,
     verbose: bool = False,
 ):
@@ -77,7 +80,7 @@ def test_tof_lm_fwd(
         xp.asarray([sigma_tof], dtype=xp.float32, device=dev),
         xp.asarray([tof_center_offset], dtype=xp.float32, device=dev),
         num_tofbins,
-        n_sigmas=num_sigmas,
+        num_sigmas=num_sigmas,
     )
 
     p_tof_lm = xp.zeros(num_tofbins, dtype=xp.float32, device=dev)
@@ -90,10 +93,13 @@ def test_tof_lm_fwd(
         p_tof_lm,
         tofbin_width,
         xp.tile(xp.asarray([sigma_tof], dtype=xp.float32, device=dev), (num_tofbins,)),
-        xp.tile(xp.asarray([tof_center_offset], dtype=xp.float32, device=dev), (num_tofbins,)),
+        xp.tile(
+            xp.asarray([tof_center_offset], dtype=xp.float32, device=dev),
+            (num_tofbins,),
+        ),
         xp.arange(num_tofbins, dtype=xp.int16, device=dev),
         num_tofbins,
-        n_sigmas=num_sigmas,
+        num_sigmas=num_sigmas,
     )
 
     for i in range(num_tofbins):
@@ -103,7 +109,10 @@ def test_tof_lm_fwd(
 
         assert math.isclose(sino_val, lm_val, abs_tol=1e-4)
 
-@pytest.mark.parametrize("sigma_tof, num_tofbins", [(4.5, 41), (4.5, 40), (8.5, 41), (2.5, 41)])
+
+@pytest.mark.parametrize(
+    "sigma_tof, num_tofbins", [(4.5, 41), (4.5, 40), (8.5, 41), (2.5, 41)]
+)
 def test_tof_lm_adjointness(
     xp: ModuleType,
     dev: str,
@@ -115,9 +124,10 @@ def test_tof_lm_adjointness(
     tof_center_offset: float = 0.0,
     nvox: int = 19,
     verbose: bool = False,
-    nlors = 200):
+    nlors=200,
+):
 
-    #------
+    # ------
     random.seed(42)
     img_dim = (nvox, nvox, nvox)
 
@@ -127,7 +137,6 @@ def test_tof_lm_adjointness(
         (-(n1 / 2) + 0.5) * voxsize[1],
         (-(n2 / 2) + 0.5) * voxsize[2],
     )
-
 
     img = xp.zeros(img_dim, dtype=xp.float32, device=dev)
     # fill the image with uniform random values using python's random module
@@ -154,20 +163,18 @@ def test_tof_lm_adjointness(
         xend[i, 1] = r * math.sin(theta) * math.sin(phi)
         xend[i, 2] = r * math.cos(theta)
 
-
     # simulate LOR-dependent TOF resolution and center offsets
     sigma_tof_array = xp.zeros(nlors, dtype=xp.float32, device=dev)
     for i in range(nlors):
-        sigma_tof_array[i] = sigma_tof * random.uniform(0.9,1.1)
+        sigma_tof_array[i] = sigma_tof * random.uniform(0.9, 1.1)
 
     tof_center_offset_array = xp.zeros(nlors, dtype=xp.float32, device=dev)
     for i in range(nlors):
-        tof_center_offset_array[i] = tof_center_offset + random.uniform(-2.0,2.0)
+        tof_center_offset_array[i] = tof_center_offset + random.uniform(-2.0, 2.0)
 
     tofbin = xp.zeros(nlors, dtype=xp.int16, device=dev)
     for i in range(nlors):
         tofbin[i] = random.randint(0, num_tofbins - 1)
-
 
     img_fwd = xp.zeros(nlors, dtype=xp.float32, device=dev)
     ppb.joseph3d_tof_lm_fwd(
@@ -182,7 +189,7 @@ def test_tof_lm_adjointness(
         tof_center_offset_array,
         tofbin,
         num_tofbins,
-        n_sigmas=num_sigmas,
+        num_sigmas=num_sigmas,
     )
 
     # back project a random TOF sinogram
@@ -203,7 +210,7 @@ def test_tof_lm_adjointness(
         tof_center_offset_array,
         tofbin,
         num_tofbins,
-        n_sigmas=num_sigmas,
+        num_sigmas=num_sigmas,
     )
 
     # test the adjointness property

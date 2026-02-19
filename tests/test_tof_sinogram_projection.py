@@ -7,7 +7,6 @@ from types import ModuleType
 from .config import pytestmark
 
 
-
 def effective_tof_kernel(dx: float, sigma_t: float, tbin_width: float) -> float:
     """Gaussian integrated over a tof bin width."""
     sqrt2 = 1.414213562373095
@@ -17,16 +16,19 @@ def effective_tof_kernel(dx: float, sigma_t: float, tbin_width: float) -> float:
     )
 
 
-@pytest.mark.parametrize("direc, sigma_tof, num_tofbins, tof_center_offset", [
-    (0, 4.5, 41, 0.0),
-    (1, 4.5, 41, 0.0),
-    (2, 4.5, 41, 0.0),
-    (0, 3.5, 41, 0.0),
-    (0, 3.5, 40, 0.0),
-    (0, 8.5, 41, 0.0),
-    (0, 3.5, 41, -2.5),
-    (0, 3.5, 41, 2.5),
-])
+@pytest.mark.parametrize(
+    "direc, sigma_tof, num_tofbins, tof_center_offset",
+    [
+        (0, 4.5, 41, 0.0),
+        (1, 4.5, 41, 0.0),
+        (2, 4.5, 41, 0.0),
+        (0, 3.5, 41, 0.0),
+        (0, 3.5, 40, 0.0),
+        (0, 8.5, 41, 0.0),
+        (0, 3.5, 41, -2.5),
+        (0, 3.5, 41, 2.5),
+    ],
+)
 def test_tof_sino_fwd(
     xp: ModuleType,
     dev: str,
@@ -135,11 +137,11 @@ def test_tof_sino_fwd(
 
         for k, it in enumerate(range(it_min, it_max + 1)):
             if direction == 0:
-                p_tof_ref[0, it] += tof_weights[k] * cf * img[i,0,0]
+                p_tof_ref[0, it] += tof_weights[k] * cf * img[i, 0, 0]
             elif direction == 1:
-                p_tof_ref[0, it] += tof_weights[k] * cf * img[0,i,0]
+                p_tof_ref[0, it] += tof_weights[k] * cf * img[0, i, 0]
             elif direction == 2:
-                p_tof_ref[0, it] += tof_weights[k] * cf * img[0,0,i]
+                p_tof_ref[0, it] += tof_weights[k] * cf * img[0, 0, i]
             else:
                 raise ValueError("direction must be 0, 1, or 2")
 
@@ -161,7 +163,7 @@ def test_tof_sino_fwd(
         xp.asarray([sigma_tof], dtype=xp.float32, device=dev),
         xp.asarray([tof_center_offset], dtype=xp.float32, device=dev),
         num_tofbins,
-        n_sigmas=num_sigmas,
+        num_sigmas=num_sigmas,
     )
 
     if verbose:
@@ -178,7 +180,10 @@ def test_tof_sino_fwd(
     # the sum over TOF should be the voxel size (if we have enough TOF bins)
     assert math.isclose(float(xp.sum(p_tof)), voxsize[direction], abs_tol=1e-6)
 
-@pytest.mark.parametrize("sigma_tof, num_tofbins", [(4.5, 41), (4.5, 40), (8.5, 41), (2.5, 41)])
+
+@pytest.mark.parametrize(
+    "sigma_tof, num_tofbins", [(4.5, 41), (4.5, 40), (8.5, 41), (2.5, 41)]
+)
 def test_tof_sino_adjointness(
     xp: ModuleType,
     dev: str,
@@ -190,9 +195,10 @@ def test_tof_sino_adjointness(
     tof_center_offset: float = 0.0,
     nvox: int = 19,
     verbose: bool = False,
-    nlors = 200):
+    nlors=200,
+):
 
-    #------
+    # ------
     random.seed(42)
     img_dim = (nvox, nvox, nvox)
 
@@ -202,7 +208,6 @@ def test_tof_sino_adjointness(
         (-(n1 / 2) + 0.5) * voxsize[1],
         (-(n2 / 2) + 0.5) * voxsize[2],
     )
-
 
     img = xp.zeros(img_dim, dtype=xp.float32, device=dev)
     # fill the image with uniform random values using python's random module
@@ -229,15 +234,14 @@ def test_tof_sino_adjointness(
         xend[i, 1] = r * math.sin(theta) * math.sin(phi)
         xend[i, 2] = r * math.cos(theta)
 
-
     # simulate LOR-dependent TOF resolution and center offsets
     sigma_tof_array = xp.zeros(nlors, dtype=xp.float32, device=dev)
     for i in range(nlors):
-        sigma_tof_array[i] = sigma_tof * random.uniform(0.9,1.1)
+        sigma_tof_array[i] = sigma_tof * random.uniform(0.9, 1.1)
 
     tof_center_offset_array = xp.zeros(nlors, dtype=xp.float32, device=dev)
     for i in range(nlors):
-        tof_center_offset_array[i] = tof_center_offset + random.uniform(-2.0,2.0)
+        tof_center_offset_array[i] = tof_center_offset + random.uniform(-2.0, 2.0)
 
     img_fwd = xp.zeros((nlors, num_tofbins), dtype=xp.float32, device=dev)
     ppb.joseph3d_tof_sino_fwd(
@@ -251,7 +255,7 @@ def test_tof_sino_adjointness(
         sigma_tof_array,
         tof_center_offset_array,
         num_tofbins,
-        n_sigmas=num_sigmas,
+        num_sigmas=num_sigmas,
     )
 
     # back project a random TOF sinogram
@@ -272,7 +276,7 @@ def test_tof_sino_adjointness(
         sigma_tof_array,
         tof_center_offset_array,
         num_tofbins,
-        n_sigmas=num_sigmas,
+        num_sigmas=num_sigmas,
     )
 
     # test the adjointness property
@@ -293,10 +297,12 @@ def test_tof_sino_adjointness(
         img,
         xp.asarray(img_origin, dtype=xp.float32, device=dev),
         xp.asarray(voxsize, dtype=xp.float32, device=dev),
-        img_fwd_nontof
+        img_fwd_nontof,
     )
 
     img_fwd_sum_tof = xp.sum(img_fwd, axis=-1)
 
     for i in range(nlors):
-        assert math.isclose(float(img_fwd_sum_tof[i]), float(img_fwd_nontof[i]), abs_tol=2e-3)
+        assert math.isclose(
+            float(img_fwd_sum_tof[i]), float(img_fwd_nontof[i]), abs_tol=2e-3
+        )
