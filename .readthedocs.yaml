@@ -4,6 +4,9 @@ build:
   os: "ubuntu-lts-latest"
   tools:
     python: "miniconda-latest"
+  commands:
+    - mkdir -p docs/_build_doxygen
+    - cd docs/_build_doxygen && cmake ../.. -DBUILD_DOCS=ON -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF -DUSE_CUDA=OFF && cmake --build . --target doxygen-docs && cmake --build .
 
 conda:
   environment: docs/environment.yaml
