@@ -4,8 +4,6 @@ build:
   os: "ubuntu-lts-latest"
   tools:
     python: "miniconda-latest"
-#  commands:
-#    - mamba run -n readthedocs make -C docs doxygen
 
 conda:
   environment: docs/environment.yaml
