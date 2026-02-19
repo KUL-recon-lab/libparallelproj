@@ -22,10 +22,11 @@ extern "C"
   \pp_param_lor_start{num_lors}
   \pp_param_lor_end{num_lors}
   \pp_param_image_fwd
+  \pp_note_image_layout
   \pp_param_image_origin
   \pp_param_voxel_size
-  @param projection_values Pointer to array of length @p num_lors where the forward projection results will be stored.
-  \pp_param_count{num_lors,geometrical LORs}
+  \pp_param_projection_values_fwd{num_lors}
+  \pp_param_count{num_lors,geometric LORs}
   \pp_param_image_dim
   \pp_param_device_id
   \pp_param_threads
@@ -58,10 +59,11 @@ extern "C"
   \pp_param_lor_start{num_lors}
   \pp_param_lor_end{num_lors}
   \pp_param_image_back
+  \pp_note_image_layout
   \pp_param_image_origin
   \pp_param_voxel_size
-  @param projection_values Pointer to array of length @p num_lors with the values to be backprojected.
-  \pp_param_count{num_lors,geometrical LORs}
+  \pp_param_projection_values_back{num_lors}
+  \pp_param_count{num_lors,geometric LORs}
   \pp_param_image_dim
   \pp_param_device_id
   \pp_param_threads
@@ -93,27 +95,20 @@ extern "C"
   \pp_param_lor_start{num_lors}
   \pp_param_lor_end{num_lors}
   \pp_param_image_fwd
+  \pp_note_image_layout
   \pp_param_image_origin
   \pp_param_voxel_size
-  @param projection_values Pointer to array of length @p num_lors * @p num_tof_bins (output) used to store the projections.
-                     The ordering is row-major per LOR:
-                     [LOR0-TOFBIN-0, LOR0-TOFBIN-1, ... LOR0-TOFBIN-(n-1),
-                      LOR1-TOFBIN-0, LOR1-TOFBIN-1, ... LOR1-TOFBIN-(n-1),
-                      ...
-                      LOR(N-1)-TOFBIN-0, LOR(N-1)-TOFBIN-1, ... LOR(N-1)-TOFBIN-(n-1)]
-  \pp_param_count{num_lors,geometrical LORs}
+  \pp_param_projection_values_tof_sino_out{num_lors,num_tof_bins}
+  \pp_note_tof_sino_layout
+  \pp_param_count{num_lors,geometric LORs}
   \pp_param_tof_image_dim
   \pp_param_tof_bin_width
   \pp_param_tof_sigma{num_lors,is_lor_dependent_tof_sigma}
   \pp_param_tof_center_offset{num_lors,is_lor_dependent_tof_center_offset}
   \pp_param_tof_num_sigmas
   \pp_param_tof_num_bins
-  @param is_lor_dependent_tof_sigma Unsigned char 0 or 1.
-                                 0 means that the first value in @p tof_sigma is used for all LORs.
-                                 1 (non-zero) means that the TOF resolutions are LOR dependent
-  @param is_lor_dependent_tof_center_offset Unsigned char 0 or 1.
-                                        0 means that the first value in @p tof_center_offset is used for all LORs.
-                                        1 (non-zero) means that the TOF center offsets are LOR dependent
+  \pp_param_tof_dep_sigma{LORs}
+  \pp_param_tof_dep_center{LORs}
   \pp_param_device_id
   \pp_param_threads
   */
@@ -151,17 +146,17 @@ extern "C"
   \pp_note_pointer_types
 
   @details The function backprojects a TOF sinogram into a 3D image volume using the Joseph
-           ray-driven algorithm. The projection data @p projection_values is organized row-major per LOR:
-           [LOR0-TOFBIN-0, LOR0-TOFBIN-1, ..., LOR0-TOFBIN-(num_tof_bins-1),
-            LOR1-TOFBIN-0, LOR1-TOFBIN-1, ..., LOR1-TOFBIN-(num_tof_bins-1), ...].
-           Values from @p projection_values are distributed into @p image (accumulated, not overwritten).
+           ray-driven algorithm. Values from @p projection_values are distributed into @p image
+           (accumulated, not overwritten).
 
   \pp_param_lor_start{num_lors}
   \pp_param_lor_end{num_lors}
   \pp_param_image_back
+  \pp_note_image_layout
   \pp_param_image_origin
   \pp_param_voxel_size
-  @param projection_values Pointer to TOF sinogram data of length @p num_lors * @p num_tof_bins (see details).
+  \pp_param_projection_values_tof_sino_in{num_lors,num_tof_bins}
+  \pp_note_tof_sino_layout
   \pp_param_count{num_lors,geometric LORs}
   \pp_param_tof_image_dim
   \pp_param_tof_bin_width
@@ -169,10 +164,8 @@ extern "C"
   \pp_param_tof_center_offset{num_lors,is_lor_dependent_tof_center_offset}
   \pp_param_tof_num_sigmas
   \pp_param_tof_num_bins
-  @param is_lor_dependent_tof_sigma If non-zero, @p tof_sigma contains one sigma per LOR; otherwise the first
-                                 element is used for all LORs.
-  @param is_lor_dependent_tof_center_offset If non-zero, @p tof_center_offset contains one offset per LOR;
-                                        otherwise the first element is used for all LORs.
+  \pp_param_tof_dep_sigma{LORs}
+  \pp_param_tof_dep_center{LORs}
   \pp_param_device_id
   \pp_param_threads
 
@@ -210,23 +203,20 @@ extern "C"
   \pp_param_lor_start{num_events}
   \pp_param_lor_end{num_events}
   \pp_param_image_fwd
+  \pp_note_image_layout
   \pp_param_image_origin
   \pp_param_voxel_size
-  @param projection_values Pointer to array of length @p num_events (output) used to store the projections.
+  \pp_param_projection_values_tof_lm_out{num_events}
   \pp_param_count{num_events,events}
   \pp_param_tof_image_dim
   \pp_param_tof_bin_width
   \pp_param_tof_sigma{num_events,is_lor_dependent_tof_sigma}
   \pp_param_tof_center_offset{num_events,is_lor_dependent_tof_center_offset}
   \pp_param_tof_num_sigmas
-  @param tof_bin_index Pointer to array of length @p num_events with the TOF bin numbers.
+  \pp_param_tof_bin_index{num_events}
   \pp_param_tof_num_bins
-  @param is_lor_dependent_tof_sigma Unsigned char 0 or 1.
-                                 0 means that the first value in @p tof_sigma is used for all events.
-                                 1 (non-zero) means that the TOF resolutions are LOR dependent
-  @param is_lor_dependent_tof_center_offset Unsigned char 0 or 1.
-                                        0 means that the first value in @p tof_center_offset is used for all events.
-                                        1 (non-zero) means that the TOF center offsets are LOR dependent
+  \pp_param_tof_dep_sigma{events}
+  \pp_param_tof_dep_center{events}
   \pp_param_device_id
   \pp_param_threads
   */
@@ -266,23 +256,20 @@ extern "C"
   \pp_param_lor_start{num_events}
   \pp_param_lor_end{num_events}
   \pp_param_image_back
+  \pp_note_image_layout
   \pp_param_image_origin
   \pp_param_voxel_size
-  @param projection_values Pointer to array of values to be backprojected (length @p num_events).
+  \pp_param_projection_values_tof_lm_back{num_events}
   \pp_param_count{num_events,events}
   \pp_param_tof_image_dim
   \pp_param_tof_bin_width
   \pp_param_tof_sigma{num_events,is_lor_dependent_tof_sigma}
   \pp_param_tof_center_offset{num_events,is_lor_dependent_tof_center_offset}
   \pp_param_tof_num_sigmas
-  @param tof_bin_index Pointer to array of length @p num_events with the TOF bin numbers.
+  \pp_param_tof_bin_index{num_events}
   \pp_param_tof_num_bins
-  @param is_lor_dependent_tof_sigma Unsigned char 0 or 1.
-                                 0 means that the first value in @p tof_sigma is used for all events.
-                                 1 (non-zero) means that the TOF resolutions are LOR dependent
-  @param is_lor_dependent_tof_center_offset Unsigned char 0 or 1.
-                                        0 means that the first value in @p tof_center_offset is used for all events.
-                                        1 (non-zero) means that the TOF center offsets are LOR dependent
+  \pp_param_tof_dep_sigma{events}
+  \pp_param_tof_dep_center{events}
   \pp_param_device_id
   \pp_param_threads
   */
