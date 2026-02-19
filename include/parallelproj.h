@@ -17,23 +17,18 @@ extern "C"
   /*!
   @brief Forward projection using the Joseph 3D algorithm.
 
-  @note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
+  \pp_note_pointer_types
 
-  @param lor_start Pointer to array of shape [3 * @p num_lors] with the coordinates of the start points of the LORs.
-                   The start coordinates of the n-th LOR are at lor_start[n*3 + i] with i = 0,1,2.
-                   Units are those of @p voxel_size.
-  @param lor_end   Pointer to array of shape [3 * @p num_lors] with the coordinates of the end points of the LORs.
-                   The end coordinates of the n-th LOR are at lor_end[n*3 + i] with i = 0,1,2.
-                   Units are those of @p voxel_size.
-  @param image    Pointer to array of shape [n0*n1*n2] containing the 3D image used for forward projection.
-                The pixel [i,j,k] is stored at [n1*n2*i + n2*j + k].
-  @param image_origin Pointer to array [x0_0, x0_1, x0_2] of coordinates of the center of the [0,0,0] voxel.
-  @param voxel_size Pointer to array [vs0, vs1, vs2] of the voxel sizes.
+  \pp_param_lor_start{num_lors}
+  \pp_param_lor_end{num_lors}
+  \pp_param_image_fwd
+  \pp_param_image_origin
+  \pp_param_voxel_size
   @param projection_values Pointer to array of length @p num_lors where the forward projection results will be stored.
   @param num_lors  Number of geometrical LORs.
-  @param image_dim Pointer to array with dimensions of the image [n0, n1, n2].
-  @param device_id ID of the device to use for computation (default: 0).
-  @param threads_per_block Number of threads per block for GPU computation (default: 64).
+  \pp_param_image_dim
+  \pp_param_device_id
+  \pp_param_threads
   */
   PARALLELPROJ_API void joseph3d_fwd(const float *lor_start,
                                      const float *lor_end,
@@ -58,24 +53,18 @@ extern "C"
   /*!
   @brief Backprojection using the Joseph 3D algorithm.
 
-  @note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
+  \pp_note_pointer_types
 
-  @param lor_start Pointer to array of shape [3 * @p num_lors] with the coordinates of the start points of the LORs.
-                   The start coordinates of the n-th LOR are at lor_start[n*3 + i] with i = 0,1,2.
-                   Units are those of @p voxel_size.
-  @param lor_end   Pointer to array of shape [3 * @p num_lors] with the coordinates of the end points of the LORs.
-                   The end coordinates of the n-th LOR are at lor_end[n*3 + i] with i = 0,1,2.
-                   Units are those of @p voxel_size.
-  @param image    Pointer to array of shape [n0*n1*n2] containing the 3D image used for backprojection (output).
-                The pixel [i,j,k] is stored at [n1*n2*i + n2*j + k].
-                Values are added to the existing contents of this array.
-  @param image_origin Pointer to array [x0_0, x0_1, x0_2] of coordinates of the center of the [0,0,0] voxel.
-  @param voxel_size Pointer to array [vs0, vs1, vs2] of the voxel sizes.
+  \pp_param_lor_start{num_lors}
+  \pp_param_lor_end{num_lors}
+  \pp_param_image_back
+  \pp_param_image_origin
+  \pp_param_voxel_size
   @param projection_values Pointer to array of length @p num_lors with the values to be backprojected.
   @param num_lors  Number of geometrical LORs.
-  @param image_dim Pointer to array with dimensions of the image [n0, n1, n2].
-  @param device_id ID of the device to use for computation (default: 0).
-  @param threads_per_block Number of threads per block for GPU computation (default: 64).
+  \pp_param_image_dim
+  \pp_param_device_id
+  \pp_param_threads
    */
   PARALLELPROJ_API void joseph3d_back(const float *lor_start,
                                       const float *lor_end,
@@ -99,18 +88,13 @@ extern "C"
 
   /*! @brief 3D sinogram TOF Joseph forward projector
 
-  @note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
+  \pp_note_pointer_types
 
-  @param lor_start Pointer to array of shape [3 * @p num_lors] with the coordinates of the start points of the LORs.
-                   The start coordinates of the n-th LOR are at lor_start[n*3 + i] with i = 0,1,2.
-                   Units are those of @p voxel_size.
-  @param lor_end   Pointer to array of shape [3 * @p num_lors] with the coordinates of the end points of the LORs.
-                   The end coordinates of the n-th LOR are at lor_end[n*3 + i] with i = 0,1,2.
-                   Units are those of @p voxel_size.
-  @param image    Pointer to array of shape [n0*n1*n2] containing the 3D image to be projected.
-                The voxel [i,j,k] is stored at index n1*n2*i + n2*j + k.
-  @param image_origin Pointer to array [x0_0, x0_1, x0_2] of coordinates of the center of the [0,0,0] voxel.
-  @param voxel_size Pointer to array [vs0, vs1, vs2] of the voxel sizes.
+  \pp_param_lor_start{num_lors}
+  \pp_param_lor_end{num_lors}
+  \pp_param_image_fwd
+  \pp_param_image_origin
+  \pp_param_voxel_size
   @param projection_values Pointer to array of length @p num_lors * @p num_tof_bins (output) used to store the projections.
                      The ordering is row-major per LOR:
                      [LOR0-TOFBIN-0, LOR0-TOFBIN-1, ... LOR0-TOFBIN-(n-1),
@@ -118,7 +102,7 @@ extern "C"
                       ...
                       LOR(N-1)-TOFBIN-0, LOR(N-1)-TOFBIN-1, ... LOR(N-1)-TOFBIN-(n-1)]
   @param num_lors Number of geometrical LORs.
-  @param image_dim Array with dimensions of image [n0, n1, n2].
+  @param image_dim Pointer to array with image dimensions [n0, n1, n2].
   @param tof_bin_width Width of the TOF bins in spatial units (units of @p lor_start and @p lor_end).
   @param tof_sigma Pointer to array of length 1 or @p num_lors (depending on @p is_lor_dependent_tof_sigma)
                           with the TOF resolution (sigma) for each LOR in spatial units
@@ -134,8 +118,8 @@ extern "C"
   @param is_lor_dependent_tof_center_offset Unsigned char 0 or 1.
                                         0 means that the first value in @p tof_center_offset is used for all LORs.
                                         1 (non-zero) means that the TOF center offsets are LOR dependent
-  @param device_id ID of the device to use for computation (default: 0).
-  @param threads_per_block Number of threads per block for GPU computation (default: 64).
+  \pp_param_device_id
+  \pp_param_threads
   */
 
   PARALLELPROJ_API void joseph3d_tof_sino_fwd(const float *lor_start,
@@ -168,7 +152,7 @@ extern "C"
   /*!
   @brief TOF sinogram backprojection using the Joseph 3D algorithm.
 
-  @note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
+  \pp_note_pointer_types
 
   @details The function backprojects a TOF sinogram into a 3D image volume using the Joseph
            ray-driven algorithm. The projection data @p projection_values is organized row-major per LOR:
@@ -185,16 +169,16 @@ extern "C"
                 Values are added to the existing contents of this array.
   @param image_origin Pointer to array [x0_0, x0_1, x0_2] giving the coordinates of the center of the
                     voxel at index [0,0,0].
-  @param voxel_size Pointer to array [vs0, vs1, vs2] specifying voxel sizes in the same units as LOR coords.
+  @param voxel_size Pointer to array [vs0, vs1, vs2] specifying voxel sizes in the same units as LOR coordinates.
   @param projection_values Pointer to TOF sinogram data of length @p num_lors * @p num_tof_bins (see details).
   @param num_lors  Number of geometric LORs.
-  @param image_dim Pointer to array [n0, n1, n2] with image dimensions. Can be host/device/managed.
+  @param image_dim Pointer to array [n0, n1, n2] with image dimensions. Can be host pointers, CUDA device pointers, or CUDA managed pointers.
   @param tof_bin_width Width of each TOF bin in spatial units (same units as LOR coordinates).
   @param tof_sigma Pointer to array of length 1 or @p num_lors (depending on
                    @p is_lor_dependent_tof_sigma) specifying TOF sigma(s) in spatial units.
   @param tof_center_offset Pointer to array of length 1 or @p num_lors (depending on
                           @p is_lor_dependent_tof_center_offset) specifying per-LOR offset of the
-                          central TOF bin from the geometric midpoint (positive towards lor_end).
+                          central TOF bin from the geometric midpoint (positive towards @p lor_end).
   @param num_sigmas Number of sigmas to consider when evaluating the TOF kernel (controls kernel radius).
   @param num_tof_bins Number of TOF bins per LOR.
   @param is_lor_dependent_tof_sigma If non-zero, @p tof_sigma contains one sigma per LOR; otherwise the first
@@ -233,21 +217,16 @@ extern "C"
 
   /*! @brief 3D listmode TOF Joseph forward projector
 
-  @note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
+  \pp_note_pointer_types
 
-  @param lor_start Pointer to array of shape [3 * @p num_events] with the coordinates of the start points of the event LORs.
-                   The start coordinates of the n-th event are at lor_start[n*3 + i] with i = 0,1,2.
-                   Units are those of @p voxel_size.
-  @param lor_end   Pointer to array of shape [3 * @p num_events] with the coordinates of the end points of the event LORs.
-                   The end coordinates of the n-th event are at lor_end[n*3 + i] with i = 0,1,2.
-                   Units are those of @p voxel_size.
-  @param image    Pointer to array of shape [n0*n1*n2] containing the 3D image to be projected.
-                The voxel [i,j,k] is stored at index n1*n2*i + n2*j + k.
-  @param image_origin Pointer to array [x0_0, x0_1, x0_2] of coordinates of the center of the [0,0,0] voxel.
-  @param voxel_size Pointer to array [vs0, vs1, vs2] of the voxel sizes.
+  \pp_param_lor_start{num_events}
+  \pp_param_lor_end{num_events}
+  \pp_param_image_fwd
+  \pp_param_image_origin
+  \pp_param_voxel_size
   @param projection_values Pointer to array of length @p num_events (output) used to store the projections.
   @param num_events Number of events.
-  @param image_dim Array with dimensions of image [n0, n1, n2].
+  @param image_dim Pointer to array with image dimensions [n0, n1, n2].
   @param tof_bin_width Width of the TOF bins in spatial units (units of @p lor_start and @p lor_end).
   @param tof_sigma Pointer to array of length 1 or @p num_events (depending on @p is_lor_dependent_tof_sigma)
                           with the TOF resolution (sigma) for each event in spatial units
@@ -264,8 +243,8 @@ extern "C"
   @param is_lor_dependent_tof_center_offset Unsigned char 0 or 1.
                                         0 means that the first value in @p tof_center_offset is used for all events.
                                         1 (non-zero) means that the TOF center offsets are LOR dependent
-  @param device_id ID of the device to use for computation (default: 0).
-  @param threads_per_block Number of threads per block for GPU computation (default: 64).
+  \pp_param_device_id
+  \pp_param_threads
   */
 
   PARALLELPROJ_API void joseph3d_tof_lm_fwd(const float *lor_start,
@@ -298,22 +277,16 @@ extern "C"
 
   /*! @brief 3D listmode TOF Joseph back projector
 
-  @note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers.
+  \pp_note_pointer_types
 
-  @param lor_start Pointer to array of shape [3 * @p num_events] with the coordinates of the start points of the event LORs.
-                   The start coordinates of the n-th event are at lor_start[n*3 + i] with i = 0,1,2.
-                   Units are those of @p voxel_size.
-  @param lor_end   Pointer to array of shape [3 * @p num_events] with the coordinates of the end points of the event LORs.
-                   The end coordinates of the n-th event are at lor_end[n*3 + i] with i = 0,1,2.
-                   Units are those of @p voxel_size.
-  @param image    Pointer to array of shape [n0*n1*n2] containing the 3D image to add backprojected
-                contributions into. The element (i,j,k) is stored at index n1*n2*i + n2*j + k.
-                Values are added to the existing contents of this array.
-  @param image_origin Pointer to array [x0_0, x0_1, x0_2] of coordinates of the center of the [0,0,0] voxel.
-  @param voxel_size Pointer to array [vs0, vs1, vs2] of the voxel sizes.
+  \pp_param_lor_start{num_events}
+  \pp_param_lor_end{num_events}
+  \pp_param_image_back
+  \pp_param_image_origin
+  \pp_param_voxel_size
   @param projection_values Pointer to array of values to be backprojected (length @p num_events).
   @param num_events Number of events.
-  @param image_dim Array with dimensions of image [n0, n1, n2].
+  @param image_dim Pointer to array with image dimensions [n0, n1, n2].
   @param tof_bin_width Width of the TOF bins in spatial units (units of @p lor_start and @p lor_end).
   @param tof_sigma Pointer to array of length 1 or @p num_events (depending on @p is_lor_dependent_tof_sigma)
                           with the TOF resolution (sigma) for each event in spatial units
@@ -330,8 +303,8 @@ extern "C"
   @param is_lor_dependent_tof_center_offset Unsigned char 0 or 1.
                                         0 means that the first value in @p tof_center_offset is used for all events.
                                         1 (non-zero) means that the TOF center offsets are LOR dependent
-  @param device_id ID of the device to use for computation (default: 0).
-  @param threads_per_block Number of threads per block for GPU computation (default: 64).
+  \pp_param_device_id
+  \pp_param_threads
   */
 
   PARALLELPROJ_API void joseph3d_tof_lm_back(const float *lor_start,

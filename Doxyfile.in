@@ -20,6 +20,18 @@ ENABLE_PREPROCESSING   = YES
 MACRO_EXPANSION        = YES
 JAVADOC_AUTOBRIEF      = YES
 
+# Reusable documentation snippets (used in include/parallelproj.h)
+ALIASES                += pp_note_pointer_types="@note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers."
+ALIASES                += pp_param_lor_start{1}="@param lor_start Pointer to array of shape [3 * @p \1] with the coordinates of the start points of the LORs/events.^^The start coordinates of the n-th LOR/event are at @p lor_start[n*3 + i] with i = 0,1,2.^^Units are those of @p voxel_size."
+ALIASES                += pp_param_lor_end{1}="@param lor_end Pointer to array of shape [3 * @p \1] with the coordinates of the end points of the LORs/events.^^The end coordinates of the n-th LOR/event are at @p lor_end[n*3 + i] with i = 0,1,2.^^Units are those of @p voxel_size."
+ALIASES                += pp_param_image_fwd="@param image Pointer to array of shape [n0*n1*n2] containing the 3D image used for forward projection.^^The voxel/pixel [i,j,k] is stored at index n1*n2*i + n2*j + k."
+ALIASES                += pp_param_image_back="@param image Pointer to array of shape [n0*n1*n2] containing the 3D image used for backprojection.^^The voxel/pixel [i,j,k] is stored at index n1*n2*i + n2*j + k.^^Values are added to the existing contents of this array."
+ALIASES                += pp_param_image_origin="@param image_origin Pointer to array [x0_0, x0_1, x0_2] of coordinates of the center of the [0,0,0] voxel."
+ALIASES                += pp_param_voxel_size="@param voxel_size Pointer to array [vs0, vs1, vs2] of voxel sizes."
+ALIASES                += pp_param_image_dim="@param image_dim Pointer to array with image dimensions [n0, n1, n2]."
+ALIASES                += pp_param_device_id="@param device_id ID of the device to use for computation (default: 0)."
+ALIASES                += pp_param_threads="@param threads_per_block Number of threads per block for GPU computation (default: 64)."
+
 # HTML Output
 HTML_OUTPUT            = html
 
