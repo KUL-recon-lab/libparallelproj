@@ -8,10 +8,5 @@ build:
 conda:
   environment: docs/environment.yaml
 
-python:
-  install:
-    - method: pip
-      path: .
-
 sphinx:
   configuration: docs/conf.py
