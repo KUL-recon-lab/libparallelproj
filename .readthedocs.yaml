@@ -1,19 +1,23 @@
 version: 2
 
 build:
-  os: ubuntu-24.04
+  os: "ubuntu-lts-latest"
   tools:
-    python: "3.11"
-  apt_packages:
-    - doxygen
-    - cmake
-    - ninja-build
+    python: "mambaforge-latest"
+#  apt_packages:
+#    - doxygen
+#    - cmake
+#    - ninja-build
   commands:
     - make -C docs doxygen
 
+conda:
+  environment_file: docs/environment.yaml
+
 python:
   install:
-    - requirements: docs/requirements.txt
+    - method: pip
+      path: .
 
 sphinx:
   configuration: docs/conf.py

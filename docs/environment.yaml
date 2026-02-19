@@ -1,0 +1,13 @@
+name: readthedocs
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - doxygen
+  - cmake
+  - ninja
+  - sphinx
+  - breathe
+  - furo
+  - nanobind
+  - sphinxcontrib-bibtex
