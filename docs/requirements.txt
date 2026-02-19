@@ -2,3 +2,4 @@ sphinx
 breathe
 furo
 nanobind
+sphinxcontrib-bibtex
