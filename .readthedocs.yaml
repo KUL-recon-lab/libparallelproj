@@ -4,12 +4,8 @@ build:
   os: "ubuntu-lts-latest"
   tools:
     python: "mambaforge-latest"
-  apt_packages:
-    - doxygen
-    - cmake
-    - ninja-build
   commands:
-    - make -C docs doxygen
+    - conda run -n readthedocs make -C docs doxygen
 
 conda:
   environment: docs/environment.yaml
