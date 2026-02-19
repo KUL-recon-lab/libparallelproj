@@ -5,7 +5,7 @@ build:
   tools:
     python: "miniconda-latest"
   commands:
-    - conda run -n readthedocs make -C docs doxygen
+    - mamba run -n readthedocs make -C docs doxygen
 
 conda:
   environment: docs/environment.yaml
