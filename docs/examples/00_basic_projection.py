@@ -1,3 +1,12 @@
+"""
+Non-TOF Joseph Forward and Back Projection
+==========================================
+
+This minimal example demonstrates how to call python API
+for the non-TOF Joseph forward and back projection functions, which are implemented in
+:func:`parallelproj_backend.joseph3d_fwd` and :func:`parallelproj_backend.joseph3d_back`.
+"""
+
 import parallelproj_backend as ppb
 
 import array_api_compat.numpy as xp
@@ -8,8 +17,8 @@ import matplotlib.pyplot as plt
 
 from utils import show_voxel_cube, show_lors
 
-################################################################################
 
+# %%
 image = xp.zeros((5, 5, 5), dtype=xp.float32, device=dev)
 image[1, 2, 4] = 0.25
 image[2, 2, 4] = 1.0

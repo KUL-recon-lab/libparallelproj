@@ -59,11 +59,20 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinxcontrib.bibtex",
+    "sphinx_gallery.gen_gallery",
 ]
 
 templates_path = ["_templates"]
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "examples/README.rst"]
 bibtex_bibfiles = ["refs.bib"]
+
+sphinx_gallery_conf = {
+    "examples_dirs": ["examples"],
+    "gallery_dirs": ["auto_examples"],
+    "filename_pattern": r"[\\/]\d{2,3}_.*\.py$",
+    "ignore_pattern": r"(^|[\\/])utils\.py$",
+    "plot_gallery": True,
+}
 
 # -- Breathe configuration ---------------------------------------------------
 breathe_projects = {"parallelproj": "_build_doxygen/docs/xml"}

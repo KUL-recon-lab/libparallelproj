@@ -1,8 +1,10 @@
 # Sphinx build outputs
+auto_examples/
 _build/
 _build_doxygen/
 _static/
 _templates/
+sg_execution_times.rst
 
 # Python
 __pycache__/

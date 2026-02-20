@@ -6,6 +6,9 @@ dependencies:
   - pip
   - sphinx>=7,<9
   - breathe
+  - sphinx-gallery
   - furo
   - nanobind
   - sphinxcontrib-bibtex
+  - matplotlib
+  - array-api-compat

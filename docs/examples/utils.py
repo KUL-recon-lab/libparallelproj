@@ -15,7 +15,7 @@ def show_voxel_cube(ax, img, voxel_size, img_origin, num_bins=64):
 
     X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
 
-    norm_image = np.astype(num_bins * img / img.max(), np.int16)
+    norm_image = np.asarray(num_bins * img / img.max()).astype(np.int16)
 
     for b in np.unique(norm_image):
         ax.voxels(
