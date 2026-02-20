@@ -7,18 +7,34 @@ for the non-TOF Joseph forward and back projection functions, which are implemen
 :func:`parallelproj_backend.joseph3d_fwd` and :func:`parallelproj_backend.joseph3d_back`.
 """
 
+import importlib
 import parallelproj_backend
-
-import array_api_compat.numpy as xp
-
-dev = "cpu"
-
 import matplotlib.pyplot as plt
-
 from utils import show_voxel_cube, show_lors
+
+# %%
+# import array API compatible library (CuPy if CUDA is available, otherwise NumPy).
+if (
+    parallelproj_backend.PARALLELPROJ_CUDA
+    and importlib.util.find_spec("cupy") is not None
+):
+    import array_api_compat.cupy as xp
+
+    dev = xp.cuda.Device(0)
+else:
+    import array_api_compat.numpy as xp
+
+    dev = "cpu"
 
 
 # %%
+# Print backend and device info.
+print(f"Using parallelproj-backend: {parallelproj_backend.__version__}")
+print(f"CUDA support: {parallelproj_backend.PARALLELPROJ_CUDA}")
+print(f"Using array API compatible library: {xp.__name__} on device {dev}")
+
+# %%
+# Define a mini sparse demo image.
 image = xp.zeros((5, 5, 5), dtype=xp.float32, device=dev)
 image[1, 2, 4] = 0.25
 image[2, 2, 4] = 1.0
@@ -29,6 +45,7 @@ voxel_size = xp.asarray([2.0, 2.0, 2.0], device=dev, dtype=xp.float32)
 img_origin = xp.asarray([-1.0, -1.0, -1.0], device=dev, dtype=xp.float32)
 
 # %%
+# Define LOR start and end points.
 lor_start = xp.asarray(
     [[12.0, 3.5, 7.0], [-1, -1, -6], [7, -4, -4]],
     device=dev,
@@ -40,7 +57,8 @@ lor_end = xp.asarray(
     dtype=xp.float32,
 )
 
-# forward projection
+# %%
+# Forward projection of the demo image.
 img_fwd = xp.zeros(lor_start.shape[0], dtype=xp.float32, device=dev)
 parallelproj_backend.joseph3d_fwd(
     lor_start, lor_end, image, img_origin, voxel_size, img_fwd
@@ -48,14 +66,14 @@ parallelproj_backend.joseph3d_fwd(
 print(img_fwd)
 
 # %%
-# visualize the image using a 3D matplotlib plot
-# every voxel should be rendered as a cube, so we use the "nearest" interpolation method
-# the voxel values should be rendered as transparancy, so we use the "alpha" colormap
 fig = plt.figure(figsize=(6, 6), layout="constrained")
 ax = fig.add_subplot(111, projection="3d")
 show_voxel_cube(ax, image, voxel_size, img_origin)
 show_lors(
-    ax, lor_start, lor_end, labels=[f"LOR-{i}: {x:.2f}" for i, x in enumerate(img_fwd)]
+    ax,
+    lor_start,
+    lor_end,
+    labels=[f"LOR-{i}: {float(x):.2f}" for i, x in enumerate(img_fwd)],
 )
 
 ax.set_xlim(-8, 13)
@@ -71,6 +89,7 @@ ax.set_title(
 fig.show()
 
 # %%
+# back projection of ones along the same LORs.
 back_ones = xp.zeros(image.shape, dtype=xp.float32, device=dev)
 parallelproj_backend.joseph3d_back(
     lor_start,
@@ -81,6 +100,7 @@ parallelproj_backend.joseph3d_back(
     xp.ones(img_fwd.shape, dtype=xp.float32, device=dev),
 )
 
+# %%
 fig2 = plt.figure(figsize=(6, 6), layout="constrained")
 ax2 = fig2.add_subplot(111, projection="3d")
 show_voxel_cube(ax2, back_ones, voxel_size, img_origin)

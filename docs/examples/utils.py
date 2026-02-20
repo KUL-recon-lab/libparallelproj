@@ -1,21 +1,65 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+import numpy as np
+
+
+def to_numpy(x):
+    """
+    Convert x (NumPy / CuPy / torch.Tensor) to a NumPy ndarray on CPU.
+
+    - torch CPU: zero-copy when possible (via .numpy()).
+    - torch CUDA: moves to CPU, then converts.
+    - cupy: moves to host (asnumpy).
+    """
+    # Fast path: already NumPy
+    if isinstance(x, np.ndarray):
+        return x
+
+    # PyTorch
+    try:
+        import torch
+
+        if isinstance(x, torch.Tensor):
+            # detach to avoid autograd surprises; then ensure CPU
+            if x.device.type != "cpu":
+                x = x.detach().to("cpu")
+            else:
+                x = x.detach()
+            return x.numpy()
+    except Exception:
+        pass
+
+    # CuPy
+    try:
+        import cupy as cp
+
+        if isinstance(x, cp.ndarray):
+            return cp.asnumpy(x)  # same as x.get()
+    except Exception:
+        pass
+
+    # Fallbacks:
+    # - Works for objects implementing __array__ (e.g., some CPU array-likes)
+    # - Will NOT magically pull from GPU for CuPy/torch CUDA
+    return np.asarray(x)
+
 
 def show_voxel_cube(ax, img, voxel_size, img_origin, num_bins=64):
-    x = np.arange(img.shape[0] + 1) * voxel_size[0] + (
-        img_origin[0] - voxel_size[0] / 2
+    x = np.arange(img.shape[0] + 1) * float(voxel_size[0]) + (
+        float(img_origin[0]) - float(voxel_size[0]) / 2
     )
-    y = np.arange(img.shape[1] + 1) * voxel_size[1] + (
-        img_origin[1] - voxel_size[1] / 2
+    y = np.arange(img.shape[1] + 1) * float(voxel_size[1]) + (
+        float(img_origin[1]) - float(voxel_size[1]) / 2
     )
-    z = np.arange(img.shape[2] + 1) * voxel_size[2] + (
-        img_origin[2] - voxel_size[2] / 2
+    z = np.arange(img.shape[2] + 1) * float(voxel_size[2]) + (
+        float(img_origin[2]) - float(voxel_size[2]) / 2
     )
 
     X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
 
-    norm_image = np.asarray(num_bins * img / img.max()).astype(np.int16)
+    norm_image = to_numpy(img)
+    norm_image = np.asarray(num_bins * norm_image / np.max(norm_image)).astype(np.int16)
 
     for b in np.unique(norm_image):
         ax.voxels(
@@ -30,34 +74,35 @@ def show_voxel_cube(ax, img, voxel_size, img_origin, num_bins=64):
 
 
 def show_lors(ax, lor_start, lor_end, labels=None):
+    l_start = to_numpy(lor_start)
+    l_end = to_numpy(lor_end)
+
     for i in range(lor_start.shape[0]):
         col = plt.cm.tab10(i)
         # plor the start and end points of the line of response as red dots
         ax.scatter(
-            lor_start[i, 0],
-            lor_start[i, 1],
-            lor_start[i, 2],
+            l_start[i, 0],
+            l_start[i, 1],
+            l_start[i, 2],
             color=col,
             s=50,
             marker="^",
         )
-        ax.scatter(
-            lor_end[i, 0], lor_end[i, 1], lor_end[i, 2], color=col, s=50, marker="X"
-        )
+        ax.scatter(l_end[i, 0], l_end[i, 1], l_end[i, 2], color=col, s=50, marker="X")
         # plot the line of response as a red line
         ax.plot(
-            [lor_start[i, 0], lor_end[i, 0]],
-            [lor_start[i, 1], lor_end[i, 1]],
-            [lor_start[i, 2], lor_end[i, 2]],
+            [l_start[i, 0], l_end[i, 0]],
+            [l_start[i, 1], l_end[i, 1]],
+            [l_start[i, 2], l_end[i, 2]],
             color=col,
             linewidth=2,
         )
 
         if labels is not None:
             ax.text(
-                lor_start[i, 0],
-                lor_start[i, 1],
-                lor_start[i, 2],
+                l_start[i, 0],
+                l_start[i, 1],
+                l_start[i, 2],
                 labels[i],
                 color="black",
                 fontsize=10,
