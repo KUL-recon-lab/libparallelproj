@@ -5,11 +5,17 @@ import array_api_compat.numpy as np
 
 import parallelproj_backend as pp
 
-torch_available = importlib.util.find_spec("array_api_compat.torch") is not None and importlib.util.find_spec("torch") is not None
+torch_available = (
+    importlib.util.find_spec("array_api_compat.torch") is not None
+    and importlib.util.find_spec("torch") is not None
+)
 if torch_available:
     import array_api_compat.torch as torch
 
-cupy_available = importlib.util.find_spec("array_api_compat.cupy") is not None and importlib.util.find_spec("cupy") is not None
+cupy_available = (
+    importlib.util.find_spec("array_api_compat.cupy") is not None
+    and importlib.util.find_spec("cupy") is not None
+)
 if cupy_available:
     import array_api_compat.cupy as cp
 
@@ -25,6 +31,7 @@ xp_dev_list.append((np, "cpu"))
 # add array_api_strict if available
 if importlib.util.find_spec("array_api_strict") is not None:
     import array_api_strict as nparr
+
     xp_dev_list.append((nparr, None))
 
 ###########
@@ -35,7 +42,7 @@ if torch_available:
 
 ###########
 # add torch gpu and cupy
-if pp.PARALLELPROJ_CUDA == 1:
+if pp.cuda_enabled == 1:
     if torch_available:
         xp_dev_list.append((torch, "cuda"))
     if cupy_available:

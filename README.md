@@ -6,13 +6,20 @@ supporting both CUDA and non-CUDA builds and a minimal python interface.
 Official documentation: [link to readthedocs](https://libparallelproj.readthedocs.io)
 
 ## Table of Contents
-- [Requirements](#requirements)
+- [Installation](#installation)
+- [Build Requirements](#requirements)
 - [Building and Testing](#building-the-project)
 - [Python Interface](#python-interface)
+- [Linking against libparallelproj](#linking)
 
 ---
 
-## Requirements
+## Installation
+
+We recommend to install pre-compiled versions of `libparallelproj` from conda forge.
+(**to come in the near future**).
+
+## Build requirements
 
 ### General Requirements
 - **CMake** (version 3.18 or higher)
@@ -61,3 +68,31 @@ To build the project with CUDA support:
 - for CUDA builds, ensure that the CUDA Toolkit is installed and properly configured.
 - for non-CUDA builds, OpenMP is required for parallelization.
 - many important tests are written in python and requires the python interface
+
+
+## Linking against libparallelproj
+
+When building a project with cmake and linking against `libparallelproj`, the following
+lines can be used to see whether it was built with or without CUDA.
+
+```
+find_package(parallelproj CONFIG REQUIRED)
+
+if(PARALLELPROJ_CUDA)
+  message(STATUS "parallelproj was built WITH CUDA")
+else()
+  message(STATUS "parallelproj was built WITHOUT CUDA")
+endif()
+```
+
+At runtime, call the C API helper:
+
+```c
+#include "parallelproj.h"
+
+if (parallelproj_cuda_enabled()) {
+   /* built with CUDA support */
+} else {
+   /* built without CUDA support */
+}
+```

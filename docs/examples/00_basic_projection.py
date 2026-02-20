@@ -15,7 +15,7 @@ from utils import show_voxel_cube, show_lors
 # %%
 # import array API compatible library (CuPy if CUDA is available, otherwise NumPy).
 if (
-    parallelproj_backend.PARALLELPROJ_CUDA
+    parallelproj_backend.cuda_enabled == 1
     and importlib.util.find_spec("cupy") is not None
 ):
     import array_api_compat.cupy as xp
@@ -29,9 +29,9 @@ else:
 
 # %%
 # Print backend and device info.
-print(f"Using parallelproj-backend: {parallelproj_backend.__version__}")
-print(f"CUDA support: {parallelproj_backend.PARALLELPROJ_CUDA}")
-print(f"Using array API compatible library: {xp.__name__} on device {dev}")
+print(f"parallelproj_backend version: {parallelproj_backend.__version__}")
+print(f"parallelproj_backend cuda enabled: {parallelproj_backend.cuda_enabled}")
+print(f"using array API compatible library: {xp.__name__} on device {dev}")
 
 # %%
 # Define a mini sparse demo image.

@@ -711,7 +711,7 @@ NB_MODULE(parallelproj_backend, m)
     ----------
     __version__ : str
         The version of the parallelproj backend library.
-    PARALLELPROJ_CUDA : int
+    cuda_enabled : int
         Flag indicating if the library was compiled with CUDA support.
         Returns 1 if CUDA is enabled, 0 otherwise.
   )pbdoc";
@@ -723,12 +723,7 @@ NB_MODULE(parallelproj_backend, m)
   m.attr("__version__") = "unknown";
 #endif
 
-  // Expose the PARALLELPROJ_CUDA definition as a Python constant
-#ifdef PARALLELPROJ_CUDA
-  m.attr("PARALLELPROJ_CUDA") = PARALLELPROJ_CUDA;
-#else
-  m.attr("PARALLELPROJ_CUDA") = 0; // Default to 0 if not defined
-#endif
+  m.attr("cuda_enabled") = parallelproj_cuda_enabled();
 
   m.def("joseph3d_fwd", &joseph3d_fwd_py,
         "lor_start"_a.noconvert(), "lor_end"_a.noconvert(), "image"_a.noconvert(),

@@ -106,6 +106,7 @@ if(USE_CUDA)
         src/joseph3d_tof_lm_fwd.cu
         src/joseph3d_tof_lm_back.cu
         src/cuda_utils.cu
+        src/parallelproj_info.cpp
     )
 
     enable_language(CUDA)
@@ -127,6 +128,7 @@ else()
         src/joseph3d_tof_sino_back.cpp
         src/joseph3d_tof_lm_fwd.cpp
         src/joseph3d_tof_lm_back.cpp
+        src/parallelproj_info.cpp
     )
 
     find_package(OpenMP REQUIRED)

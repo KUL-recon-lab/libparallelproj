@@ -51,6 +51,21 @@ extern "C"
 {
 #endif
 
+  /*! @brief Query whether this libparallelproj library was compiled with CUDA support.
+
+  @return 1 if compiled with CUDA support, 0 otherwise.
+  */
+  PARALLELPROJ_API int parallelproj_cuda_enabled(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
   /*!
   @brief Backprojection using the Joseph 3D algorithm.
 
