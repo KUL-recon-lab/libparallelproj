@@ -716,12 +716,8 @@ NB_MODULE(parallelproj_backend, m)
         Returns 1 if CUDA is enabled, 0 otherwise.
   )pbdoc";
 
-  // Expose the project version as __version__
-#ifdef PROJECT_VERSION
-  m.attr("__version__") = PROJECT_VERSION;
-#else
-  m.attr("__version__") = "unknown";
-#endif
+  // Expose the linked library version as __version__
+  m.attr("__version__") = parallelproj_version();
 
   m.attr("cuda_enabled") = parallelproj_cuda_enabled();
 

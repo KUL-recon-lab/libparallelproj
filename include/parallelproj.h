@@ -57,6 +57,12 @@ extern "C"
   */
   PARALLELPROJ_API int parallelproj_cuda_enabled(void);
 
+  /*! @brief Query the version string of this libparallelproj library.
+
+  @return Null-terminated version string.
+  */
+  PARALLELPROJ_API const char *parallelproj_version(void);
+
 #ifdef __cplusplus
 }
 #endif

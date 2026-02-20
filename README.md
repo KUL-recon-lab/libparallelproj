@@ -95,4 +95,7 @@ if (parallelproj_cuda_enabled()) {
 } else {
    /* built without CUDA support */
 }
+
+const char* version = parallelproj_version();
+/* e.g. "2.0.0-alpha..." */
 ```

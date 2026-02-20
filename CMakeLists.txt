@@ -117,7 +117,7 @@ if(USE_CUDA)
     add_library(parallelproj SHARED ${LIB_SOURCES})
     target_link_libraries(parallelproj PRIVATE CUDA::cudart)
     target_compile_definitions(parallelproj PUBLIC PARALLELPROJ_CUDA=1)
-    target_compile_definitions(parallelproj PRIVATE PARALLELPROJ_EXPORTS)
+    target_compile_definitions(parallelproj PRIVATE PARALLELPROJ_EXPORTS PROJECT_VERSION="${PROJECT_VERSION}")
 else()
     message(STATUS "CUDA build disabled.")
 
@@ -137,7 +137,7 @@ else()
     add_library(parallelproj SHARED ${LIB_SOURCES})
     target_link_libraries(parallelproj PRIVATE OpenMP::OpenMP_CXX)
     target_compile_definitions(parallelproj PUBLIC PARALLELPROJ_CUDA=0)
-    target_compile_definitions(parallelproj PRIVATE PARALLELPROJ_EXPORTS)
+    target_compile_definitions(parallelproj PRIVATE PARALLELPROJ_EXPORTS PROJECT_VERSION="${PROJECT_VERSION}")
 
 endif()
 
