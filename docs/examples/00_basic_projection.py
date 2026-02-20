@@ -7,7 +7,7 @@ for the non-TOF Joseph forward and back projection functions, which are implemen
 :func:`parallelproj_backend.joseph3d_fwd` and :func:`parallelproj_backend.joseph3d_back`.
 """
 
-import parallelproj_backend as ppb
+import parallelproj_backend
 
 import array_api_compat.numpy as xp
 
@@ -42,7 +42,9 @@ lor_end = xp.asarray(
 
 # forward projection
 img_fwd = xp.zeros(lor_start.shape[0], dtype=xp.float32, device=dev)
-ppb.joseph3d_fwd(lor_start, lor_end, image, img_origin, voxel_size, img_fwd)
+parallelproj_backend.joseph3d_fwd(
+    lor_start, lor_end, image, img_origin, voxel_size, img_fwd
+)
 print(img_fwd)
 
 # %%
@@ -70,7 +72,7 @@ fig.show()
 
 # %%
 back_ones = xp.zeros(image.shape, dtype=xp.float32, device=dev)
-ppb.joseph3d_back(
+parallelproj_backend.joseph3d_back(
     lor_start,
     lor_end,
     back_ones,

@@ -1,5 +1,6 @@
 # Sphinx build outputs
 auto_examples/
+gen_modules/
 _build/
 _build_doxygen/
 _static/
