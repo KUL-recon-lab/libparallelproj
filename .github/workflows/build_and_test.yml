@@ -48,7 +48,7 @@ jobs:
           micromamba activate libparallelproj
           mkdir build
           cd build
-          cmake .. -G Ninja -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DBUILD_PYTHON=ON
+          cmake .. -G Ninja -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DBUILD_PYTHON=ON -DBUILD_TESTS=ON
           cmake --build .
 
       # Step 4: Run Tests

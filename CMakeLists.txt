@@ -25,7 +25,7 @@ endif()
 option(BUILD_PYTHON "Build the Python interface using nanobind" OFF)
 
 # Add an option to build the tests
-option(BUILD_TESTS "Build the tests" ON)
+option(BUILD_TESTS "Build the tests" OFF)
 
 # Enable automatic symbol export on Windows for shared libraries
 if(WIN32 AND BUILD_SHARED_LIBS)

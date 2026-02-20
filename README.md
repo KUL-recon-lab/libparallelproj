@@ -3,12 +3,11 @@
 libparallelproj is a high-performance library for 3D forward and backward projection,
 supporting both CUDA and non-CUDA builds and a minimal python interface.
 
+Official documentation: [link to readthedocs](https://libparallelproj.readthedocs.io)
+
 ## Table of Contents
 - [Requirements](#requirements)
-- [Building the Project](#building-the-project)
-  - [Non-CUDA Build](#non-cuda-build)
-  - [CUDA Build](#cuda-build)
-- [Running Tests](#running-tests)
+- [Building and Testing](#building-the-project)
 - [Python Interface](#python-interface)
 
 ---
@@ -23,86 +22,42 @@ supporting both CUDA and non-CUDA builds and a minimal python interface.
 ### CUDA-Specific Requirements
 - **CUDA Toolkit** (if building with CUDA support)
 
+All build and test requirements can be installed from `conda-forge` using
+`environment.yaml` or `environment_cuda.yaml`.
 ---
 
 ## Building the Project
-
-### Non-CUDA Build
-
-To build the project without CUDA support:
-
-1. Create a build directory:
-   ```bash
-   mkdir build
-   cd build
-   ```
-
-2. Configure the project with CMake:
-   ```bash
-   cmake .. -DCMAKE_BUILD_TYPE=Release -DUSE_CUDA=OFF
-   ```
-
-3. Build the project:
-   ```bash
-   cmake --build .
-   ```
-
-### CUDA Build
 
 To build the project with CUDA support:
 
 1. Create a build directory:
    ```bash
-   mkdir build
-   cd build
+   mkdir -p build && cd build
    ```
 
 2. Configure the project with CMake:
    ```bash
-   cmake .. -DCMAKE_BUILD_TYPE=Release -DUSE_CUDA=ON
+   cmake ..
    ```
+
+   The following CMake option can be used to cofigure the build:
+   `-DUSE_CUDA`, `-DBUILD_PYTHON`, `-DBUILD_TESTS`, `-DBUILD_DOCS`
+
 
 3. Build the project:
    ```bash
    cmake --build .
    ```
 
----
-
-## Running Tests
-
-To run the tests after building the project:
-
-1. Navigate to the `build` directory:
-   ```bash
-   cd build
-   ```
-
-2. Run the tests using `ctest`:
+4. In case the tests where build, they can be executed via:
    ```bash
    ctest --output-on-failure
    ```
 
 ---
 
-## Python Interface
-
-If you want to build the Python interface, ensure that `nanobind` is installed.
-Then, configure the project with the `BUILD_PYTHON` option:
-
-1. Configure the project:
-   ```bash
-   cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON=ON
-   ```
-
-2. Build the Python interface:
-   ```bash
-   cmake --build .
-   ```
-
----
-
 ## Notes
 
-- For CUDA builds, ensure that the CUDA Toolkit is installed and properly configured.
-- For non-CUDA builds, OpenMP is required for parallelization.
+- for CUDA builds, ensure that the CUDA Toolkit is installed and properly configured.
+- for non-CUDA builds, OpenMP is required for parallelization.
+- many important tests are written in python and requires the python interface

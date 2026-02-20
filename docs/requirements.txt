@@ -1,8 +1,0 @@
-sphinx
-breathe
-sphinx-gallery
-furo
-nanobind
-sphinxcontrib-bibtex
-matplotlib
-array-api-compat
