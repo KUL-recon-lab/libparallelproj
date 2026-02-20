@@ -3,7 +3,15 @@ name: CUDA Build
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/*_worker.h'
+      - 'src/*.cu'
+      - 'python/bindings.cpp'
   pull_request:
+    paths:
+      - 'src/*_worker.h'
+      - 'src/*.cu'
+      - 'python/bindings.cpp'
 
 jobs:
   cuda-build:
