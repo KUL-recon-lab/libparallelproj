@@ -17,3 +17,30 @@ const char *parallelproj_version(void)
   return "unknown";
 #endif
 }
+
+int parallelproj_version_major(void)
+{
+#ifdef PROJECT_VERSION_MAJOR
+  return PROJECT_VERSION_MAJOR;
+#else
+  return 0;
+#endif
+}
+
+int parallelproj_version_minor(void)
+{
+#ifdef PROJECT_VERSION_MINOR
+  return PROJECT_VERSION_MINOR;
+#else
+  return 0;
+#endif
+}
+
+int parallelproj_version_patch(void)
+{
+#ifdef PROJECT_VERSION_PATCH
+  return PROJECT_VERSION_PATCH;
+#else
+  return 0;
+#endif
+}

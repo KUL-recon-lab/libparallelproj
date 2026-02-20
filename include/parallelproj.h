@@ -14,6 +14,45 @@ extern "C"
 {
 #endif
 
+  /*! @brief Query whether this libparallelproj library was compiled with CUDA support.
+
+  @return 1 if compiled with CUDA support, 0 otherwise.
+  */
+  PARALLELPROJ_API int parallelproj_cuda_enabled(void);
+
+  /*! @brief Query the version string of this libparallelproj library.
+
+  @return Null-terminated version string.
+  */
+  PARALLELPROJ_API const char *parallelproj_version(void);
+
+  /*! @brief Query the major version number of this libparallelproj library.
+
+  @return Major version number.
+  */
+  PARALLELPROJ_API int parallelproj_version_major(void);
+
+  /*! @brief Query the minor version number of this libparallelproj library.
+
+  @return Minor version number.
+  */
+  PARALLELPROJ_API int parallelproj_version_minor(void);
+
+  /*! @brief Query the patch version number of this libparallelproj library.
+
+  @return Patch version number.
+  */
+  PARALLELPROJ_API int parallelproj_version_patch(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
   /*!
   @brief Forward projection using the Joseph 3D algorithm.
 
@@ -41,27 +80,6 @@ extern "C"
                                      const int *image_dim,
                                      int device_id = 0,
                                      int threads_per_block = 64);
-
-#ifdef __cplusplus
-}
-#endif
-
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
-  /*! @brief Query whether this libparallelproj library was compiled with CUDA support.
-
-  @return 1 if compiled with CUDA support, 0 otherwise.
-  */
-  PARALLELPROJ_API int parallelproj_cuda_enabled(void);
-
-  /*! @brief Query the version string of this libparallelproj library.
-
-  @return Null-terminated version string.
-  */
-  PARALLELPROJ_API const char *parallelproj_version(void);
 
 #ifdef __cplusplus
 }

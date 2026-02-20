@@ -711,6 +711,12 @@ NB_MODULE(parallelproj_backend, m)
     ----------
     __version__ : str
         The version of the parallelproj backend library.
+    version_major : int
+      Major version number of the linked parallelproj library.
+    version_minor : int
+      Minor version number of the linked parallelproj library.
+    version_patch : int
+      Patch version number of the linked parallelproj library.
     cuda_enabled : int
         Flag indicating if the library was compiled with CUDA support.
         Returns 1 if CUDA is enabled, 0 otherwise.
@@ -718,6 +724,9 @@ NB_MODULE(parallelproj_backend, m)
 
   // Expose the linked library version as __version__
   m.attr("__version__") = parallelproj_version();
+  m.attr("version_major") = parallelproj_version_major();
+  m.attr("version_minor") = parallelproj_version_minor();
+  m.attr("version_patch") = parallelproj_version_patch();
 
   m.attr("cuda_enabled") = parallelproj_cuda_enabled();
 
