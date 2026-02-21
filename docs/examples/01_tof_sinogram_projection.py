@@ -6,8 +6,9 @@ This minimal example demonstrates how to call python API
 for the sinogram (histogram) TOF Joseph forward and back projection functions, which are implemented in
 :func:`parallelproj_backend.joseph3d_tof_sino_fwd` and :func:`parallelproj_backend.joseph3d_tof_sino_back`.
 
-note:: In this educational example, the TOF resolution is much smaller compared to the voxel size,
-which is not typical for real PET scanners, but better for visualization.
+.. note::
+  In this educational example, the TOF resolution is much smaller compared to the voxel size,
+  which is not typical for real PET scanners, but better for visualization.
 """
 
 import importlib
@@ -63,10 +64,15 @@ lor_end = xp.asarray(
 # %%
 # TOF parameter setup
 
-tofbin_width = 1.0
+# standard deviation of the TOF kernel in spatial units (mm)
 sigma_tof = xp.asarray([2.0], device=dev, dtype=xp.float32)
+# width of the TOF sinogram bins in mm
+tofbin_width = float(sigma_tof[0]) / 2.0
+# offset of the TOF center in mm
 tof_center_offset = xp.asarray([0.0], device=dev, dtype=xp.float32)
+# number of sigmas for truncation of Gaussian TOF kernel
 num_sigmas = 3.0
+# number of TOF bins needed to cover an LOR of 22mm length
 num_tofbins = int(22 / tofbin_width) + 1
 
 # %%
@@ -96,6 +102,9 @@ show_lors(
     lor_start,
     lor_end,
     labels=[f"LOR-{i}" for i in range(lor_start.shape[0])],
+    num_tofbins=num_tofbins,
+    tofbin_width=tofbin_width,
+    tof_center_offset=tof_center_offset,
 )
 
 ax.set_xlim(-10, 15)
@@ -144,7 +153,13 @@ fig2 = plt.figure(figsize=(6, 6), layout="constrained")
 ax2 = fig2.add_subplot(111, projection="3d")
 show_voxel_cube(ax2, back_ones, voxel_size, img_origin)
 show_lors(
-    ax2, lor_start, lor_end, labels=[f"LOR-{i}" for i in range(lor_start.shape[0])]
+    ax2,
+    lor_start,
+    lor_end,
+    labels=[f"LOR-{i}" for i in range(lor_start.shape[0])],
+    num_tofbins=num_tofbins,
+    tofbin_width=tofbin_width,
+    tof_center_offset=tof_center_offset,
 )
 
 ax2.set_xlim(-10, 15)

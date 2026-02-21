@@ -73,7 +73,15 @@ def show_voxel_cube(ax, img, voxel_size, img_origin, num_bins=64):
         )
 
 
-def show_lors(ax, lor_start, lor_end, labels=None):
+def show_lors(
+    ax,
+    lor_start,
+    lor_end,
+    labels=None,
+    num_tofbins=None,
+    tofbin_width=None,
+    tof_center_offset=None,
+):
     l_start = to_numpy(lor_start)
     l_end = to_numpy(lor_end)
 
@@ -97,6 +105,39 @@ def show_lors(ax, lor_start, lor_end, labels=None):
             color=col,
             linewidth=2,
         )
+
+        if num_tofbins is not None and tofbin_width is not None:
+            # calculate the LOR center
+            center = (l_start[i] + l_end[i]) / 2
+            # calculat the unit vector along the LOR
+            lor_vec = l_end[i] - l_start[i]
+            lor_unit_vec = lor_vec / np.linalg.norm(lor_vec)
+
+            if tof_center_offset is not None:
+                to = to_numpy(tof_center_offset)
+                if len(to) == 1:
+                    center += to[0] * lor_unit_vec
+                elif len(to) == lor_start.shape[0]:
+                    center += to[i] * lor_unit_vec
+                else:
+                    raise ValueError(
+                        "tof_center_offset should be either a scalar or an array of shape (num_lors,)"
+                    )
+
+            # calculate the signed tof bins
+            signed_tof_bins = np.arange(num_tofbins) - num_tofbins / 2 + 0.5
+
+            for it, signed_tof_bin in enumerate(signed_tof_bins):
+                tofbin_center = center + signed_tof_bin * tofbin_width * lor_unit_vec
+                ax.scatter(
+                    tofbin_center[0],
+                    tofbin_center[1],
+                    tofbin_center[2],
+                    color=col,
+                    s=20,
+                    marker="o",
+                    alpha=0.5,
+                )
 
         if labels is not None:
             ax.text(
