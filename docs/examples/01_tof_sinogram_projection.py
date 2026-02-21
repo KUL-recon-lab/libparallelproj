@@ -1,16 +1,19 @@
 """
-Non-TOF Joseph Forward and Back Projection
-==========================================
+Sinogram (histogram) TOF Joseph Forward and Back Projection
+===========================================================
 
 This minimal example demonstrates how to call python API
-for the non-TOF Joseph forward and back projection functions, which are implemented in
-:func:`parallelproj_backend.joseph3d_fwd` and :func:`parallelproj_backend.joseph3d_back`.
+for the sinogram (histogram) TOF Joseph forward and back projection functions, which are implemented in
+:func:`parallelproj_backend.joseph3d_tof_sino_fwd` and :func:`parallelproj_backend.joseph3d_tof_sino_back`.
+
+note:: In this educational example, the TOF resolution is much smaller compared to the voxel size,
+which is not typical for real PET scanners, but better for visualization.
 """
 
 import importlib
 import parallelproj_backend
 import matplotlib.pyplot as plt
-from utils import show_voxel_cube, show_lors
+from utils import show_voxel_cube, show_lors, to_numpy
 
 # %%
 # import array API compatible library (CuPy if CUDA is available, otherwise NumPy).
@@ -56,23 +59,43 @@ lor_end = xp.asarray(
     device=dev,
     dtype=xp.float32,
 )
+
+# %%
+# TOF parameter setup
+
+tofbin_width = 1.0
+sigma_tof = xp.asarray([2.0], device=dev, dtype=xp.float32)
+tof_center_offset = xp.asarray([0.0], device=dev, dtype=xp.float32)
+num_sigmas = 3.0
+num_tofbins = int(22 / tofbin_width) + 1
+
 # %%
 # Forward projection of the demo image.
-img_fwd = xp.zeros(lor_start.shape[0], dtype=xp.float32, device=dev)
-parallelproj_backend.joseph3d_fwd(
-    lor_start, lor_end, image, img_origin, voxel_size, img_fwd
+img_fwd = xp.zeros((lor_start.shape[0], num_tofbins), dtype=xp.float32, device=dev)
+parallelproj_backend.joseph3d_tof_sino_fwd(
+    lor_start,
+    lor_end,
+    image,
+    img_origin,
+    voxel_size,
+    img_fwd,
+    tofbin_width,
+    sigma_tof,
+    tof_center_offset,
+    num_tofbins,
+    num_sigmas,
 )
 print(img_fwd)
 
 # %%
-fig = plt.figure(figsize=(6, 6), layout="constrained")
-ax = fig.add_subplot(111, projection="3d")
+fig = plt.figure(figsize=(12, 6), layout="constrained")
+ax = fig.add_subplot(121, projection="3d")
 show_voxel_cube(ax, image, voxel_size, img_origin)
 show_lors(
     ax,
     lor_start,
     lor_end,
-    labels=[f"LOR-{i}: {float(x):.2f}" for i, x in enumerate(img_fwd)],
+    labels=[f"LOR-{i}" for i in range(lor_start.shape[0])],
 )
 
 ax.set_xlim(-10, 15)
@@ -82,21 +105,38 @@ ax.set_xlabel("x [mm]")
 ax.set_ylabel("y [mm]")
 ax.set_zlabel("z [mm]")
 ax.set_box_aspect([1, 1, 1])
-ax.set_title(
-    "Forward projection of a 3D image using the Joseph's method", fontsize="medium"
+fig.suptitle(
+    "TOF sinogram forward projection of a 3D image using the Joseph's method",
+    fontsize="medium",
 )
+
+ax_b = fig.add_subplot(122)
+
+for i in range(img_fwd.shape[0]):
+    ax_b.plot(to_numpy(img_fwd[i, ...]), ".-", label=f"LOR {i}")
+
+ax_b.set_xlabel("TOF bin")
+ax_b.set_ylabel("TOF projection profile")
+ax_b.grid(ls=":")
+ax_b.legend()
+
 fig.show()
 
 # %%
 # back projection of ones along the same LORs.
 back_ones = xp.zeros(image.shape, dtype=xp.float32, device=dev)
-parallelproj_backend.joseph3d_back(
+parallelproj_backend.joseph3d_tof_sino_back(
     lor_start,
     lor_end,
     back_ones,
     img_origin,
     voxel_size,
     xp.ones(img_fwd.shape, dtype=xp.float32, device=dev),
+    tofbin_width,
+    sigma_tof,
+    tof_center_offset,
+    num_tofbins,
+    num_sigmas,
 )
 
 # %%
