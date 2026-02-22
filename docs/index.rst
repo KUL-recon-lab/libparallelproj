@@ -26,6 +26,7 @@ Content
    :maxdepth: 1
    :titlesonly:
 
+   Theory and Background <theory_background>
    C API Reference <c_api>
    Python API Reference <python_api>
    Examples <auto_examples/index>
