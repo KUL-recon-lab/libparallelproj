@@ -81,6 +81,7 @@ def show_lors(
     num_tofbins=None,
     tofbin_width=None,
     tof_center_offset=None,
+    highlight_tof_bin=None,
 ):
     l_start = to_numpy(lor_start)
     l_end = to_numpy(lor_end)
@@ -151,12 +152,17 @@ def show_lors(
                     s=15,
                     marker=".",
                 )
+
+                if highlight_tof_bin is not None and it == highlight_tof_bin[i]:
+                    col = "red"
+                else:
+                    col = "k"
                 ax.text(
                     tofbin_center[0],
                     tofbin_center[1],
                     tofbin_center[2],
                     f"{it}",
-                    color="k",
+                    color=col,
                     fontsize="xx-small",
                     multialignment="center",
                 )
@@ -168,5 +174,5 @@ def show_lors(
                 l_start[i, 2],
                 labels[i],
                 color="black",
-                fontsize=10,
+                fontsize="x-small",
             )
