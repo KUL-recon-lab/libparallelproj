@@ -33,52 +33,59 @@ The (continuous) non-TOF projection value along the LOR is
 In a voxelized image, this becomes a weighted sum over voxels, where the weights approximate the
 path length contribution through each voxel and the voxel values are sampled/interpolated.
 
-Joseph's method for line integrals
-----------------------------------
+Joseph’s method in 3D
+---------------------
 
-Joseph's method is a ray-driven projector that approximates the line integral by stepping through
-a grid along the dominant axis of the ray and using **linear interpolation** in the orthogonal
-direction(s). In 3D this yields a **bilinear interpolation** in the two transverse directions.
+Joseph’s method :cite:`Joseph1982`  approximates the line integral by sampling the ray on a sequence of planes
+orthogonal to the dominant direction and interpolating in the transverse plane.
 
-Key idea (2D intuition)
-^^^^^^^^^^^^^^^^^^^^^^^
-
-In 2D, assume the ray direction has a larger absolute x-component than y-component
-(i.e. :math:`|u_x| \ge |u_y|`). Then we step through *x-planes* at regularly spaced positions
-(e.g. at pixel centers). For each step location :math:`s_k`, we:
-
-1. compute the continuous intersection point :math:`(x_k, y_k) = \mathbf{r}(s_k)`,
-2. interpolate the image value at that location using **linear interpolation in y** between the two
-   neighboring pixels,
-3. accumulate with step length :math:`\Delta s`:
+Without loss of generality, assume **x is the dominant direction**, i.e.
 
 .. math::
 
-   p \approx \sum_k f(x_k, y_k)\, \Delta s.
+   |u_x| \ge |u_y| \quad \text{and} \quad |u_x| \ge |u_z|.
 
-Because we step along the dominant axis, the sampling is stable and efficient, and interpolation
-reduces aliasing compared to nearest-neighbor sampling.
-
-3D version (Joseph3D)
-^^^^^^^^^^^^^^^^^^^^^
-
-In 3D, the same idea applies. Pick the dominant axis among x, y, z. If x is dominant
-(:math:`|u_x| \ge |u_y|` and :math:`|u_x| \ge |u_z|`), then at each x-step we compute
-:math:`(x_k, y_k, z_k)` and evaluate :math:`f(x_k,y_k,z_k)` via **bilinear interpolation**
-in (y,z) on the two closest y-planes and two closest z-planes.
-
-That is, :math:`f(x_k,y_k,z_k)` is approximated by combining the four neighboring voxel values in
-the transverse plane with the usual bilinear weights (and similarly for other dominant-axis choices).
-
-Practical notes
+Sampling planes
 ^^^^^^^^^^^^^^^
 
-- The forward projector applies the above accumulation.
-- The adjoint (backprojector) distributes each ray sample back to the neighboring voxels using the
-  same interpolation weights (ensuring a matched projector/backprojector pair, up to boundary
-  handling and discretization details).
-- Step size is tied to the grid spacing along the dominant axis, which makes the algorithm fast and
-  predictable.
+.. figure:: _static/joseph.svg
+   :width: 95%
+   :alt: Joseph method in 3D: sampling planes in x and bilinear interpolation in the transverse (y,z) plane.
+
+Let :math:`\{x_k\}_{k=1}^n` be the x-coordinates of the sampling planes, typically chosen as the
+x-coordinates of voxel centers that lie between the entry and exit points of the ray through the
+image bounding box.
+
+For each plane :math:`x=x_k`, compute the corresponding ray parameter :math:`s_k`:
+
+.. math::
+
+   s_k = \frac{x_k - x_0}{u_x},
+
+and then the continuous intersection point in y and z:
+
+.. math::
+
+   \tilde{y}_k = y_0 + s_k u_y, \qquad
+   \tilde{z}_k = z_0 + s_k u_z.
+
+These are the (continuous) transverse coordinates of the ray where it intersects the plane
+:math:`x=x_k`.
+
+With a constant step in x (the voxel size in x), the path-length increment is
+
+.. math::
+
+   \Delta s = \frac{\Delta_x}{|u_x|}.
+
+Joseph’s method then approximates the line integral as
+
+.. math::
+
+   p \approx \sum_{k=1}^{n} f(x_k,\tilde{y}_k,\tilde{z}_k)\,\Delta s.
+
+where :math:`(\tilde{y}_k,\tilde{z}_k)` are the continuous intersection coordinates and
+:math:`f(x_k,\tilde{y}_k,\tilde{z}_k)` is evaluated via bilinear interpolation in :math:`(y,z)`.
 
 TOF-weighted line integrals
 ---------------------------
@@ -203,21 +210,19 @@ A standard approach is to truncate the kernel beyond a configurable number of st
 
 .. math::
 
-   |t - t_c| > \text{num\_sigmas}\,\sigma_t \quad \Longrightarrow \quad w_{\text{eff}}(t; t_c, \sigma_t, \Delta) \approx 0.
+   |t - t_c| > n_\sigma \,\sigma_t \quad \Longrightarrow \quad w_{\text{eff}}(t; t_c, \sigma_t, \Delta) \approx 0.
 
-Implementation-wise, this means:
+Implementation-wise, this means, for each TOF bin center :math:`t_c`, only ray samples with :math:`t_k` in
 
-- For each TOF bin center :math:`t_c`, only ray samples with :math:`t_k` in
+.. math::
 
-  .. math::
+   \left[t_c - n_\sigma \,\sigma_t,\; t_c + n_\sigma\,\sigma_t\right]
 
-     \left[t_c - \text{num\_sigmas}\,\sigma_t,\; t_c + \text{num\_sigmas}\,\sigma_t\right]
+are considered.
 
-  are considered.
-
-- Samples outside this window are ignored (weight set to zero).
-
-- This reduces computation substantially, especially for many TOF bins.
+Samples outside this window are ignored (weight set to zero) which reduces computation substantially.
+The truncated weights are renormalized to ensure that the sum over the TOF bins of a TOF projection is the
+same as the non-TOF projection.
 
 Choosing ``num_sigmas``
 ^^^^^^^^^^^^^^^^^^^^^^^
