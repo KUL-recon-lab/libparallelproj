@@ -453,8 +453,8 @@ void joseph3d_tof_back_fwd_py(ConstFloatNDArray lor_start,
 ////////////////////////////////////////////////////////////////////////////////
 
 // Wrapper for joseph3d_tof_lm_fwd
-void joseph3d_tof_lm_fwd_py(ConstFloatNDArray lor_start,
-                            ConstFloatNDArray lor_end,
+void joseph3d_tof_lm_fwd_py(ConstFloatNDArray event_start,
+                            ConstFloatNDArray event_end,
                             ConstFloat3DArray image,
                             ConstFloat1D3ELArray image_origin,
                             ConstFloat1D3ELArray voxel_size,
@@ -471,45 +471,45 @@ void joseph3d_tof_lm_fwd_py(ConstFloatNDArray lor_start,
   bool is_lor_dependent_tof_sigma;
   bool is_lor_dependent_tof_center_offset;
 
-  // 1 check that ndim of lor_start and lor_end are equal to 2
-  if (lor_start.ndim() != 2 || lor_end.ndim() != 2)
-    throw std::invalid_argument("lor_start and lor_end must have 2 dimensions");
-  if (lor_start.shape(1) != 3 || lor_end.shape(1) != 3)
-    throw std::invalid_argument("lor_start and lor_end must have shape (..., 3)");
-  if (lor_start.shape(0) != lor_end.shape(0))
-    throw std::invalid_argument("lor_start and lor_end must have the same number of events (shape[0])");
+  // 1 check that ndim of event_start and event_end are equal to 2
+  if (event_start.ndim() != 2 || event_end.ndim() != 2)
+    throw std::invalid_argument("event_start and event_end must have 2 dimensions");
+  if (event_start.shape(1) != 3 || event_end.shape(1) != 3)
+    throw std::invalid_argument("event_start and event_end must have shape (..., 3)");
+  if (event_start.shape(0) != event_end.shape(0))
+    throw std::invalid_argument("event_start and event_end must have the same number of events (shape[0])");
 
-  size_t num_events = lor_start.shape(0);
+  size_t num_events = event_start.shape(0);
 
   // 2 check dims and shapes of projection_values and tof_bin_index
   if (projection_values.ndim() != 1)
     throw std::invalid_argument("projection_values.ndim must be 1");
   if (projection_values.shape(0) != num_events)
-    throw std::invalid_argument("projection_values.shape[0] must match lor_start.shape[0]");
+    throw std::invalid_argument("projection_values.shape[0] must match event_start.shape[0]");
 
   if (tof_bin_index.ndim() != 1)
     throw std::invalid_argument("tof_bin_index.ndim must be 1");
   if (tof_bin_index.shape(0) != num_events)
-    throw std::invalid_argument("tof_bin_index.shape[0] must match lor_start.shape[0]");
+    throw std::invalid_argument("tof_bin_index.shape[0] must match event_start.shape[0]");
 
   // 3 check that all arrays have the same device type
-  if (lor_start.device_type() != lor_end.device_type() ||
-      lor_start.device_type() != image.device_type() ||
-      lor_start.device_type() != image_origin.device_type() ||
-      lor_start.device_type() != voxel_size.device_type() ||
-      lor_start.device_type() != projection_values.device_type() ||
-      lor_start.device_type() != tof_bin_index.device_type())
+  if (event_start.device_type() != event_end.device_type() ||
+      event_start.device_type() != image.device_type() ||
+      event_start.device_type() != image_origin.device_type() ||
+      event_start.device_type() != voxel_size.device_type() ||
+      event_start.device_type() != projection_values.device_type() ||
+      event_start.device_type() != tof_bin_index.device_type())
   {
     throw std::invalid_argument("All input arrays must be on the same device type");
   }
 
   // 4 check that all arrays have the same device ID
-  if (lor_start.device_id() != lor_end.device_id() ||
-      lor_start.device_id() != image.device_id() ||
-      lor_start.device_id() != image_origin.device_id() ||
-      lor_start.device_id() != voxel_size.device_id() ||
-      lor_start.device_id() != projection_values.device_id() ||
-      lor_start.device_id() != tof_bin_index.device_id())
+  if (event_start.device_id() != event_end.device_id() ||
+      event_start.device_id() != image.device_id() ||
+      event_start.device_id() != image_origin.device_id() ||
+      event_start.device_id() != voxel_size.device_id() ||
+      event_start.device_id() != projection_values.device_id() ||
+      event_start.device_id() != tof_bin_index.device_id())
   {
     throw std::invalid_argument("All input arrays must be on the same device ID");
   }
@@ -552,8 +552,8 @@ void joseph3d_tof_lm_fwd_py(ConstFloatNDArray lor_start,
     throw std::invalid_argument("shape of tof_center_offset must be [1,] or [num_events,]");
   }
 
-  joseph3d_tof_lm_fwd(lor_start.data(),
-                      lor_end.data(),
+  joseph3d_tof_lm_fwd(event_start.data(),
+                      event_end.data(),
                       image.data(),
                       image_origin.data(),
                       voxel_size.data(),
@@ -577,8 +577,8 @@ void joseph3d_tof_lm_fwd_py(ConstFloatNDArray lor_start,
 ////////////////////////////////////////////////////////////////////////////////
 
 // Wrapper for joseph3d_tof_lm_back
-void joseph3d_tof_lm_back_py(ConstFloatNDArray lor_start,
-                             ConstFloatNDArray lor_end,
+void joseph3d_tof_lm_back_py(ConstFloatNDArray event_start,
+                             ConstFloatNDArray event_end,
                              Float3DArray image,
                              ConstFloat1D3ELArray image_origin,
                              ConstFloat1D3ELArray voxel_size,
@@ -595,45 +595,45 @@ void joseph3d_tof_lm_back_py(ConstFloatNDArray lor_start,
   bool is_lor_dependent_tof_sigma;
   bool is_lor_dependent_tof_center_offset;
 
-  // 1 check that ndim of lor_start and lor_end are equal to 2
-  if (lor_start.ndim() != 2 || lor_end.ndim() != 2)
-    throw std::invalid_argument("lor_start and lor_end must have 2 dimensions");
-  if (lor_start.shape(1) != 3 || lor_end.shape(1) != 3)
-    throw std::invalid_argument("lor_start and lor_end must have shape (..., 3)");
-  if (lor_start.shape(0) != lor_end.shape(0))
-    throw std::invalid_argument("lor_start and lor_end must have the same number of events (shape[0])");
+  // 1 check that ndim of event_start and event_end are equal to 2
+  if (event_start.ndim() != 2 || event_end.ndim() != 2)
+    throw std::invalid_argument("event_start and event_end must have 2 dimensions");
+  if (event_start.shape(1) != 3 || event_end.shape(1) != 3)
+    throw std::invalid_argument("event_start and event_end must have shape (..., 3)");
+  if (event_start.shape(0) != event_end.shape(0))
+    throw std::invalid_argument("event_start and event_end must have the same number of events (shape[0])");
 
-  size_t num_events = lor_start.shape(0);
+  size_t num_events = event_start.shape(0);
 
   // 2 check dims and shapes of projection_values and tof_bin_index
   if (projection_values.ndim() != 1)
     throw std::invalid_argument("projection_values.ndim must be 1");
   if (projection_values.shape(0) != num_events)
-    throw std::invalid_argument("projection_values.shape[0] must match lor_start.shape[0]");
+    throw std::invalid_argument("projection_values.shape[0] must match event_start.shape[0]");
 
   if (tof_bin_index.ndim() != 1)
     throw std::invalid_argument("tof_bin_index.ndim must be 1");
   if (tof_bin_index.shape(0) != num_events)
-    throw std::invalid_argument("tof_bin_index.shape[0] must match lor_start.shape[0]");
+    throw std::invalid_argument("tof_bin_index.shape[0] must match event_start.shape[0]");
 
   // 3 check that all arrays have the same device type
-  if (lor_start.device_type() != lor_end.device_type() ||
-      lor_start.device_type() != image.device_type() ||
-      lor_start.device_type() != image_origin.device_type() ||
-      lor_start.device_type() != voxel_size.device_type() ||
-      lor_start.device_type() != projection_values.device_type() ||
-      lor_start.device_type() != tof_bin_index.device_type())
+  if (event_start.device_type() != event_end.device_type() ||
+      event_start.device_type() != image.device_type() ||
+      event_start.device_type() != image_origin.device_type() ||
+      event_start.device_type() != voxel_size.device_type() ||
+      event_start.device_type() != projection_values.device_type() ||
+      event_start.device_type() != tof_bin_index.device_type())
   {
     throw std::invalid_argument("All input arrays must be on the same device type");
   }
 
   // 4 check that all arrays have the same device ID
-  if (lor_start.device_id() != lor_end.device_id() ||
-      lor_start.device_id() != image.device_id() ||
-      lor_start.device_id() != image_origin.device_id() ||
-      lor_start.device_id() != voxel_size.device_id() ||
-      lor_start.device_id() != projection_values.device_id() ||
-      lor_start.device_id() != tof_bin_index.device_id())
+  if (event_start.device_id() != event_end.device_id() ||
+      event_start.device_id() != image.device_id() ||
+      event_start.device_id() != image_origin.device_id() ||
+      event_start.device_id() != voxel_size.device_id() ||
+      event_start.device_id() != projection_values.device_id() ||
+      event_start.device_id() != tof_bin_index.device_id())
   {
     throw std::invalid_argument("All input arrays must be on the same device ID");
   }
@@ -676,8 +676,8 @@ void joseph3d_tof_lm_back_py(ConstFloatNDArray lor_start,
     throw std::invalid_argument("shape of tof_center_offset must be [1,] or [num_events,]");
   }
 
-  joseph3d_tof_lm_back(lor_start.data(),
-                       lor_end.data(),
+  joseph3d_tof_lm_back(event_start.data(),
+                       event_end.data(),
                        image.data(),
                        image_origin.data(),
                        voxel_size.data(),
@@ -882,7 +882,7 @@ NB_MODULE(parallelproj_backend, m)
         )pbdoc");
 
   m.def("joseph3d_tof_lm_fwd", &joseph3d_tof_lm_fwd_py,
-        "lor_start"_a.noconvert(), "lor_end"_a.noconvert(), "image"_a.noconvert(),
+        "event_start"_a.noconvert(), "event_end"_a.noconvert(), "image"_a.noconvert(),
         "image_origin"_a.noconvert(), "voxel_size"_a.noconvert(), "projection_values"_a.noconvert(),
         "tof_bin_width"_a,
         "tof_sigma"_a.noconvert(),
@@ -896,10 +896,10 @@ NB_MODULE(parallelproj_backend, m)
 
         Parameters
         ----------
-        lor_start : ndarray
-            Array of shape (..., 3) with coordinates of event LOR start points.
-        lor_end : ndarray
-            Array of shape (..., 3) with coordinates of event LOR end points.
+        event_start : ndarray
+          Array of shape (..., 3) with coordinates of event LOR start points.
+        event_end : ndarray
+          Array of shape (..., 3) with coordinates of event LOR end points.
         image : ndarray
             3D image array of shape (n0, n1, n2) for forward projection.
         image_origin : ndarray
@@ -907,7 +907,7 @@ NB_MODULE(parallelproj_backend, m)
         voxel_size : ndarray
             Array of shape (3,) with voxel sizes.
         projection_values : ndarray
-            Output array for event projections, shape matches lor_start.shape[:-1].
+          Output array for event projections, shape matches event_start.shape[:-1].
         tof_bin_width : float
             Width of TOF bins in spatial units.
         tof_sigma : ndarray
@@ -915,7 +915,7 @@ NB_MODULE(parallelproj_backend, m)
         tof_center_offset : ndarray
             Offset of central TOF bin from LOR midpoint. Shape (1,) or (...,).
         tof_bin_index : ndarray
-            TOF bin indices for each event, shape matches lor_start.shape[:-1].
+          TOF bin indices for each event, shape matches event_start.shape[:-1].
         num_tof_bins : int
             Number of TOF bins.
         num_sigmas : float, optional
@@ -927,7 +927,7 @@ NB_MODULE(parallelproj_backend, m)
         )pbdoc");
 
   m.def("joseph3d_tof_lm_back", &joseph3d_tof_lm_back_py,
-        "lor_start"_a.noconvert(), "lor_end"_a.noconvert(), "image"_a.noconvert(),
+        "event_start"_a.noconvert(), "event_end"_a.noconvert(), "image"_a.noconvert(),
         "image_origin"_a.noconvert(), "voxel_size"_a.noconvert(), "projection_values"_a.noconvert(),
         "tof_bin_width"_a,
         "tof_sigma"_a.noconvert(),
@@ -941,10 +941,10 @@ NB_MODULE(parallelproj_backend, m)
 
         Parameters
         ----------
-        lor_start : ndarray
-            Array of shape (num_events, 3) with coordinates of event LOR start points.
-        lor_end : ndarray
-            Array of shape (num_events, 3) with coordinates of event LOR end points.
+        event_start : ndarray
+          Array of shape (num_events, 3) with coordinates of event LOR start points.
+        event_end : ndarray
+          Array of shape (num_events, 3) with coordinates of event LOR end points.
         image : ndarray
             3D image array of shape (n0, n1, n2) to accumulate backprojection into.
         image_origin : ndarray
