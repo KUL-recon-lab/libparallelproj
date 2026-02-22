@@ -129,14 +129,36 @@ def show_lors(
 
             for it, signed_tof_bin in enumerate(signed_tof_bins):
                 tofbin_center = center + signed_tof_bin * tofbin_width * lor_unit_vec
+                tofbin_edge1 = (
+                    center + (signed_tof_bin - 0.5) * tofbin_width * lor_unit_vec
+                )
+                tofbin_edge2 = (
+                    center + (signed_tof_bin + 0.5) * tofbin_width * lor_unit_vec
+                )
                 ax.scatter(
+                    tofbin_edge1[0],
+                    tofbin_edge1[1],
+                    tofbin_edge1[2],
+                    color="k",
+                    s=15,
+                    marker=".",
+                )
+                ax.scatter(
+                    tofbin_edge2[0],
+                    tofbin_edge2[1],
+                    tofbin_edge2[2],
+                    color="k",
+                    s=15,
+                    marker=".",
+                )
+                ax.text(
                     tofbin_center[0],
                     tofbin_center[1],
                     tofbin_center[2],
-                    color=col,
-                    s=20,
-                    marker="o",
-                    alpha=0.5,
+                    f"{it}",
+                    color="k",
+                    fontsize="xx-small",
+                    multialignment="center",
                 )
 
         if labels is not None:

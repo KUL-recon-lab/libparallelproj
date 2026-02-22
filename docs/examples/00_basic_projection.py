@@ -83,7 +83,7 @@ ax.set_ylabel("y [mm]")
 ax.set_zlabel("z [mm]")
 ax.set_box_aspect([1, 1, 1])
 ax.set_title(
-    "Forward projection of a 3D image using the Joseph's method", fontsize="medium"
+    "Forward projection of a 3D image using Joseph's method", fontsize="medium"
 )
 fig.show()
 
@@ -115,7 +115,7 @@ ax2.set_ylabel("y [mm]")
 ax2.set_zlabel("z [mm]")
 ax2.set_box_aspect([1, 1, 1])
 ax2.set_title(
-    "Back projection of ones for a set of LORs using the Joseph's method",
+    "Back projection of a sinogram full of ones using Joseph's method",
     fontsize="medium",
 )
 

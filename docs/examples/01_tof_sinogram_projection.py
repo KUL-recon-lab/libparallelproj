@@ -72,8 +72,8 @@ tofbin_width = float(sigma_tof[0]) / 2.0
 tof_center_offset = xp.asarray([0.0], device=dev, dtype=xp.float32)
 # number of sigmas for truncation of Gaussian TOF kernel
 num_sigmas = 3.0
-# number of TOF bins needed to cover an LOR of 22mm length
-num_tofbins = int(22 / tofbin_width) + 1
+# number of TOF bins needed to cover an LOR of 20mm length
+num_tofbins = int(20 / tofbin_width) + 1
 
 # %%
 # Forward projection of the demo image.
@@ -115,7 +115,7 @@ ax.set_ylabel("y [mm]")
 ax.set_zlabel("z [mm]")
 ax.set_box_aspect([1, 1, 1])
 fig.suptitle(
-    "TOF sinogram forward projection of a 3D image using the Joseph's method",
+    "TOF sinogram forward projection of a 3D image using Joseph's method",
     fontsize="medium",
 )
 
@@ -170,7 +170,7 @@ ax2.set_ylabel("y [mm]")
 ax2.set_zlabel("z [mm]")
 ax2.set_box_aspect([1, 1, 1])
 ax2.set_title(
-    "Back projection of ones for a set of LORs using the Joseph's method",
+    "TOF back projection of a TOF sinogram full of ones using Joseph's method",
     fontsize="medium",
 )
 
