@@ -132,7 +132,7 @@ ax_b.legend()
 fig.show()
 
 # %%
-# back projection of ones along the same LORs.
+# TOF back projection of a TOF sinogram full of ones.
 back_ones = xp.zeros(image.shape, dtype=xp.float32, device=dev)
 parallelproj_backend.joseph3d_tof_sino_back(
     lor_start,
@@ -175,3 +175,53 @@ ax2.set_title(
 )
 
 fig2.show()
+
+# %%
+# TOF back projection of a TOF sinogram containing a 1 in the "central" TOF bin.
+
+center_tofbin = num_tofbins // 2
+tof_sino = xp.zeros(img_fwd.shape, dtype=xp.float32, device=dev)
+tof_sino[:, center_tofbin] = 1.0
+
+img_back = xp.zeros(image.shape, dtype=xp.float32, device=dev)
+parallelproj_backend.joseph3d_tof_sino_back(
+    lor_start,
+    lor_end,
+    img_back,
+    img_origin,
+    voxel_size,
+    tof_sino,
+    tofbin_width,
+    sigma_tof,
+    tof_center_offset,
+    num_tofbins,
+    num_sigmas,
+)
+
+# %%
+fig3 = plt.figure(figsize=(6, 6), layout="constrained")
+ax3 = fig3.add_subplot(111, projection="3d")
+show_voxel_cube(ax3, img_back, voxel_size, img_origin)
+show_lors(
+    ax3,
+    lor_start,
+    lor_end,
+    labels=[f"LOR-{i}" for i in range(lor_start.shape[0])],
+    num_tofbins=num_tofbins,
+    tofbin_width=tofbin_width,
+    tof_center_offset=tof_center_offset,
+)
+
+ax3.set_xlim(-10, 15)
+ax3.set_ylim(-10, 15)
+ax3.set_zlim(-10, 15)
+ax3.set_xlabel("x [mm]")
+ax3.set_ylabel("y [mm]")
+ax3.set_zlabel("z [mm]")
+ax3.set_box_aspect([1, 1, 1])
+ax3.set_title(
+    f"TOF back projection of a TOF profiles containg a 1 in TOF bin {center_tofbin}",
+    fontsize="medium",
+)
+
+fig3.show()
