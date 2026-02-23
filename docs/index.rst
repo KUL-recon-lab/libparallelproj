@@ -15,9 +15,12 @@ The library implements the Joseph 3D ray-driven projection algorithm :cite:`Jose
 **github repository**: `<https://github.com/KUL-recon-lab/libparallelproj>`_
 
 .. important::
-  *If you are using parallelproj, we highly recommend reading and appreciate citing our publication* :cite:`Schramm2023`
+  *If you are using libparallelproj, we highly recommend reading and appreciate citing our publication* :cite:`Schramm2023`
 
   * G. Schramm, K. Thielemans: "**PARALLELPROJ - An open-source framework for fast calculation of projections in tomography**", Front. Nucl. Med., Volume 3 - 2023, doi: 10.3389/fnume.2023.1324562, `link to paper <https://www.frontiersin.org/articles/10.3389/fnume.2023.1324562/abstract>`_, `link to arxiv version <https://arxiv.org/abs/2212.12519>`_
+
+.. note::
+  Libparallelproj is a **minimal API for the core projection operations**, and does not include higher-level reconstruction algorithms or utilities. However, it can be easily integrated into existing reconstruction frameworks. For minimal higher level examples see e.g. the `parallelproj python package <https://parallelproj.readthedocs.io>`_
 
 Content
 =======
@@ -27,6 +30,7 @@ Content
    :titlesonly:
 
    Theory and Background <theory_background>
+   Installation <installation>
    C API Reference <c_api>
    Python API Reference <python_api>
    Examples <auto_examples/index>

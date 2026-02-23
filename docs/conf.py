@@ -60,6 +60,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinxcontrib.bibtex",
     "sphinx_gallery.gen_gallery",
+    "sphinx_design",
 ]
 
 templates_path = ["_templates"]
