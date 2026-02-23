@@ -11,14 +11,14 @@ Line integrals (in 3D)
 
 We consider a continuous image/object :math:`f(\mathbf{r})` with :math:`\mathbf{r}=(x,y,z)` (3D) or
 :math:`\mathbf{r}=(x,y)` (2D). A line of response (LOR) is defined by two detector points
-:math:`\mathbf{p}_0` and :math:`\mathbf{p}_1`. Its length is :math:`L=\|\mathbf{p}_1-\mathbf{p}_0\|` and the
-unit direction vector is :math:`\mathbf{u} = (\mathbf{p}_1-\mathbf{p}_0)/L`.
+:math:`\mathbf{d}_0` and :math:`\mathbf{d}_1`. Its length is :math:`L=\|\mathbf{d}_1-\mathbf{d}_0\|` and the
+unit direction vector is :math:`\mathbf{u} = (\mathbf{d}_1-\mathbf{d}_0)/L`.
 
 A convenient parameterization along the LOR is
 
 .. math::
 
-   \mathbf{r}(s) = \mathbf{p}_0 + s\,\mathbf{u},
+   \mathbf{r}(s) = \mathbf{d}_0 + s\,\mathbf{u},
    \qquad s \in [0, L].
 
 The (continuous) non-TOF projection value along the LOR is
@@ -209,3 +209,18 @@ Implementation-wise, this means that
   1. The choice of :math:`n_\sigma` is a trade-off between accuracy and speed. A smaller :math:`n_\sigma` leads to faster computations but may introduce bias if the kernel tails are not negligible. This means that :math:`n_\sigma` should be chosen large enough to capture the majority of the kernel mass, otherwise the truncation may introduce bias in the projections. The default value of :math:`n_\sigma=3` which is typically sufficient for most applications.
 
   2. We always **re-normalize** the effective TOF kernel **after truncation** to ensure that the integral over the truncated kernel is the same as the integral over the full kernel. In case :math:`n_\sigma` is too small (e.g. < 3) significant kernel mass is truncated and the re-normalization introduces bias in the shape of the effective TOF kernel (on top of the truncation).
+
+
+Math symbols vs C API variable names
+------------------------------------
+
+.. csv-table::
+   :header: "Symbol in theory/background", "Meaning", "API variable name"
+   :widths: 30, 35, 35
+
+   ":math:`\mathbf{d}_0`", "LOR start point", "``lor_start``"
+   ":math:`\mathbf{d}_1`", "LOR end point", "``lor_end``"
+   ":math:`f(\mathbf{r})`", "(discretized) image", "``image``"
+   ":math:`\Delta`", "TOF bin width", "``tof_bin_width``"
+   ":math:`\sigma_{\mathrm{TOF}}`", "TOF standard deviation", "``tof_sigma``"
+   ":math:`n_\sigma`", "Truncation width in units of :math:`\sigma_{\mathrm{TOF}}`", "``num_sigmas``"

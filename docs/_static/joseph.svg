@@ -6,7 +6,7 @@
    version="1.1"
    id="svg64"
    sodipodi:docname="joseph.svg"
-   inkscape:version="1.4 (e7c3feb1, 2024-10-09)"
+   inkscape:version="1.4 (86a8ad7, 2024-10-11)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -21,13 +21,13 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="1.1710229"
-     inkscape:cx="241.24208"
-     inkscape:cy="74.294021"
-     inkscape:window-width="1512"
-     inkscape:window-height="921"
-     inkscape:window-x="0"
-     inkscape:window-y="33"
+     inkscape:zoom="2.3420458"
+     inkscape:cx="356.09893"
+     inkscape:cy="159.47596"
+     inkscape:window-width="2560"
+     inkscape:window-height="1369"
+     inkscape:window-x="1272"
+     inkscape:window-y="-8"
      inkscape:window-maximized="1"
      inkscape:current-layer="svg64" />
   <defs
@@ -342,8 +342,8 @@
      style="stroke-width:1.19859;stroke-dasharray:none" />
   <text
      class="note"
-     x="505.02661"
-     y="163.4949"
+     x="462.32892"
+     y="143.42697"
      id="text32">ray / LOR</text>
   <!-- Sample points = intersections with planes -->
   <circle
@@ -634,4 +634,38 @@
      x="-14.476562"
      y="-19"
      id="text64" />
+  <circle
+     class="sample"
+     cx="147.67873"
+     cy="224.07909"
+     r="6"
+     id="circle1"
+     style="fill:#ff00ff" />
+  <circle
+     class="sample"
+     cx="500.36182"
+     cy="158.75159"
+     r="6"
+     id="circle2"
+     style="fill:#ff00ff" />
+  <text
+     class="sampleLbl"
+     x="140.7578"
+     y="246.78796"
+     id="text2"
+     style="fill:#ff00ff"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:sans-serif;-inkscape-font-specification:'sans-serif Bold'"
+       id="tspan3">d</tspan><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:65%;font-family:sans-serif;-inkscape-font-specification:sans-serif;baseline-shift:sub;fill:#ff00ff"
+       id="tspan2">0</tspan></text>
+  <text
+     class="sampleLbl"
+     x="493.01395"
+     y="181.88745"
+     id="text5"
+     style="fill:#ff00ff"><tspan
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:sans-serif;-inkscape-font-specification:'sans-serif Bold'"
+       id="tspan4">d</tspan><tspan
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:65%;font-family:sans-serif;-inkscape-font-specification:sans-serif;baseline-shift:sub;fill:#ff00ff"
+       id="tspan5">1</tspan></text>
 </svg>
