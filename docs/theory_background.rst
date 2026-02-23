@@ -1,13 +1,13 @@
 .. _theory_background:
 
-Theory / background
+Theory & background
 ===================
 
 This page summarizes the core ideas behind the (TOF-weighted) line integrals implemented in
 ``libparallelproj``. The goal is to provide a compact reference for users of the library.
 
-Notation
---------
+Line integrals (in 3D)
+----------------------
 
 We consider a continuous image/object :math:`f(\mathbf{r})` with :math:`\mathbf{r}=(x,y,z)` (3D) or
 :math:`\mathbf{r}=(x,y)` (2D). A line of response (LOR) is defined by two detector points
@@ -21,9 +21,6 @@ A convenient parameterization along the LOR is
    \mathbf{r}(s) = \mathbf{p}_0 + s\,\mathbf{u},
    \qquad s \in [0, L].
 
-Non-TOF line integral
----------------------
-
 The (continuous) non-TOF projection value along the LOR is
 
 .. math::
@@ -33,8 +30,8 @@ The (continuous) non-TOF projection value along the LOR is
 In a voxelized image, this becomes a weighted sum over voxels, where the weights approximate the
 path length contribution through each voxel and the voxel values are sampled/interpolated.
 
-Joseph’s method in 3D
----------------------
+Joseph’s method
+---------------
 
 Joseph’s method :cite:`Joseph1982`  approximates the line integral by sampling the ray on a sequence of planes
 orthogonal to the dominant direction and interpolating in the transverse plane.
@@ -96,11 +93,14 @@ Typically this can be modeled as a Gaussian along the LOR coordinate :math:`s`
 (or an equivalent centered coordinate).
 
 .. note::
-  The conincidence time resolution (CTR) of PET scanners is often specified in time units (e.g. ps),
-  but it can be converted to distance units along the LOR by multiplying with :math:`c/2` (where :math:`c` is the speed of light).
+  1. The conincidence time resolution (CTR) of PET scanners is often specified in time units (e.g. ps), but it can be converted to distance units along the LOR by multiplying with :math:`c/2` (where :math:`c` is the speed of light).
 
-Gaussian TOF kernel (continuous)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  2. Knowing that :math:`c` is approximately 0.3 mm/ps, a :math:`\sigma` of 100 ps corresponds to 15 mm along the LOR.
+
+  3. The CTR of PET scanners is often specified as a full-width at half maximum (FWHM) value, which can be converted to :math:`\sigma` via :math:`\sigma = \text{FWHM} / (2\sqrt{2\ln(2)}) \approx \text{FWHM} / 2.355`.
+
+Continuous Gaussian TOF kernel
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Let :math:`\sigma_\text{TOF}` be the TOF standard deviation *in distance units along the LOR* (often derived
 from the system CTR). The ideal (continuous) Gaussian kernel centered at :math:`s_c` is
@@ -114,22 +114,22 @@ The corresponding TOF-weighted line integral is
 
 .. math::
 
-   p_{\text{TOF}}(s_c)
+   p_{\text{TOF}}(s_c, \sigma_\text{TOF})
    = \int_0^L f(\mathbf{r}(s))\; g\!\left(s;\, s_c, \sigma_\text{TOF}\right)\, ds.
 
 Finite TOF bin width and the effective TOF kernel
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-In practice, TOF data are binned - which is equivalent to subdividing the LOR into discrete segments.
+In practice, TOF data are binned (due to the use of TDCs)- which is equivalent to subdividing the LOR into discrete segments.
 A TOF bin has a finite width :math:`\Delta` (in distance units along
 the LOR, after converting from time), and one typically wants the probability mass **integrated over
 the bin**.
 
-If a bin is centered at :math:`s_c` and spans :math:`[s_c-\Delta/2,\, s_c+\Delta/2]`, then an
+If a bin is centered at :math:`s_c` spans :math:`[s_c-\Delta/2,\, s_c+\Delta/2]`, then an
 effective (binned) kernel can be defined as the Gaussian convolved with a rectangular window, or
 equivalently as the Gaussian **integrated over the bin limits**.
 
-A common and very useful closed form is the bin probability for a point at coordinate :math:`s`:
+For a continuous Gaussian kernel, this results in an effective TOF kernel of the form
 
 .. math::
 
@@ -150,11 +150,18 @@ With Joseph sampling points :math:`s_k` along the LOR, the TOF projection for a 
    p_{\text{TOF}}(s_c)
    \approx \sum_k f(\mathbf{r}(s_k))\; w_{\text{eff}}(s_k; s_c, \sigma_\text{TOF}, \Delta)\; \Delta s.
 
+.. figure:: _static/gaussian_tof_kernel.svg
+   :width: 95%
+   :alt: comparison of Gaussian and effective TOF kernel.
+
+.. note::
+  If the continous kernel is non-Gaussian, the effective kernel can be defined similarly by integrating the continous kernel over the TOF bin limits.
+
 TOF projections: sinogram vs listmode
 -------------------------------------
 
 Although the underlying physics is the same, the evaluation of TOF projections
-is implemented differently for TOF sinograms and TOF listmode data, to increase efficiency.
+is implemented differently for TOF sinogram and TOF listmode data, to increase efficiency.
 
 TOF sinogram
 ^^^^^^^^^^^^
@@ -165,14 +172,16 @@ which allows for efficient reuse of the ray samples when
 stepping through the planes in the dominant direction.
 
 For a given interpolated image values along the ray :math:`f(\mathbf{r}(s_k))`,
-we evaluate the effective TOF weights for all TOF bins (with centers :math:`t_c`).
+we evaluate the effective TOF weights for "all" TOF bins.
 
 TOF listmode
 ^^^^^^^^^^^^
 
 When operating in listmode (event-by-event reconstruction), we are typically only interested
-in the projection value for a single TOF bin for a given LOR (the TOF bin of a given event).
+in the projection value for a certain single TOF bin for a given LOR (the TOF bin of a given event, detected on a given LOR).
+
 In this case, we only evaluate the effective TOF weights for the relevant TOF bin center :math:`t_c` and ignore the others.
+
 Moreover, based on the width of the (effective) TOF kernel, we can further ignore ray samples that are far from the TOF bin center,
 which leads to a significant speedup (see next section).
 
