@@ -1,7 +1,7 @@
 .. _theory_background:
 
-Theory & background
-===================
+Theory and background
+=====================
 
 This page summarizes the core ideas behind the (TOF-weighted) line integrals implemented in
 ``libparallelproj``. The goal is to provide a compact reference for users of the library.
@@ -188,32 +188,24 @@ which leads to a significant speedup (see next section).
 Truncation of the effective Gaussian TOF kernel
 -----------------------------------------------
 
-The Gaussian (and thus :math:`w_{\text{eff}}`) has infinite support, but in practice its tails
-contribute negligibly far from the center and are expensive to evaluate.
+The continuous Gaussian as well as the effective TOF kernel (:math:`w_{\text{eff}}`) has infinite support,
+but in practice its tails contribute negligibly far from the center and are expensive to evaluate.
 
-A standard approach is to truncate the kernel beyond a configurable number of standard deviations
-``num_sigmas``:
-
-.. math::
-
-   |t - t_c| > n_\sigma \,\sigma_t \quad \Longrightarrow \quad w_{\text{eff}}(t; t_c, \sigma_t, \Delta) \approx 0.
-
-Implementation-wise, this means, for each TOF bin center :math:`t_c`, only ray samples with :math:`t_k` in
+A standard approach is to truncate the kernel beyond a configurable number of standard deviations :math:`n_\sigma`:
 
 .. math::
 
-   \left[t_c - n_\sigma \,\sigma_t,\; t_c + n_\sigma\,\sigma_t\right]
+   |s - s_c| > n_\sigma \,\sigma_\text{TOF} \quad \Longrightarrow \quad w_{\text{eff}}(s; s_c, \sigma_\text{TOF}, \Delta) \approx 0.
 
-are considered.
+Implementation-wise, this means that
 
-Samples outside this window are ignored (weight set to zero) which reduces computation substantially.
-The truncated weights are renormalized to ensure that the sum over the TOF bins of a TOF projection is the
-same as the non-TOF projection.
+1. in sinogram mode, at a given ray sample :math:`s_k`, we only evaluate the effective TOF weights for TOF bins whose centers are within
+:math:`n_\sigma \sigma_\text{TOF}` of :math:`s_k`.
 
-Choosing ``num_sigmas``
-^^^^^^^^^^^^^^^^^^^^^^^
+2. in listmode, we only evaluate the effective TOF weights for ray samples :math:`s_k` that are within :math:`n_\sigma \sigma_\text{TOF}` of the TOF bin center :math:`s_c`.
 
-The default values (3) already capture most of the Gaussian mass. The trade-off is:
+.. important::
 
-- larger ``num_sigmas``: more accurate tail contributions, more compute
-- smaller ``num_sigmas``: faster, slightly more approximation error
+  1. The choice of :math:`n_\sigma` is a trade-off between accuracy and speed. A smaller :math:`n_\sigma` leads to faster computations but may introduce bias if the kernel tails are not negligible. This means that :math:`n_\sigma` should be chosen large enough to capture the majority of the kernel mass, otherwise the truncation may introduce bias in the projections. The default value of :math:`n_\sigma=3` which is typically sufficient for most applications.
+
+  2. We always **re-normalize** the effective TOF kernel **after truncation** to ensure that the integral over the truncated kernel is the same as the integral over the full kernel. In case :math:`n_\sigma` is too small (e.g. < 3) significant kernel mass is truncated and the re-normalization introduces bias in the shape of the effective TOF kernel (on top of the truncation).
