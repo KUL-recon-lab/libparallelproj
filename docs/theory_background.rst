@@ -91,113 +91,90 @@ TOF-weighted line integrals
 ---------------------------
 
 Time-of-flight (TOF) information assigns a **weight along the LOR** depending on where the emission
-is likely to have occurred. For a TOF bin centered at :math:`\tau` (time difference) one typically
-models a Gaussian along the LOR coordinate :math:`s` (or an equivalent centered coordinate).
+is likely to have occurred.
+Typically this can be modeled as a Gaussian along the LOR coordinate :math:`s`
+(or an equivalent centered coordinate).
 
-A convenient centered coordinate is :math:`t` measured along the LOR with :math:`t=0` at the LOR
-midpoint:
-
-.. math::
-
-   t = s - \frac{L}{2},
-   \qquad t \in \left[-\frac{L}{2}, \frac{L}{2}\right].
+.. note::
+  The conincidence time resolution (CTR) of PET scanners is often specified in time units (e.g. ps),
+  but it can be converted to distance units along the LOR by multiplying with :math:`c/2` (where :math:`c` is the speed of light).
 
 Gaussian TOF kernel (continuous)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Let :math:`\sigma_t` be the TOF standard deviation *in distance units along the LOR* (often derived
-from the system CTR). The ideal (continuous) Gaussian kernel centered at :math:`t_c` is
+Let :math:`\sigma_\text{TOF}` be the TOF standard deviation *in distance units along the LOR* (often derived
+from the system CTR). The ideal (continuous) Gaussian kernel centered at :math:`s_c` is
 
 .. math::
 
-   g(t; t_c, \sigma_t)
-   = \frac{1}{\sqrt{2\pi}\sigma_t}\exp\!\left(-\frac{(t-t_c)^2}{2\sigma_t^2}\right).
+   g(s; s_c, \sigma_\text{TOF})
+   = \frac{1}{\sqrt{2\pi}\sigma_\text{TOF}}\exp\!\left(-\frac{(s-s_c)^2}{2\sigma_\text{TOF}^2}\right).
 
 The corresponding TOF-weighted line integral is
 
 .. math::
 
-   p_{\text{TOF}}(t_c)
-   = \int_0^L f(\mathbf{r}(s))\; g\!\left(s-\frac{L}{2};\, t_c, \sigma_t\right)\, ds.
+   p_{\text{TOF}}(s_c)
+   = \int_0^L f(\mathbf{r}(s))\; g\!\left(s;\, s_c, \sigma_\text{TOF}\right)\, ds.
 
-Finite TOF bin width and the *effective* TOF kernel
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Finite TOF bin width and the effective TOF kernel
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-In practice, TOF data are binned. A bin has a finite width :math:`\Delta` (in distance units along
+In practice, TOF data are binned - which is equivalent to subdividing the LOR into discrete segments.
+A TOF bin has a finite width :math:`\Delta` (in distance units along
 the LOR, after converting from time), and one typically wants the probability mass **integrated over
 the bin**.
 
-If a bin is centered at :math:`t_c` and spans :math:`[t_c-\Delta/2,\, t_c+\Delta/2]`, then an
+If a bin is centered at :math:`s_c` and spans :math:`[s_c-\Delta/2,\, s_c+\Delta/2]`, then an
 effective (binned) kernel can be defined as the Gaussian convolved with a rectangular window, or
 equivalently as the Gaussian **integrated over the bin limits**.
 
-A common and very useful closed form is the bin probability for a point at coordinate :math:`t`:
+A common and very useful closed form is the bin probability for a point at coordinate :math:`s`:
 
 .. math::
 
-   w_{\text{eff}}(t; t_c, \sigma_t, \Delta)
-   = \int_{t_c-\Delta/2}^{t_c+\Delta/2} g(t; \xi, \sigma_t)\, d\xi
+   w_{\text{eff}}(s; s_c, \sigma_\text{TOF}, \Delta)
+   = \int_{s_c-\Delta/2}^{s_c+\Delta/2} g(\xi; s_c, \sigma_\text{TOF})\, d\xi
    = \frac{1}{2}\left[
-       \operatorname{erf}\!\left(\frac{t - (t_c-\Delta/2)}{\sqrt{2}\sigma_t}\right)
-       - \operatorname{erf}\!\left(\frac{t - (t_c+\Delta/2)}{\sqrt{2}\sigma_t}\right)
+       \operatorname{erf}\!\left(\frac{s - (s_c-\Delta/2)}{\sqrt{2}\sigma_\text{TOF}}\right)
+       - \operatorname{erf}\!\left(\frac{s - (s_c+\Delta/2)}{\sqrt{2}\sigma_\text{TOF}}\right)
      \right].
 
 This :math:`w_{\text{eff}}` is dimensionless and represents the fraction of the Gaussian mass that
 falls into the TOF bin.
 
-With Joseph sampling points :math:`t_k` along the LOR, the TOF projection is approximated as
+With Joseph sampling points :math:`s_k` along the LOR, the TOF projection for a given LOR and TOF bin center :math:`s_c` is approximated as
 
 .. math::
 
-   p_{\text{TOF}}(t_c)
-   \approx \sum_k f(\mathbf{r}(s_k))\; w_{\text{eff}}(t_k; t_c, \sigma_t, \Delta)\; \Delta s.
+   p_{\text{TOF}}(s_c)
+   \approx \sum_k f(\mathbf{r}(s_k))\; w_{\text{eff}}(s_k; s_c, \sigma_\text{TOF}, \Delta)\; \Delta s.
 
 TOF projections: sinogram vs listmode
 -------------------------------------
 
-Although the underlying physics is the same, TOF projection/backprojection differs slightly in how
-measurements are indexed and accumulated.
+Although the underlying physics is the same, the evaluation of TOF projections
+is implemented differently for TOF sinograms and TOF listmode data, to increase efficiency.
 
 TOF sinogram
 ^^^^^^^^^^^^
 
-A TOF sinogram stores counts in discrete bins:
+When dealing with TOF sinograms, we are typically interested in computing projections / backprojections
+for all TOF bins of a given LOR,
+which allows for efficient reuse of the ray samples when
+stepping through the planes in the dominant direction.
 
-- geometric bin (e.g. segment/view/tangential/axial indices, depending on scanner geometry and
-  sinogram definition),
-- TOF bin index :math:`b` (centered at :math:`t_{c,b}` with width :math:`\Delta`).
-
-Forward projection for a TOF sinogram produces *one value per (LOR bin, TOF bin)*:
-
-.. math::
-
-   p_{j,b} \approx \sum_k f(\mathbf{r}_{j}(s_k))\; w_{\text{eff}}(t_{j,k}; t_{c,b}, \sigma_t, \Delta)\; \Delta s,
-
-where :math:`j` indexes the sinogram LOR bin.
-
-Backprojection distributes each sinogram residual :math:`r_{j,b}` along LOR :math:`j` weighted by
-the same :math:`w_{\text{eff}}` for bin :math:`b`.
+For a given interpolated image values along the ray :math:`f(\mathbf{r}(s_k))`,
+we evaluate the effective TOF weights for all TOF bins (with centers :math:`t_c`).
 
 TOF listmode
 ^^^^^^^^^^^^
 
-Listmode stores events individually. Each event typically carries:
-
-- the LOR identity (detector pair, or equivalent),
-- a measured TOF value mapped to a TOF bin :math:`b_i` or to a continuous estimate :math:`t_i`
-  (implementation-dependent).
-
-For TOF listmode, forward projection produces *one value per event* (or per event TOF bin),
-i.e. you evaluate the same TOF-weighted integral using the event's LOR and its TOF center:
-
-.. math::
-
-   p_i \approx \sum_k f(\mathbf{r}_{i}(s_k))\; w_{\text{eff}}(t_{i,k}; t_{c,i}, \sigma_t, \Delta)\; \Delta s.
-
-Listmode is often convenient for:
-- sparse data and event-wise likelihood models,
-- avoiding explicit histogramming into sinograms,
-- supporting event-dependent metadata (e.g. per-event TOF center).
+When operating in listmode (event-by-event reconstruction), we are typically only interested
+in the projection value for a single TOF bin for a given LOR (the TOF bin of a given event).
+In this case, we only evaluate the effective TOF weights for the relevant TOF bin center :math:`t_c` and ignore the others.
+Moreover, based on the width of the (effective) TOF kernel, we can further ignore ray samples that are far from the TOF bin center,
+which leads to a significant speedup (see next section).
 
 Truncation of the effective Gaussian TOF kernel
 -----------------------------------------------
