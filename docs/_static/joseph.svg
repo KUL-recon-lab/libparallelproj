@@ -6,7 +6,7 @@
    version="1.1"
    id="svg64"
    sodipodi:docname="joseph.svg"
-   inkscape:version="1.4 (86a8ad7, 2024-10-11)"
+   inkscape:version="1.4 (e7c3feb1, 2024-10-09)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -21,14 +21,14 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="2.3420458"
-     inkscape:cx="356.09893"
-     inkscape:cy="159.47596"
-     inkscape:window-width="2560"
-     inkscape:window-height="1369"
-     inkscape:window-x="1272"
-     inkscape:window-y="-8"
-     inkscape:window-maximized="1"
+     inkscape:zoom="0.64359823"
+     inkscape:cx="476.22878"
+     inkscape:cy="89.341451"
+     inkscape:window-width="1512"
+     inkscape:window-height="806"
+     inkscape:window-x="0"
+     inkscape:window-y="33"
+     inkscape:window-maximized="0"
      inkscape:current-layer="svg64" />
   <defs
      id="defs16">
@@ -517,33 +517,33 @@
   </g>
   <rect
      class="stencilBox"
-     x="775.52344"
-     y="161"
+     x="755.52344"
+     y="141"
      width="40"
      height="40"
      id="rect49" />
   <circle
      class="cornerDot"
-     cx="775.52344"
-     cy="201"
+     cx="755.52344"
+     cy="181"
      r="4"
      id="circle49" />
   <circle
      class="cornerDot"
-     cx="815.52344"
-     cy="201"
+     cx="795.52344"
+     cy="181"
      r="4"
      id="circle50" />
   <circle
      class="cornerDot"
-     cx="775.52344"
-     cy="161"
+     cx="755.52344"
+     cy="141"
      r="4"
      id="circle51" />
   <circle
      class="cornerDot"
-     cx="815.52344"
-     cy="161"
+     cx="795.52344"
+     cy="141"
      r="4"
      id="circle52" />
   <text
@@ -553,28 +553,28 @@
      id="text55" />
   <line
      class="tick"
-     x1="775.52344"
+     x1="755.52344"
      y1="291"
-     x2="775.52344"
+     x2="755.52344"
      y2="299"
      id="line55" />
   <text
      class="tickLbl"
-     x="765.52344"
+     x="745.52344"
      y="319"
      id="text56">y<tspan
    style="font-size:65%;baseline-shift:sub"
    id="tspan74">j</tspan></text>
   <line
      class="tick"
-     x1="815.52344"
+     x1="795.52344"
      y1="291"
-     x2="815.52344"
+     x2="795.52344"
      y2="299"
      id="line56" />
   <text
      class="tickLbl"
-     x="800.52344"
+     x="780.52344"
      y="319"
      id="text57">y<tspan
    style="font-size:65%;baseline-shift:sub"
@@ -582,42 +582,42 @@
   <line
      class="tick"
      x1="687.52344"
-     y1="201"
+     y1="181"
      x2="695.52344"
-     y2="201"
+     y2="181"
      id="line57" />
   <text
      class="tickLbl"
      x="667.52344"
-     y="205"
+     y="185"
      id="text58">z<tspan
    style="font-size:65%;baseline-shift:sub"
    id="tspan72">l</tspan></text>
   <line
      class="tick"
      x1="687.52344"
-     y1="161"
+     y1="141"
      x2="695.52344"
-     y2="161"
+     y2="141"
      id="line58" />
   <text
      class="tickLbl"
      x="659.52344"
-     y="165"
+     y="145"
      id="text59">z<tspan
    style="font-size:65%;baseline-shift:sub"
    id="tspan73">l+1</tspan></text>
   <circle
      class="interp"
-     cx="805.52344"
-     cy="187"
+     cx="781.28485"
+     cy="170.84094"
      r="6"
      id="circle60"
      style="fill:#ff0000" />
   <text
      class="small"
-     x="819.52344"
-     y="187"
+     x="818.05756"
+     y="173.53412"
      id="text61">(ỹ<tspan
    style="font-size:65%;baseline-shift:sub"
    id="tspan70">3</tspan>, z̃<tspan
@@ -668,4 +668,40 @@
        id="tspan4">d</tspan><tspan
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:65%;font-family:sans-serif;-inkscape-font-specification:sans-serif;baseline-shift:sub;fill:#ff00ff"
        id="tspan5">1</tspan></text>
+  <rect
+     style="fill:#ff0000;fill-opacity:0.03096539;stroke-width:1.5"
+     id="rect1"
+     width="39.997894"
+     height="39.675331"
+     x="735.44513"
+     y="120.96137"
+     rx="0"
+     ry="0" />
+  <rect
+     style="fill:#ff0000;fill-opacity:0.11111111;stroke-width:1.5"
+     id="rect2"
+     width="39.997894"
+     height="39.675331"
+     x="775.76556"
+     y="121.6065"
+     rx="0"
+     ry="0" />
+  <rect
+     style="fill:#ff0000;fill-opacity:0.11293261;stroke-width:1.5"
+     id="rect3"
+     width="39.997894"
+     height="39.675331"
+     x="736.09021"
+     y="161.28183"
+     rx="0"
+     ry="0" />
+  <rect
+     style="fill:#ff0000;fill-opacity:0.30783242;stroke-width:1.5"
+     id="rect4"
+     width="39.997894"
+     height="39.675331"
+     x="775.76556"
+     y="161.28183"
+     rx="0"
+     ry="0" />
 </svg>

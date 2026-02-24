@@ -9,8 +9,8 @@ This page summarizes the core ideas behind the (TOF-weighted) line integrals imp
 Line integrals (in 3D)
 ----------------------
 
-We consider a continuous image/object :math:`f(\mathbf{r})` with :math:`\mathbf{r}=(x,y,z)` (3D) or
-:math:`\mathbf{r}=(x,y)` (2D). A line of response (LOR) is defined by two detector points
+We consider a continuous image/object :math:`f(\mathbf{r})` with :math:`\mathbf{r}=(x,y,z)`.
+A line of response (LOR) is defined by two detector points
 :math:`\mathbf{d}_0` and :math:`\mathbf{d}_1`. Its length is :math:`L=\|\mathbf{d}_1-\mathbf{d}_0\|` and the
 unit direction vector is :math:`\mathbf{u} = (\mathbf{d}_1-\mathbf{d}_0)/L`.
 
