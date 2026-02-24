@@ -160,7 +160,7 @@ if(BUILD_PYTHON)
       set(DEV_MODULE Development.Module)
     endif()
 
-    find_package(Python 3.8 COMPONENTS Interpreter ${DEV_MODULE} REQUIRED)
+    find_package(Python 3.10 COMPONENTS Interpreter ${DEV_MODULE} REQUIRED)
 
     # Add an option for the Python interface install destination
     set(PYTHON_INTERFACE_INSTALL_DIR ${Python_SITELIB})
