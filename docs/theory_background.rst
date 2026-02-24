@@ -93,7 +93,7 @@ Typically this can be modeled as a Gaussian along the LOR coordinate :math:`s`
 (or an equivalent centered coordinate).
 
 .. note::
-  1. The conincidence time resolution (CTR) of PET scanners is often specified in time units (e.g. ps), but it can be converted to distance units along the LOR by multiplying with :math:`c/2` (where :math:`c` is the speed of light).
+  1. The coincidence time resolution (CTR) of PET scanners is often specified in time units (e.g. ps), but it can be converted to distance units along the LOR by multiplying with :math:`c/2` (where :math:`c` is the speed of light).
 
   2. Knowing that :math:`c` is approximately 0.3 mm/ps, a :math:`\sigma` of 100 ps corresponds to 15 mm along the LOR.
 
@@ -120,7 +120,7 @@ The corresponding TOF-weighted line integral is
 Finite TOF bin width and the effective TOF kernel
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-In practice, TOF data are binned (due to the use of TDCs)- which is equivalent to subdividing the LOR into discrete segments.
+In practice, TOF data are binned (due to the use of TDCs), which is equivalent to subdividing the LOR into discrete segments.
 A TOF bin has a finite width :math:`\Delta` (in distance units along
 the LOR, after converting from time), and one typically wants the probability mass **integrated over
 the bin**.
@@ -155,7 +155,7 @@ With Joseph sampling points :math:`s_k` along the LOR, the TOF projection for a 
    :alt: comparison of Gaussian and effective TOF kernel.
 
 .. note::
-  If the continous kernel is non-Gaussian, the effective kernel can be defined similarly by integrating the continous kernel over the TOF bin limits.
+  If the continuous kernel is non-Gaussian, the effective kernel can be defined similarly by integrating the continuous kernel over the TOF bin limits.
 
 TOF projections: sinogram vs listmode
 -------------------------------------
@@ -171,7 +171,7 @@ for all TOF bins of a given LOR,
 which allows for efficient reuse of the ray samples when
 stepping through the planes in the dominant direction.
 
-For a given interpolated image values along the ray :math:`f(\mathbf{r}(s_k))`,
+For given interpolated image values along the ray :math:`f(\mathbf{r}(s_k))`,
 we evaluate the effective TOF weights for "all" TOF bins.
 
 TOF listmode
@@ -180,7 +180,7 @@ TOF listmode
 When operating in listmode (event-by-event reconstruction), we are typically only interested
 in the projection value for a certain single TOF bin for a given LOR (the TOF bin of a given event, detected on a given LOR).
 
-In this case, we only evaluate the effective TOF weights for the relevant TOF bin center :math:`t_c` and ignore the others.
+In this case, we only evaluate the effective TOF weights for the relevant TOF bin center :math:`s_c` and ignore the others.
 
 Moreover, based on the width of the (effective) TOF kernel, we can further ignore ray samples that are far from the TOF bin center,
 which leads to a significant speedup (see next section).
@@ -188,7 +188,7 @@ which leads to a significant speedup (see next section).
 Truncation of the effective Gaussian TOF kernel
 -----------------------------------------------
 
-The continuous Gaussian as well as the effective TOF kernel (:math:`w_{\text{eff}}`) has infinite support,
+The continuous Gaussian as well as the effective TOF kernel (:math:`w_{\text{eff}}`) have infinite support,
 but in practice its tails contribute negligibly far from the center and are expensive to evaluate.
 
 A standard approach is to truncate the kernel beyond a configurable number of standard deviations :math:`n_\sigma`:
@@ -206,7 +206,7 @@ Implementation-wise, this means that
 
 .. important::
 
-  1. The choice of :math:`n_\sigma` is a trade-off between accuracy and speed. A smaller :math:`n_\sigma` leads to faster computations but may introduce bias if the kernel tails are not negligible. This means that :math:`n_\sigma` should be chosen large enough to capture the majority of the kernel mass, otherwise the truncation may introduce bias in the projections. The default value of :math:`n_\sigma=3` which is typically sufficient for most applications.
+  1. The choice of :math:`n_\sigma` is a trade-off between accuracy and speed. A smaller :math:`n_\sigma` leads to faster computations but may introduce bias if the kernel tails are not negligible. This means that :math:`n_\sigma` should be chosen large enough to capture the majority of the kernel mass, otherwise the truncation may introduce bias in the projections. The default value :math:`n_\sigma=3` which is typically sufficient for most applications.
 
   2. We always **re-normalize** the effective TOF kernel **after truncation** to ensure that the integral over the truncated kernel is the same as the integral over the full kernel. In case :math:`n_\sigma` is too small (e.g. < 3) significant kernel mass is truncated and the re-normalization introduces bias in the shape of the effective TOF kernel (on top of the truncation).
 
