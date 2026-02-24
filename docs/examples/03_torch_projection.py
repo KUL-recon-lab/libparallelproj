@@ -1,5 +1,5 @@
 """
-Torch projection layer
+Torch Projection Layer
 ======================
 
 This minimal example demonstrates how to use the `parallelproj_core` library
@@ -106,3 +106,50 @@ grad_test_fwd = torch.autograd.gradcheck(
 )
 
 assert grad_test_fwd, "Gradient check failed!"
+
+# %%
+
+# sphinx_gallery_start_ignore
+import matplotlib.pyplot as plt
+from matplotlib.patches import Circle
+
+fig, ax = plt.subplots(figsize=(2.6, 1.6), layout="constrained")
+ax.axis("off")
+
+r = 0.035  # neuron radius
+
+x_in, x_h1, x_h2, x_out = 0.12, 0.38, 0.64, 0.88
+ys_in = [0.35, 0.65]  # 2 inputs
+ys_h1 = [0.25, 0.50, 0.75]  # 3 hidden
+ys_h2 = [0.25, 0.50, 0.75]  # 3 hidden
+ys_out = [0.50]  # 1 output
+
+
+def connect(x0, ys0, x1, ys1):
+    for y0 in ys0:
+        for y1 in ys1:
+            ax.plot([x0 + r, x1 - r], [y0, y1], lw=0.8, alpha=0.35)
+
+
+connect(x_in, ys_in, x_h1, ys_h1)
+connect(x_h1, ys_h1, x_h2, ys_h2)
+connect(x_h2, ys_h2, x_out, ys_out)
+
+
+def neurons(x, ys):
+    for y in ys:
+        ax.add_patch(Circle((x, y), r, fill=True, alpha=0.95))
+
+
+neurons(x_in, ys_in)
+neurons(x_h1, ys_h1)
+neurons(x_h2, ys_h2)
+neurons(x_out, ys_out)
+
+ax.text(x_in, 0.06, "in", ha="center", va="center", fontsize=9)
+ax.text(x_h1, 0.06, "h1", ha="center", va="center", fontsize=9)
+ax.text(x_h2, 0.06, "h2", ha="center", va="center", fontsize=9)
+ax.text(x_out, 0.06, "out", ha="center", va="center", fontsize=9)
+
+fig.show()
+# sphinx_gallery_end_ignore
