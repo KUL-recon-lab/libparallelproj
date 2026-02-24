@@ -15,6 +15,7 @@ from array_api_compat import device
 # Setup a custom torch autograd function to wraps the forward projection.
 # We also implement the backward path (Jacobian-vector product) which in case of a linear operator
 # is equivalent to its adjoint (back projection).
+# Here we operator on a singel 3D tensor. In practice, this would probably be a batch of 3D tensors, with a signle channel (5D tensor).
 
 
 class FwdProjLayer(torch.autograd.Function):
