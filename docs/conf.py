@@ -6,6 +6,7 @@
 import os
 import re
 import sys
+from sphinx_gallery.sorting import FileNameSortKey
 from typing import Optional
 
 # Add the build directory to the path so we can import the Python module
@@ -73,6 +74,7 @@ sphinx_gallery_conf = {
     "filename_pattern": r"[\\/]\d{2,3}_.*\.py$",
     "ignore_pattern": r"(^|[\\/])utils\.py$",
     "plot_gallery": True,
+    "within_subsection_order": FileNameSortKey,
 }
 
 # -- Breathe configuration ---------------------------------------------------

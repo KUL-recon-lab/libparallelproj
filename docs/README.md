@@ -35,7 +35,7 @@ make html
 
 This will:
 1. Generate Doxygen XML from the C header files
-2. Build the Python extension module (parallelproj_backend)
+2. Build the Python extension module (parallelproj_core)
 3. Use Breathe to parse the Doxygen XML
 4. Use autodoc to extract Python docstrings
 5. Build the Sphinx HTML documentation

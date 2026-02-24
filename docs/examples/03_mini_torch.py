@@ -2,11 +2,11 @@
 Mini torch example
 ==================
 
-This minimal example demonstrates how to use the `parallelproj_backend` library
+This minimal example demonstrates how to use the `parallelproj_core` library
 with torch tensors and how to backward propagate gradients through the forward projection operation.
 """
 
-import parallelproj_backend
+import parallelproj_core
 import array_api_compat.torch as torch
 from array_api_compat import device
 
@@ -23,7 +23,7 @@ class FwdProjLayer(torch.autograd.Function):
     def forward(ctx, x, lor_start, lor_end, img_origin, voxel_size):
         dev = device(x)
         img_fwd = torch.zeros(lor_start.shape[0], dtype=torch.float32, device=dev)
-        parallelproj_backend.joseph3d_fwd(
+        parallelproj_core.joseph3d_fwd(
             lor_start, lor_end, x, img_origin, voxel_size, img_fwd
         )
         # save context variables for backward pass
@@ -36,7 +36,7 @@ class FwdProjLayer(torch.autograd.Function):
         dev = device(grad_output)
         lor_start, lor_end, img_origin, voxel_size, image_shape = ctx.saved_tensors
         grad_input = torch.zeros(tuple(image_shape), dtype=torch.float32, device=dev)
-        parallelproj_backend.joseph3d_back(
+        parallelproj_core.joseph3d_back(
             lor_start,
             lor_end,
             grad_input,
@@ -49,7 +49,7 @@ class FwdProjLayer(torch.autograd.Function):
 
 # %%
 # import array API compatible library (CuPy if CUDA is available, otherwise NumPy).
-if parallelproj_backend.cuda_enabled == 1:
+if parallelproj_core.cuda_enabled == 1:
     dev = "cuda"
 else:
     dev = "cpu"
@@ -57,8 +57,8 @@ else:
 
 # %%
 # Print backend and device info.
-print(f"parallelproj_backend version: {parallelproj_backend.__version__}")
-print(f"parallelproj_backend cuda enabled: {parallelproj_backend.cuda_enabled}")
+print(f"parallelproj_core version: {parallelproj_core.__version__}")
+print(f"parallelproj_core cuda enabled: {parallelproj_core.cuda_enabled}")
 print(f"using array API compatible library: {torch.__name__} on device {dev}")
 
 # %%
@@ -91,7 +91,7 @@ print("Forward projection result:", img_fwd)
 
 # %%
 # Run a torch gradient check to verify that the backward projection correctly computes gradients.
-# Since all parallelproj_backend functions use float32, we set the eps, atol, and rtol parameters to higher values
+# Since all parallelproj_core functions use float32, we set the eps, atol, and rtol parameters to higher values
 # to account for numerical precision issues.
 
 x = torch.rand(image.shape, dtype=torch.float32, device=dev, requires_grad=True)

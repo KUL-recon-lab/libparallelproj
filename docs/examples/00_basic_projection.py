@@ -4,20 +4,17 @@ Non-TOF Joseph Forward and Back Projection
 
 This minimal example demonstrates how to call python API
 for the non-TOF Joseph forward and back projection functions, which are implemented in
-:func:`parallelproj_backend.joseph3d_fwd` and :func:`parallelproj_backend.joseph3d_back`.
+:func:`parallelproj_core.joseph3d_fwd` and :func:`parallelproj_core.joseph3d_back`.
 """
 
 import importlib
-import parallelproj_backend
+import parallelproj_core
 import matplotlib.pyplot as plt
 from utils import show_voxel_cube, show_lors
 
 # %%
 # import array API compatible library (CuPy if CUDA is available, otherwise NumPy).
-if (
-    parallelproj_backend.cuda_enabled == 1
-    and importlib.util.find_spec("cupy") is not None
-):
+if parallelproj_core.cuda_enabled == 1 and importlib.util.find_spec("cupy") is not None:
     import array_api_compat.cupy as xp
 
     dev = xp.cuda.Device(0)
@@ -29,8 +26,8 @@ else:
 
 # %%
 # Print backend and device info.
-print(f"parallelproj_backend version: {parallelproj_backend.__version__}")
-print(f"parallelproj_backend cuda enabled: {parallelproj_backend.cuda_enabled}")
+print(f"parallelproj_core version: {parallelproj_core.__version__}")
+print(f"parallelproj_core cuda enabled: {parallelproj_core.cuda_enabled}")
 print(f"using array API compatible library: {xp.__name__} on device {dev}")
 
 # %%
@@ -59,7 +56,7 @@ lor_end = xp.asarray(
 # %%
 # Forward projection of the demo image.
 img_fwd = xp.zeros(lor_start.shape[0], dtype=xp.float32, device=dev)
-parallelproj_backend.joseph3d_fwd(
+parallelproj_core.joseph3d_fwd(
     lor_start, lor_end, image, img_origin, voxel_size, img_fwd
 )
 print(img_fwd)
@@ -90,7 +87,7 @@ fig.show()
 # %%
 # back projection of ones along the same LORs.
 back_ones = xp.zeros(image.shape, dtype=xp.float32, device=dev)
-parallelproj_backend.joseph3d_back(
+parallelproj_core.joseph3d_back(
     lor_start,
     lor_end,
     back_ones,

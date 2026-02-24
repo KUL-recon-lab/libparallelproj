@@ -4,7 +4,7 @@ Sinogram (histogram) TOF Joseph Forward and Back Projection
 
 This minimal example demonstrates how to call python API
 for the sinogram (histogram) TOF Joseph forward and back projection functions, which are implemented in
-:func:`parallelproj_backend.joseph3d_tof_sino_fwd` and :func:`parallelproj_backend.joseph3d_tof_sino_back`.
+:func:`parallelproj_core.joseph3d_tof_sino_fwd` and :func:`parallelproj_core.joseph3d_tof_sino_back`.
 
 .. note::
   In this educational example, the TOF resolution is much smaller compared to the voxel size,
@@ -12,16 +12,13 @@ for the sinogram (histogram) TOF Joseph forward and back projection functions, w
 """
 
 import importlib
-import parallelproj_backend
+import parallelproj_core
 import matplotlib.pyplot as plt
 from utils import show_voxel_cube, show_lors, to_numpy
 
 # %%
 # import array API compatible library (CuPy if CUDA is available, otherwise NumPy).
-if (
-    parallelproj_backend.cuda_enabled == 1
-    and importlib.util.find_spec("cupy") is not None
-):
+if parallelproj_core.cuda_enabled == 1 and importlib.util.find_spec("cupy") is not None:
     import array_api_compat.cupy as xp
 
     dev = xp.cuda.Device(0)
@@ -33,8 +30,8 @@ else:
 
 # %%
 # Print backend and device info.
-print(f"parallelproj_backend version: {parallelproj_backend.__version__}")
-print(f"parallelproj_backend cuda enabled: {parallelproj_backend.cuda_enabled}")
+print(f"parallelproj_core version: {parallelproj_core.__version__}")
+print(f"parallelproj_core cuda enabled: {parallelproj_core.cuda_enabled}")
 print(f"using array API compatible library: {xp.__name__} on device {dev}")
 
 # %%
@@ -78,7 +75,7 @@ num_tofbins = int(20 / tofbin_width) + 1
 # %%
 # Forward projection of the demo image.
 img_fwd = xp.zeros((lor_start.shape[0], num_tofbins), dtype=xp.float32, device=dev)
-parallelproj_backend.joseph3d_tof_sino_fwd(
+parallelproj_core.joseph3d_tof_sino_fwd(
     lor_start,
     lor_end,
     image,
@@ -134,7 +131,7 @@ fig.show()
 # %%
 # TOF back projection of a TOF sinogram full of ones.
 back_ones = xp.zeros(image.shape, dtype=xp.float32, device=dev)
-parallelproj_backend.joseph3d_tof_sino_back(
+parallelproj_core.joseph3d_tof_sino_back(
     lor_start,
     lor_end,
     back_ones,
@@ -184,7 +181,7 @@ tof_sino = xp.zeros(img_fwd.shape, dtype=xp.float32, device=dev)
 tof_sino[:, center_tofbin] = 1.0
 
 img_back = xp.zeros(image.shape, dtype=xp.float32, device=dev)
-parallelproj_backend.joseph3d_tof_sino_back(
+parallelproj_core.joseph3d_tof_sino_back(
     lor_start,
     lor_end,
     img_back,

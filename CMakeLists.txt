@@ -173,22 +173,22 @@ if(BUILD_PYTHON)
     find_package(nanobind CONFIG REQUIRED)
 
     nanobind_add_module(
-      parallelproj_backend
+      parallelproj_core
       python/bindings.cpp
     )
 
-    target_include_directories(parallelproj_backend PRIVATE ${CMAKE_SOURCE_DIR}/include/parallelproj)
+    target_include_directories(parallelproj_core PRIVATE ${CMAKE_SOURCE_DIR}/include/parallelproj)
     # Link the core library to the Python module
-    target_link_libraries(parallelproj_backend PRIVATE parallelproj)
+    target_link_libraries(parallelproj_core PRIVATE parallelproj)
 
     # Pass the PARALLELPROJ_CUDA definition to the Python module
-    target_compile_definitions(parallelproj_backend PRIVATE PARALLELPROJ_CUDA=${PARALLELPROJ_CUDA} PROJECT_VERSION="${PROJECT_VERSION}")
+    target_compile_definitions(parallelproj_core PRIVATE PARALLELPROJ_CUDA=${PARALLELPROJ_CUDA} PROJECT_VERSION="${PROJECT_VERSION}")
 
-    # Ensure parallelproj is built before parallelproj_backend
-    add_dependencies(parallelproj_backend parallelproj)
+    # Ensure parallelproj is built before parallelproj_core
+    add_dependencies(parallelproj_core parallelproj)
 
-    # Install parallelproj_backend to the specified destination
-    install(TARGETS parallelproj_backend
+    # Install parallelproj_core to the specified destination
+    install(TARGETS parallelproj_core
         EXPORT parallelprojTargets
         LIBRARY DESTINATION ${PYTHON_INTERFACE_INSTALL_DIR}
         RUNTIME DESTINATION ${PYTHON_INTERFACE_INSTALL_DIR}
@@ -268,7 +268,7 @@ if(BUILD_TESTS)
 
         add_test(NAME python_interface_test COMMAND ${Python_EXECUTABLE} -m  pytest -v ${CMAKE_SOURCE_DIR}/tests)
 
-        set_tests_properties(python_interface_test PROPERTIES ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:parallelproj_backend>$<SEMICOLON>$ENV{PYTHONPATH}")
+        set_tests_properties(python_interface_test PROPERTIES ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:parallelproj_core>$<SEMICOLON>$ENV{PYTHONPATH}")
     endif()
 endif()
 

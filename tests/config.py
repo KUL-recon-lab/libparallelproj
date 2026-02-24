@@ -3,7 +3,7 @@ import importlib
 
 import array_api_compat.numpy as np
 
-import parallelproj_backend as pp
+import parallelproj_core as pp
 
 torch_available = (
     importlib.util.find_spec("array_api_compat.torch") is not None

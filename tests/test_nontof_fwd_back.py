@@ -1,6 +1,6 @@
 import math
 import numpy as np
-import parallelproj_backend as pp
+import parallelproj_core as pp
 
 from types import ModuleType
 
@@ -143,7 +143,7 @@ def test_box_projection(xp: ModuleType, dev: str):
         dtype=xp.float32,
     )
 
-    img_fwd = xp.zeros(xstart.shape[0], dtype=xp.float32, device = dev)
+    img_fwd = xp.zeros(xstart.shape[0], dtype=xp.float32, device=dev)
 
     # Perform back projection
     pp.joseph3d_fwd(xstart, xend, img, img_origin, voxel_size, img_fwd)

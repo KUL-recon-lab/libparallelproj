@@ -1,7 +1,7 @@
 import pytest
 import math
 import random
-import parallelproj_backend as ppb
+import parallelproj_core as ppb
 
 from types import ModuleType
 from .config import pytestmark
