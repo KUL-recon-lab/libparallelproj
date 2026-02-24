@@ -13,3 +13,4 @@ dependencies:
   - sphinxcontrib-bibtex
   - matplotlib
   - array-api-compat
+  - pytorch
