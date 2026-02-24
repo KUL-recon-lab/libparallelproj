@@ -1,6 +1,6 @@
 """
-Mini torch example
-==================
+Torch projection layer
+======================
 
 This minimal example demonstrates how to use the `parallelproj_core` library
 with torch tensors and how to backward propagate gradients through the forward projection operation.
