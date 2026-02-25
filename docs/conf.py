@@ -85,9 +85,12 @@ breathe_default_project = "parallelproj"
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = "furo"
+html_logo = "_static/logo.png"
 
 # Theme options
 html_theme_options = {
     "navigation_with_keys": True,
     "top_of_page_buttons": ["view", "edit"],
 }
+
+suppress_warnings = ["config.cache"]
