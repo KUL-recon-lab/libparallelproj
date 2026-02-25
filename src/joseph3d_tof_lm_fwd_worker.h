@@ -2,7 +2,7 @@
 #include "cuda_compat.h"
 #include "utils.h"
 
-WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(size_t i,
+WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
                                                         const float *lor_start,
                                                         const float *lor_end,
                                                         const float *image,

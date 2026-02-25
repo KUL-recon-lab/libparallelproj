@@ -47,7 +47,7 @@ int test_cuda_managed_arrays(int device_id, int threadsperblock)
   cudaMallocManaged(&cm_vend, h_vend.size() * sizeof(float));
   std::copy(h_vend.begin(), h_vend.end(), cm_vend);
 
-  size_t nlors = h_vstart.size() / 3;
+  std::size_t nlors = h_vstart.size() / 3;
 
   float *cm_xstart, *cm_xend;
   cudaMallocManaged(&cm_xstart, 3 * nlors * sizeof(float));
@@ -95,12 +95,12 @@ int test_cuda_managed_arrays(int device_id, int threadsperblock)
   float inner_product1 = 0.0f;
   float inner_product2 = 0.0f;
 
-  for (size_t i = 0; i < h_img.size(); i++)
+  for (std::size_t i = 0; i < h_img.size(); i++)
   {
     inner_product1 += cm_img[i] * cm_bimg[i];
   }
 
-  for (size_t ir = 0; ir < nlors; ir++)
+  for (std::size_t ir = 0; ir < nlors; ir++)
   {
     inner_product2 += cm_img_fwd[ir] * cm_ones[ir];
   }
@@ -168,7 +168,7 @@ int test_cuda_device_arrays(int device_id, int threadsperblock)
   cudaMalloc(&d_vend, h_vend.size() * sizeof(float));
   cudaMemcpy(d_vend, h_vend.data(), h_vend.size() * sizeof(float), cudaMemcpyHostToDevice);
 
-  size_t nlors = h_vstart.size() / 3;
+  std::size_t nlors = h_vstart.size() / 3;
 
   float *d_xstart, *d_xend;
   cudaMalloc(&d_xstart, 3 * nlors * sizeof(float));
@@ -224,12 +224,12 @@ int test_cuda_device_arrays(int device_id, int threadsperblock)
   float inner_product1 = 0.0f;
   float inner_product2 = 0.0f;
 
-  for (size_t i = 0; i < h_img.size(); i++)
+  for (std::size_t i = 0; i < h_img.size(); i++)
   {
     inner_product1 += h_img[i] * h_bimg[i];
   }
 
-  for (size_t ir = 0; ir < nlors; ir++)
+  for (std::size_t ir = 0; ir < nlors; ir++)
   {
     inner_product2 += h_img_fwd[ir] * h_ones[ir];
   }
@@ -267,7 +267,7 @@ int test_box_projection_cuda_managed_arrays(int device_id, int threadsperblock)
   std::vector<float> img_origin = {-50.0f + 0.5f * voxel_size[0],
                                    -50.0f + 0.5f * voxel_size[1],
                                    -50.0f + 0.5f * voxel_size[2]};
-  size_t nvox = img_dim[0] * img_dim[1] * img_dim[2];
+  std::size_t nvox = img_dim[0] * img_dim[1] * img_dim[2];
 
   std::vector<std::vector<float>> xstart = {
       {100, 0, 0}, {50, 0, 0}, {0, 50, 0}, {0, 0, 50}, {40, 0, 0}, {0, 40, 0}, {0, 0, 40}, {50, 5, 0}, {0, 50, 5}, {5, 0, 50}, {50, 5, -2}, {-2, 50, 5}, {5, -2, 50}};
@@ -283,9 +283,9 @@ int test_box_projection_cuda_managed_arrays(int device_id, int threadsperblock)
       sqrt_100_9, sqrt_100_9, sqrt_100_9,
       sqrt_100_9_5, sqrt_100_9_5, sqrt_100_9_5};
 
-  size_t n_lors = xstart.size();
+  std::size_t n_lors = xstart.size();
   std::vector<float> xstart_flat, xend_flat;
-  for (size_t i = 0; i < n_lors; ++i)
+  for (std::size_t i = 0; i < n_lors; ++i)
   {
     xstart_flat.insert(xstart_flat.end(), xstart[i].begin(), xstart[i].end());
     xend_flat.insert(xend_flat.end(), xend[i].begin(), xend[i].end());
@@ -316,7 +316,7 @@ int test_box_projection_cuda_managed_arrays(int device_id, int threadsperblock)
   cudaDeviceSynchronize();
 
   float eps = 1e-4f;
-  for (size_t i = 0; i < n_lors; ++i)
+  for (std::size_t i = 0; i < n_lors; ++i)
   {
     if (std::abs(d_img_fwd[i] - exp_vals[i]) >= eps)
     {
@@ -348,7 +348,7 @@ int test_box_projection_cuda_device_arrays(int device_id, int threadsperblock)
   std::vector<float> img_origin = {-50.0f + 0.5f * voxel_size[0],
                                    -50.0f + 0.5f * voxel_size[1],
                                    -50.0f + 0.5f * voxel_size[2]};
-  size_t nvox = img_dim[0] * img_dim[1] * img_dim[2];
+  std::size_t nvox = img_dim[0] * img_dim[1] * img_dim[2];
 
   std::vector<std::vector<float>> xstart = {
       {100, 0, 0}, {50, 0, 0}, {0, 50, 0}, {0, 0, 50}, {40, 0, 0}, {0, 40, 0}, {0, 0, 40}, {50, 5, 0}, {0, 50, 5}, {5, 0, 50}, {50, 5, -2}, {-2, 50, 5}, {5, -2, 50}};
@@ -364,9 +364,9 @@ int test_box_projection_cuda_device_arrays(int device_id, int threadsperblock)
       sqrt_100_9, sqrt_100_9, sqrt_100_9,
       sqrt_100_9_5, sqrt_100_9_5, sqrt_100_9_5};
 
-  size_t n_lors = xstart.size();
+  std::size_t n_lors = xstart.size();
   std::vector<float> xstart_flat, xend_flat;
-  for (size_t i = 0; i < n_lors; ++i)
+  for (std::size_t i = 0; i < n_lors; ++i)
   {
     xstart_flat.insert(xstart_flat.end(), xstart[i].begin(), xstart[i].end());
     xend_flat.insert(xend_flat.end(), xend[i].begin(), xend[i].end());
@@ -399,7 +399,7 @@ int test_box_projection_cuda_device_arrays(int device_id, int threadsperblock)
   cudaMemcpy(img_fwd2.data(), dimg_fwd, n_lors * sizeof(float), cudaMemcpyDeviceToHost);
 
   float eps = 1e-4f;
-  for (size_t i = 0; i < n_lors; ++i)
+  for (std::size_t i = 0; i < n_lors; ++i)
   {
     if (std::abs(img_fwd2[i] - exp_vals[i]) >= eps)
     {

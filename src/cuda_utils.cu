@@ -11,7 +11,7 @@ static inline cudaMemLocation make_mem_location(int device_id) {
 
 // Overload for constant input_ptr (const T*)
 template <typename T>
-void handle_cuda_input_array(const T *input_ptr, T **device_ptr, size_t size, bool &free_flag, int device_id, cudaMemoryAdvise memory_hint)
+void handle_cuda_input_array(const T *input_ptr, T **device_ptr, std::size_t size, bool &free_flag, int device_id, cudaMemoryAdvise memory_hint)
 {
     cudaPointerAttributes attr;
     cudaError_t err = cudaPointerGetAttributes(&attr, input_ptr);
@@ -41,7 +41,7 @@ void handle_cuda_input_array(const T *input_ptr, T **device_ptr, size_t size, bo
 
 // Overload for non-constant input_ptr (T*) (not const)
 template <typename T>
-void handle_cuda_input_array(T *input_ptr, T **device_ptr, size_t size, bool &free_flag, int device_id, cudaMemoryAdvise memory_hint)
+void handle_cuda_input_array(T *input_ptr, T **device_ptr, std::size_t size, bool &free_flag, int device_id, cudaMemoryAdvise memory_hint)
 {
     cudaPointerAttributes attr;
     cudaError_t err = cudaPointerGetAttributes(&attr, input_ptr);
@@ -70,27 +70,27 @@ void handle_cuda_input_array(T *input_ptr, T **device_ptr, size_t size, bool &fr
 }
 
 // Explicit template instantiations
-template void handle_cuda_input_array<double>(const double *, double **, size_t, bool &, int, cudaMemoryAdvise);
-template void handle_cuda_input_array<double>(double *, double **, size_t, bool &, int, cudaMemoryAdvise);
-template void handle_cuda_input_array<float>(const float *, float **, size_t, bool &, int, cudaMemoryAdvise);
-template void handle_cuda_input_array<float>(float *, float **, size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<double>(const double *, double **, std::size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<double>(double *, double **, std::size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<float>(const float *, float **, std::size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<float>(float *, float **, std::size_t, bool &, int, cudaMemoryAdvise);
 
-template void handle_cuda_input_array<int>(const int *, int **, size_t, bool &, int, cudaMemoryAdvise);
-template void handle_cuda_input_array<int>(int *, int **, size_t, bool &, int, cudaMemoryAdvise);
-template void handle_cuda_input_array<unsigned int>(const unsigned int *, unsigned int **, size_t, bool &, int, cudaMemoryAdvise);
-template void handle_cuda_input_array<unsigned int>(unsigned int *, unsigned int **, size_t, bool &, int, cudaMemoryAdvise);
-template void handle_cuda_input_array<size_t>(const size_t *, size_t **, size_t, bool &, int, cudaMemoryAdvise);
-template void handle_cuda_input_array<size_t>(size_t *, size_t **, size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<int>(const int *, int **, std::size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<int>(int *, int **, std::size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<unsigned int>(const unsigned int *, unsigned int **, std::size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<unsigned int>(unsigned int *, unsigned int **, std::size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<std::size_t>(const std::size_t *, std::size_t **, std::size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<std::size_t>(std::size_t *, std::size_t **, std::size_t, bool &, int, cudaMemoryAdvise);
 
-template void handle_cuda_input_array<char>(const char *, char **, size_t, bool &, int, cudaMemoryAdvise);
-template void handle_cuda_input_array<char>(char *, char **, size_t, bool &, int, cudaMemoryAdvise);
-template void handle_cuda_input_array<unsigned char>(const unsigned char *, unsigned char **, size_t, bool &, int, cudaMemoryAdvise);
-template void handle_cuda_input_array<unsigned char>(unsigned char *, unsigned char **, size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<char>(const char *, char **, std::size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<char>(char *, char **, std::size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<unsigned char>(const unsigned char *, unsigned char **, std::size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<unsigned char>(unsigned char *, unsigned char **, std::size_t, bool &, int, cudaMemoryAdvise);
 
-template void handle_cuda_input_array<bool>(const bool *, bool **, size_t, bool &, int, cudaMemoryAdvise);
-template void handle_cuda_input_array<bool>(bool *, bool **, size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<bool>(const bool *, bool **, std::size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<bool>(bool *, bool **, std::size_t, bool &, int, cudaMemoryAdvise);
 
-template void handle_cuda_input_array<short>(const short *, short **, size_t, bool &, int, cudaMemoryAdvise);
-template void handle_cuda_input_array<short>(short *, short **, size_t, bool &, int, cudaMemoryAdvise);
-template void handle_cuda_input_array<unsigned short>(const unsigned short *, unsigned short **, size_t, bool &, int, cudaMemoryAdvise);
-template void handle_cuda_input_array<unsigned short>(unsigned short *, unsigned short **, size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<short>(const short *, short **, std::size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<short>(short *, short **, std::size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<unsigned short>(const unsigned short *, unsigned short **, std::size_t, bool &, int, cudaMemoryAdvise);
+template void handle_cuda_input_array<unsigned short>(unsigned short *, unsigned short **, std::size_t, bool &, int, cudaMemoryAdvise);

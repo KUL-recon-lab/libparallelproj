@@ -43,7 +43,7 @@ void test_ray_cube_intersection()
   };
 
   // Run test cases
-  for (size_t i = 0; i < test_cases.size(); ++i)
+  for (std::size_t i = 0; i < test_cases.size(); ++i)
   {
     const auto &tc = test_cases[i];
 

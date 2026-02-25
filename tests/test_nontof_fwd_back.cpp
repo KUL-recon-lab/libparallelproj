@@ -17,13 +17,13 @@ int test_box_projection_cpp()
                                    -50.0f + 0.5f * voxel_size[2]};
 
   // Allocate memory for image
-  size_t nvox = img_dim[0] * img_dim[1] * img_dim[2];
+  std::size_t nvox = img_dim[0] * img_dim[1] * img_dim[2];
   std::vector<float> img(nvox, 1.0f);
 
   // xstart and xend arrays
-  std::vector<std::vector<float> > xstart = {
+  std::vector<std::vector<float>> xstart = {
       {100, 0, 0}, {50, 0, 0}, {0, 50, 0}, {0, 0, 50}, {40, 0, 0}, {0, 40, 0}, {0, 0, 40}, {50, 5, 0}, {0, 50, 5}, {5, 0, 50}, {50, 5, -2}, {-2, 50, 5}, {5, -2, 50}};
-  std::vector<std::vector<float> > xend = {
+  std::vector<std::vector<float>> xend = {
       {-100, 0, 0}, {-50, 0, 0}, {0, -50, 0}, {0, 0, -50}, {-40, 0, 0}, {0, -40, 0}, {0, 0, -40}, {-50, -4, 0}, {0, -50, -4}, {-4, 0, -50}, {-50, -4, 3}, {3, -50, -4}, {-4, 3, -50}};
 
   std::vector<float> exp_vals = {
@@ -36,9 +36,9 @@ int test_box_projection_cpp()
       static_cast<float>(std::sqrt(100 * 100 + 9 * 9 + 5 * 5)),
       static_cast<float>(std::sqrt(100 * 100 + 9 * 9 + 5 * 5))};
 
-  size_t n_lors = xstart.size();
+  std::size_t n_lors = xstart.size();
   std::vector<float> xstart_flat, xend_flat;
-  for (size_t i = 0; i < n_lors; ++i)
+  for (std::size_t i = 0; i < n_lors; ++i)
   {
     xstart_flat.insert(xstart_flat.end(), xstart[i].begin(), xstart[i].end());
     xend_flat.insert(xend_flat.end(), xend[i].begin(), xend[i].end());
@@ -62,7 +62,7 @@ int test_box_projection_cpp()
 
   // Check results
   float eps = 1e-5f;
-  for (size_t i = 0; i < n_lors; ++i)
+  for (std::size_t i = 0; i < n_lors; ++i)
   {
     if (std::abs(img_fwd[i] - exp_vals[i]) >= eps)
     {
@@ -103,7 +103,7 @@ int test_forward_and_back_projection_cpp()
   // Read the ray end coordinates from file
   std::vector<float> vend = readArrayFromFile<float>("vend.txt");
 
-  size_t nlors = vstart.size() / 3;
+  std::size_t nlors = vstart.size() / 3;
 
   // Calculate the start and end coordinates in world coordinates
   std::vector<float> xstart(3 * nlors);
@@ -123,7 +123,7 @@ int test_forward_and_back_projection_cpp()
   // Allocate memory for forward projection results
   std::vector<float> img_fwd(nlors);
 
-  size_t nvoxels = img_dim[0] * img_dim[1] * img_dim[2];
+  std::size_t nvoxels = img_dim[0] * img_dim[1] * img_dim[2];
 
   // Perform forward projection
   joseph3d_fwd(
@@ -175,11 +175,11 @@ int test_forward_and_back_projection_cpp()
       nlors, img_dim.data());
 
   printf("\nback projection of ones along all rays:\n");
-  for (size_t i0 = 0; i0 < img_dim[0]; i0++)
+  for (std::size_t i0 = 0; i0 < img_dim[0]; i0++)
   {
-    for (size_t i1 = 0; i1 < img_dim[1]; i1++)
+    for (std::size_t i1 = 0; i1 < img_dim[1]; i1++)
     {
-      for (size_t i2 = 0; i2 < img_dim[2]; i2++)
+      for (std::size_t i2 = 0; i2 < img_dim[2]; i2++)
       {
         printf("%.1f ", bimg[img_dim[1] * img_dim[2] * i0 + img_dim[2] * i1 + i2]);
       }

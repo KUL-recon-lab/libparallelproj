@@ -56,7 +56,7 @@ static float host_dot(const std::vector<float> &a,
 {
     assert(a.size() == b.size());
     float s = 0;
-    for (size_t i = 0; i < a.size(); ++i)
+    for (std::size_t i = 0; i < a.size(); ++i)
         s += a[i] * b[i];
     return s;
 }

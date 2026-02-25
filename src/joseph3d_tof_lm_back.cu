@@ -11,7 +11,7 @@ __global__ void joseph3d_tof_lm_back_kernel(const float *lor_start,
                                            const float *image_origin,
                                            const float *voxel_size,
                                            const float *projection_values,
-                                           size_t num_events,
+                                           std::size_t num_events,
                                            const int *image_dim,
                                            float tof_bin_width,
                                            const float *tof_sigma,
@@ -22,7 +22,7 @@ __global__ void joseph3d_tof_lm_back_kernel(const float *lor_start,
                                            unsigned char is_lor_dependent_tof_sigma,
                                            unsigned char is_lor_dependent_tof_center_offset)
 {
-    size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < num_events)
     {
         joseph3d_tof_lm_back_worker(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, image_dim, tof_bin_width,
@@ -41,7 +41,7 @@ void joseph3d_tof_lm_back(const float *lor_start,
                           const float *image_origin,
                           const float *voxel_size,
                           const float *projection_values,
-                          size_t num_events,
+                          std::size_t num_events,
                           const int *image_dim,
                           float tof_bin_width,
                           const float *tof_sigma,
@@ -55,7 +55,7 @@ void joseph3d_tof_lm_back(const float *lor_start,
                           int threads_per_block)
 {
     // Calculate nvoxels from image_dim - image_dim can be device pointer!
-    size_t nvoxels = cuda_nvoxels_from_img_dim(image_dim);
+    std::size_t nvoxels = cuda_nvoxels_from_img_dim(image_dim);
 
     // Set the CUDA device
     if (device_id >= 0)
@@ -95,7 +95,7 @@ void joseph3d_tof_lm_back(const float *lor_start,
     handle_cuda_input_array(voxel_size, &d_voxel_size, sizeof(float) * 3, free_voxel_size, device_id, cudaMemAdviseSetReadMostly);
 
     // Handle projection_values (read mostly)
-    size_t projection_values_size = sizeof(float) * num_events;
+    std::size_t projection_values_size = sizeof(float) * num_events;
     float *d_projection_values = nullptr;
     bool free_projection_values = false;
     handle_cuda_input_array(projection_values, &d_projection_values, projection_values_size, free_projection_values, device_id, cudaMemAdviseSetReadMostly);
@@ -108,19 +108,19 @@ void joseph3d_tof_lm_back(const float *lor_start,
     // Handle tof_sigma (read mostly)
     float *d_tof_sigma = nullptr;
     bool free_tof_sigma = false;
-    size_t tof_sigma_size = is_lor_dependent_tof_sigma ? sizeof(float) * num_events : sizeof(float);
+    std::size_t tof_sigma_size = is_lor_dependent_tof_sigma ? sizeof(float) * num_events : sizeof(float);
     handle_cuda_input_array(tof_sigma, &d_tof_sigma, tof_sigma_size, free_tof_sigma, device_id, cudaMemAdviseSetReadMostly);
 
     // Handle tof_center_offset (read mostly)
     float *d_tof_center_offset = nullptr;
     bool free_tof_center_offset = false;
-    size_t tof_center_offset_size = is_lor_dependent_tof_center_offset ? sizeof(float) * num_events : sizeof(float);
+    std::size_t tof_center_offset_size = is_lor_dependent_tof_center_offset ? sizeof(float) * num_events : sizeof(float);
     handle_cuda_input_array(tof_center_offset, &d_tof_center_offset, tof_center_offset_size, free_tof_center_offset, device_id, cudaMemAdviseSetReadMostly);
 
     // Handle tof_bin_index (read mostly)
     short *d_tof_bin_index = nullptr;
     bool free_tof_bin_index = false;
-    size_t tof_bin_index_size = sizeof(short) * num_events;
+    std::size_t tof_bin_index_size = sizeof(short) * num_events;
     handle_cuda_input_array(tof_bin_index, &d_tof_bin_index, tof_bin_index_size, free_tof_bin_index, device_id, cudaMemAdviseSetReadMostly);
 
     ////////////////////////////////////////////////////////////////////////////

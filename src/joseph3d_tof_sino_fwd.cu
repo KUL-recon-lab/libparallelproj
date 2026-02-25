@@ -11,7 +11,7 @@ __global__ void joseph3d_tof_sino_fwd_kernel(const float *lor_start,
                                              const float *image_origin,
                                              const float *voxel_size,
                                              float *projection_values,
-                                             size_t num_lors,
+                                             std::size_t num_lors,
                                              const int *image_dim,
                                              float tof_bin_width,
                                              const float *tof_sigma,
@@ -21,7 +21,7 @@ __global__ void joseph3d_tof_sino_fwd_kernel(const float *lor_start,
                                              unsigned char is_lor_dependent_tof_sigma,
                                              unsigned char is_lor_dependent_tof_center_offset)
 {
-    size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < num_lors)
     {
         joseph3d_tof_sino_fwd_worker(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, image_dim, tof_bin_width,
@@ -40,7 +40,7 @@ void joseph3d_tof_sino_fwd(const float *lor_start,
                            const float *image_origin,
                            const float *voxel_size,
                            float *projection_values,
-                           size_t num_lors,
+                           std::size_t num_lors,
                            const int *image_dim,
                            float tof_bin_width,
                            const float *tof_sigma,
@@ -53,7 +53,7 @@ void joseph3d_tof_sino_fwd(const float *lor_start,
                            int threads_per_block)
 {
     // Calculate nvoxels from image_dim - image_dim can be device pointer!
-    size_t nvoxels = cuda_nvoxels_from_img_dim(image_dim);
+    std::size_t nvoxels = cuda_nvoxels_from_img_dim(image_dim);
 
     // Set the CUDA device
     if (device_id >= 0)
@@ -93,7 +93,7 @@ void joseph3d_tof_sino_fwd(const float *lor_start,
     handle_cuda_input_array(voxel_size, &d_voxel_size, sizeof(float) * 3, free_voxel_size, device_id, cudaMemAdviseSetReadMostly);
 
     // Handle projection_values (write access) - size depends on TOF bins
-    size_t projection_values_size = sizeof(float) * num_lors * num_tof_bins;
+    std::size_t projection_values_size = sizeof(float) * num_lors * num_tof_bins;
     float *d_projection_values = nullptr;
     bool free_projection_values = false;
     handle_cuda_input_array(projection_values, &d_projection_values, projection_values_size, free_projection_values, device_id, cudaMemAdviseSetAccessedBy);
@@ -106,13 +106,13 @@ void joseph3d_tof_sino_fwd(const float *lor_start,
     // Handle tof_sigma (read mostly)
     float *d_tof_sigma = nullptr;
     bool free_tof_sigma = false;
-    size_t tof_sigma_size = is_lor_dependent_tof_sigma ? sizeof(float) * num_lors : sizeof(float);
+    std::size_t tof_sigma_size = is_lor_dependent_tof_sigma ? sizeof(float) * num_lors : sizeof(float);
     handle_cuda_input_array(tof_sigma, &d_tof_sigma, tof_sigma_size, free_tof_sigma, device_id, cudaMemAdviseSetReadMostly);
 
     // Handle tof_center_offset (read mostly)
     float *d_tof_center_offset = nullptr;
     bool free_tof_center_offset = false;
-    size_t tof_center_offset_size = is_lor_dependent_tof_center_offset ? sizeof(float) * num_lors : sizeof(float);
+    std::size_t tof_center_offset_size = is_lor_dependent_tof_center_offset ? sizeof(float) * num_lors : sizeof(float);
     handle_cuda_input_array(tof_center_offset, &d_tof_center_offset, tof_center_offset_size, free_tof_center_offset, device_id, cudaMemAdviseSetReadMostly);
 
     ////////////////////////////////////////////////////////////////////////////

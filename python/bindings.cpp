@@ -32,7 +32,7 @@ void joseph3d_fwd_py(ConstFloatNDArray lor_start,
   // 2 check that lor_start and lor_end have same ndim and shape
   if (lor_start.ndim() != lor_end.ndim())
     throw std::invalid_argument("lor_start and lor_end must have the same number of dimensions");
-  for (size_t i = 0; i < lor_start.ndim(); ++i)
+  for (std::size_t i = 0; i < lor_start.ndim(); ++i)
   {
     if (lor_start.shape(i) != lor_end.shape(i))
       throw std::invalid_argument("lor_start and lor_end must have the same shape");
@@ -41,7 +41,7 @@ void joseph3d_fwd_py(ConstFloatNDArray lor_start,
   // 3 check that the shape of projection_values matches lor_start.shape[:-1]
   if (projection_values.ndim() != lor_start.ndim() - 1)
     throw std::invalid_argument("projection_values must have a shape equal to lor_start.shape[:-1]");
-  for (size_t i = 0; i < projection_values.ndim(); ++i)
+  for (std::size_t i = 0; i < projection_values.ndim(); ++i)
   {
     if (projection_values.shape(i) != lor_start.shape(i))
       throw std::invalid_argument("projection_values must have a shape equal to lor_start.shape[:-1]");
@@ -75,8 +75,8 @@ void joseph3d_fwd_py(ConstFloatNDArray lor_start,
 
   // 7 compute the number of LORs as the product of all dimensions except the last
   // the last dimension must be 3 (3 floating point values per LOR endpoint)
-  size_t num_lors = 1;
-  for (size_t i = 0; i < lor_start.ndim() - 1; ++i)
+  std::size_t num_lors = 1;
+  for (std::size_t i = 0; i < lor_start.ndim() - 1; ++i)
   {
     num_lors *= lor_start.shape(i);
   }
@@ -109,7 +109,7 @@ void joseph3d_back_py(ConstFloatNDArray lor_start,
   // 2 check that lor_start and lor_end have same ndim and shape
   if (lor_start.ndim() != lor_end.ndim())
     throw std::invalid_argument("lor_start and lor_end must have the same number of dimensions");
-  for (size_t i = 0; i < lor_start.ndim(); ++i)
+  for (std::size_t i = 0; i < lor_start.ndim(); ++i)
   {
     if (lor_start.shape(i) != lor_end.shape(i))
       throw std::invalid_argument("lor_start and lor_end must have the same shape");
@@ -118,7 +118,7 @@ void joseph3d_back_py(ConstFloatNDArray lor_start,
   // 3 check that the shape of projection_values matches lor_start.shape[:-1]
   if (projection_values.ndim() != lor_start.ndim() - 1)
     throw std::invalid_argument("projection_values must have a shape equal to lor_start.shape[:-1]");
-  for (size_t i = 0; i < projection_values.ndim(); ++i)
+  for (std::size_t i = 0; i < projection_values.ndim(); ++i)
   {
     if (projection_values.shape(i) != lor_start.shape(i))
       throw std::invalid_argument("projection_values must have a shape equal to lor_start.shape[:-1]");
@@ -152,8 +152,8 @@ void joseph3d_back_py(ConstFloatNDArray lor_start,
 
   // 7 compute the number of LORs as the product of all dimensions except the last
   // the last dimension must be 3 (3 floating point values per LOR endpoint)
-  size_t num_lors = 1;
-  for (size_t i = 0; i < lor_start.ndim() - 1; ++i)
+  std::size_t num_lors = 1;
+  for (std::size_t i = 0; i < lor_start.ndim() - 1; ++i)
   {
     num_lors *= lor_start.shape(i);
   }
@@ -194,7 +194,7 @@ void joseph3d_tof_sino_fwd_py(ConstFloatNDArray lor_start,
   // 2 check that lor_start and lor_end have same ndim and shape
   if (lor_start.ndim() != lor_end.ndim())
     throw std::invalid_argument("lor_start and lor_end must have the same number of dimensions");
-  for (size_t i = 0; i < lor_start.ndim(); ++i)
+  for (std::size_t i = 0; i < lor_start.ndim(); ++i)
   {
     if (lor_start.shape(i) != lor_end.shape(i))
       throw std::invalid_argument("lor_start and lor_end must have the same shape");
@@ -203,13 +203,13 @@ void joseph3d_tof_sino_fwd_py(ConstFloatNDArray lor_start,
   // 3 check projection_values has same ndim as lor_start
   if (projection_values.ndim() != lor_start.ndim())
     throw std::invalid_argument("projection_values must have same number of dimensions as lor_start");
-  for (size_t i = 0; i < (projection_values.ndim() - 1); ++i)
+  for (std::size_t i = 0; i < (projection_values.ndim() - 1); ++i)
   {
     if (projection_values.shape(i) != lor_start.shape(i))
       throw std::invalid_argument("shape of projection_values[:-1] must match shape of lor_start[:-1]");
   }
   // check that projection_values.shape[-1] == num_tof_bins
-  if (projection_values.shape(projection_values.ndim() - 1) != static_cast<size_t>(num_tof_bins))
+  if (projection_values.shape(projection_values.ndim() - 1) != static_cast<std::size_t>(num_tof_bins))
     throw std::invalid_argument("last dimension of projection_values must equal num_tof_bins");
 
   // 4 check that lor_start, lor_end, image, image_origin, voxel_size, projection_values have the same device type
@@ -240,8 +240,8 @@ void joseph3d_tof_sino_fwd_py(ConstFloatNDArray lor_start,
 
   // 7 compute the number of LORs as the product of all dimensions except the last
   // the last dimension must be 3 (3 floating point values per LOR endpoint)
-  size_t num_lors = 1;
-  for (size_t i = 0; i < lor_start.ndim() - 1; ++i)
+  std::size_t num_lors = 1;
+  for (std::size_t i = 0; i < lor_start.ndim() - 1; ++i)
   {
     num_lors *= lor_start.shape(i);
   }
@@ -257,7 +257,7 @@ void joseph3d_tof_sino_fwd_py(ConstFloatNDArray lor_start,
   }
   else if (tof_sigma.ndim() == lor_start.ndim() - 1)
   {
-    for (size_t i = 0; i < (tof_sigma.ndim()); ++i)
+    for (std::size_t i = 0; i < (tof_sigma.ndim()); ++i)
     {
       if (tof_sigma.shape(i) != lor_start.shape(i))
         throw std::invalid_argument("shape of tof_sigma must match shape of lor_start[:-1] or be scalar");
@@ -276,7 +276,7 @@ void joseph3d_tof_sino_fwd_py(ConstFloatNDArray lor_start,
   }
   else if (tof_center_offset.ndim() == lor_start.ndim() - 1)
   {
-    for (size_t i = 0; i < (tof_center_offset.ndim()); ++i)
+    for (std::size_t i = 0; i < (tof_center_offset.ndim()); ++i)
     {
       if (tof_center_offset.shape(i) != lor_start.shape(i))
         throw std::invalid_argument("shape of tof_center_offset must match shape of lor_start[:-1] or be scalar");
@@ -336,7 +336,7 @@ void joseph3d_tof_back_fwd_py(ConstFloatNDArray lor_start,
   // 2 check that lor_start and lor_end have same ndim and shape
   if (lor_start.ndim() != lor_end.ndim())
     throw std::invalid_argument("lor_start and lor_end must have the same number of dimensions");
-  for (size_t i = 0; i < lor_start.ndim(); ++i)
+  for (std::size_t i = 0; i < lor_start.ndim(); ++i)
   {
     if (lor_start.shape(i) != lor_end.shape(i))
       throw std::invalid_argument("lor_start and lor_end must have the same shape");
@@ -345,13 +345,13 @@ void joseph3d_tof_back_fwd_py(ConstFloatNDArray lor_start,
   // 3 check projection_values has same ndim as lor_start
   if (projection_values.ndim() != lor_start.ndim())
     throw std::invalid_argument("projection_values must have same number of dimensions as lor_start");
-  for (size_t i = 0; i < (projection_values.ndim() - 1); ++i)
+  for (std::size_t i = 0; i < (projection_values.ndim() - 1); ++i)
   {
     if (projection_values.shape(i) != lor_start.shape(i))
       throw std::invalid_argument("shape of projection_values[:-1] must match shape of lor_start[:-1]");
   }
   // check that projection_values.shape[-1] == num_tof_bins
-  if (projection_values.shape(projection_values.ndim() - 1) != static_cast<size_t>(num_tof_bins))
+  if (projection_values.shape(projection_values.ndim() - 1) != static_cast<std::size_t>(num_tof_bins))
     throw std::invalid_argument("last dimension of projection_values must equal num_tof_bins");
 
   // 4 check that lor_start, lor_end, image, image_origin, voxel_size, projection_values have the same device type
@@ -382,8 +382,8 @@ void joseph3d_tof_back_fwd_py(ConstFloatNDArray lor_start,
 
   // 7 compute the number of LORs as the product of all dimensions except the last
   // the last dimension must be 3 (3 floating point values per LOR endpoint)
-  size_t num_lors = 1;
-  for (size_t i = 0; i < lor_start.ndim() - 1; ++i)
+  std::size_t num_lors = 1;
+  for (std::size_t i = 0; i < lor_start.ndim() - 1; ++i)
   {
     num_lors *= lor_start.shape(i);
   }
@@ -399,7 +399,7 @@ void joseph3d_tof_back_fwd_py(ConstFloatNDArray lor_start,
   }
   else if (tof_sigma.ndim() == lor_start.ndim() - 1)
   {
-    for (size_t i = 0; i < (tof_sigma.ndim()); ++i)
+    for (std::size_t i = 0; i < (tof_sigma.ndim()); ++i)
     {
       if (tof_sigma.shape(i) != lor_start.shape(i))
         throw std::invalid_argument("shape of tof_sigma must match shape of lor_start[:-1] or be scalar");
@@ -418,7 +418,7 @@ void joseph3d_tof_back_fwd_py(ConstFloatNDArray lor_start,
   }
   else if (tof_center_offset.ndim() == lor_start.ndim() - 1)
   {
-    for (size_t i = 0; i < (tof_center_offset.ndim()); ++i)
+    for (std::size_t i = 0; i < (tof_center_offset.ndim()); ++i)
     {
       if (tof_center_offset.shape(i) != lor_start.shape(i))
         throw std::invalid_argument("shape of tof_center_offset must match shape of lor_start[:-1] or be scalar");
@@ -479,7 +479,7 @@ void joseph3d_tof_lm_fwd_py(ConstFloatNDArray event_start,
   if (event_start.shape(0) != event_end.shape(0))
     throw std::invalid_argument("event_start and event_end must have the same number of events (shape[0])");
 
-  size_t num_events = event_start.shape(0);
+  std::size_t num_events = event_start.shape(0);
 
   // 2 check dims and shapes of projection_values and tof_bin_index
   if (projection_values.ndim() != 1)
@@ -603,7 +603,7 @@ void joseph3d_tof_lm_back_py(ConstFloatNDArray event_start,
   if (event_start.shape(0) != event_end.shape(0))
     throw std::invalid_argument("event_start and event_end must have the same number of events (shape[0])");
 
-  size_t num_events = event_start.shape(0);
+  std::size_t num_events = event_start.shape(0);
 
   // 2 check dims and shapes of projection_values and tof_bin_index
   if (projection_values.ndim() != 1)

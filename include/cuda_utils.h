@@ -1,12 +1,13 @@
 #pragma once
 
+#include <cstddef>
 #include <cuda_runtime.h>
 #include <stdexcept>
 
 // Derive nvoxels = img_dim[0]*img_dim[1]*img_dim[2] when img_dim may be a
 // host, CUDA managed or device pointer. Throws std::invalid_argument or
 // std::runtime_error on error; returns computed nvoxels on success.
-inline size_t cuda_nvoxels_from_img_dim(const int *img_dim_ptr)
+inline std::size_t cuda_nvoxels_from_img_dim(const int *img_dim_ptr)
 {
     if (!img_dim_ptr)
         throw std::invalid_argument("nvoxels_from_img_dim: img_dim_ptr is null");
@@ -33,15 +34,15 @@ inline size_t cuda_nvoxels_from_img_dim(const int *img_dim_ptr)
     if (h_img_dim[0] <= 0 || h_img_dim[1] <= 0 || h_img_dim[2] <= 0)
         throw std::invalid_argument("nvoxels_from_img_dim: invalid img_dim values");
 
-    return static_cast<size_t>(h_img_dim[0]) *
-           static_cast<size_t>(h_img_dim[1]) *
-           static_cast<size_t>(h_img_dim[2]);
+    return static_cast<std::size_t>(h_img_dim[0]) *
+           static_cast<std::size_t>(h_img_dim[1]) *
+           static_cast<std::size_t>(h_img_dim[2]);
 }
 
 // Overload for constant input_ptr (const T*)
 template <typename T>
-void handle_cuda_input_array(const T *input_ptr, T **device_ptr, size_t size, bool &free_flag, int device_id, cudaMemoryAdvise memory_hint);
+void handle_cuda_input_array(const T *input_ptr, T **device_ptr, std::size_t size, bool &free_flag, int device_id, cudaMemoryAdvise memory_hint);
 
 // Overload for non-constant input_ptr (T*)
 template <typename T>
-void handle_cuda_input_array(T *input_ptr, T **device_ptr, size_t size, bool &free_flag, int device_id, cudaMemoryAdvise memory_hint);
+void handle_cuda_input_array(T *input_ptr, T **device_ptr, std::size_t size, bool &free_flag, int device_id, cudaMemoryAdvise memory_hint);

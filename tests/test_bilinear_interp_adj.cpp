@@ -9,7 +9,7 @@ float dot(const std::vector<float> &a, const std::vector<float> &b)
 {
     assert(a.size() == b.size());
     float sum = 0.0f;
-    for (size_t i = 0; i < a.size(); ++i)
+    for (std::size_t i = 0; i < a.size(); ++i)
         sum += a[i] * b[i];
     return sum;
 }
@@ -18,13 +18,13 @@ int main()
 {
     // 3D image dims
     const int n0 = 2, n1 = 3, n2 = 4;
-    const size_t N = n0 * n1 * n2;
+    const std::size_t N = n0 * n1 * n2;
 
     float eps = 1e-5f; // Tolerance for floating point comparison
 
     // Create a sample image x with distinct values
     std::vector<float> x(N);
-    for (size_t i = 0; i < N; ++i)
+    for (std::size_t i = 0; i < N; ++i)
         x[i] = float(i + 1); // 1..N
 
     // Test several fractional locations and directions

@@ -12,10 +12,10 @@ __global__ void joseph3d_back_kernel(const float *lor_start,
                                      const float *image_origin,
                                      const float *voxel_size,
                                      const float *projection_values,
-                                     size_t num_lors,
+                                     std::size_t num_lors,
                                      const int *image_dim)
 {
-    size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < num_lors)
     {
         joseph3d_back_worker(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, image_dim);
@@ -32,13 +32,13 @@ void joseph3d_back(const float *lor_start,
                    const float *image_origin,
                    const float *voxel_size,
                    const float *projection_values,
-                   size_t num_lors,
+                   std::size_t num_lors,
                    const int *image_dim,
                    int device_id,
                    int threads_per_block)
 {
     // Calculate nvoxels from image_dim - image_dim can be device pointer!
-    size_t nvoxels = cuda_nvoxels_from_img_dim(image_dim);
+    std::size_t nvoxels = cuda_nvoxels_from_img_dim(image_dim);
 
     // Set the CUDA device
     if (device_id >= 0)

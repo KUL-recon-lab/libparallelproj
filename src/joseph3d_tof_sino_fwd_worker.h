@@ -12,7 +12,7 @@ WORKER_QUALIFIER static inline void _apply_fwd_tof_weights(
     float *tof_weights,       // buffer to hold TOF weights of size at least MAX_NUM_TOF_WEIGHTS
     float toAdd,              // normalized contribution
     float *projection_values, // projection output (size: num_lors * num_tof_bins)
-    size_t lor_idx,           // LOR index i (use size_t to match caller)
+    std::size_t lor_idx,      // LOR index i (use std::size_t to match caller)
     short num_tof_bins)
 {
   int it_min = static_cast<int>(floorf(it_f - max_tof_bin_diff));
@@ -37,7 +37,7 @@ WORKER_QUALIFIER static inline void _apply_fwd_tof_weights(
   }
 }
 
-WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(size_t i,
+WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
                                                           const float *lor_start,
                                                           const float *lor_end,
                                                           const float *image,

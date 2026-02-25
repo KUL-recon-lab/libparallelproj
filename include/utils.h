@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <cmath>
 #include "cuda_compat.h"
 
@@ -162,7 +163,7 @@ WORKER_QUALIFIER inline T bilinear_interp_fixed0(const T *img,
                                                  float i_f2)
 {
   // get the i0 image plane (contiguous in memory)
-  const T *img_plane = img + size_t(i0) * n1 * n2;
+  const T *img_plane = img + std::size_t(i0) * n1 * n2;
 
   int i1_0 = int(floorf(i_f1));
   int i2_0 = int(floorf(i_f2));
@@ -176,7 +177,7 @@ WORKER_QUALIFIER inline T bilinear_interp_fixed0(const T *img,
   {
     if (i1 < 0 || i1 >= n1 || i2 < 0 || i2 >= n2)
       return T(0);
-    return img_plane[size_t(i1) * n2 + i2];
+    return img_plane[std::size_t(i1) * n2 + i2];
   };
 
   T v00 = sample(i1_0, i2_0);
@@ -206,7 +207,7 @@ WORKER_QUALIFIER inline T bilinear_interp_fixed1(const T *img,
   {
     if (i0 < 0 || i0 >= n0 || i2 < 0 || i2 >= n2)
       return T(0);
-    size_t idx = size_t(i0) * n1 * n2 + size_t(i1) * n2 + i2;
+    std::size_t idx = std::size_t(i0) * n1 * n2 + std::size_t(i1) * n2 + i2;
     return img[idx];
   };
 
@@ -237,7 +238,7 @@ WORKER_QUALIFIER inline T bilinear_interp_fixed2(const T *img,
   {
     if (i0 < 0 || i0 >= n0 || i1 < 0 || i1 >= n1)
       return T(0);
-    size_t idx = size_t(i0) * n1 * n2 + size_t(i1) * n2 + i2;
+    std::size_t idx = std::size_t(i0) * n1 * n2 + std::size_t(i1) * n2 + i2;
     return img[idx];
   };
 
@@ -270,7 +271,7 @@ WORKER_QUALIFIER inline void bilinear_interp_adj_fixed0(
     T val)
 {
   // pointer to the i0-th plane
-  T *plane = img + size_t(i0) * n1 * n2;
+  T *plane = img + std::size_t(i0) * n1 * n2;
 
   int i1_0 = int(floorf(i_f1));
   int i2_0 = int(floorf(i_f2));
@@ -288,7 +289,7 @@ WORKER_QUALIFIER inline void bilinear_interp_adj_fixed0(
   {
     if (i1 < 0 || i1 >= n1 || i2 < 0 || i2 >= n2)
       return;
-    atomic_sum(reinterpret_cast<float *>(&plane[size_t(i1) * n2 + i2]), val * w);
+    atomic_sum(reinterpret_cast<float *>(&plane[std::size_t(i1) * n2 + i2]), val * w);
   };
 
   inject(i1_0, i2_0, w00);
@@ -322,7 +323,7 @@ WORKER_QUALIFIER inline void bilinear_interp_adj_fixed1(
   {
     if (i0 < 0 || i0 >= n0 || i2 < 0 || i2 >= n2)
       return;
-    size_t idx = size_t(i0) * n1 * n2 + size_t(i1) * n2 + i2;
+    std::size_t idx = std::size_t(i0) * n1 * n2 + std::size_t(i1) * n2 + i2;
     atomic_sum(reinterpret_cast<float *>(&img[idx]), val * w);
   };
 
@@ -357,7 +358,7 @@ WORKER_QUALIFIER inline void bilinear_interp_adj_fixed2(
   {
     if (i0 < 0 || i0 >= n0 || i1 < 0 || i1 >= n1)
       return;
-    size_t idx = size_t(i0) * n1 * n2 + size_t(i1) * n2 + i2;
+    std::size_t idx = std::size_t(i0) * n1 * n2 + std::size_t(i1) * n2 + i2;
     atomic_sum(reinterpret_cast<float *>(&img[idx]), val * w);
   };
 

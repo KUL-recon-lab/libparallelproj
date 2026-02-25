@@ -11,7 +11,7 @@ WORKER_QUALIFIER static inline float _gather_back_tof_weights(
     float tof_sigma,
     float *tof_weights,             // buffer to hold TOF weights of size at least MAX_NUM_TOF_WEIGHTS
     const float *projection_values, // TOF projection values
-    size_t lor_offset,              // offset at which TOF values for given LOR start in projection_values
+    std::size_t lor_offset,         // offset at which TOF values for given LOR start in projection_values
     short num_tof_bins)
 {
   float toAdd = 0.0f;
@@ -39,7 +39,7 @@ WORKER_QUALIFIER static inline float _gather_back_tof_weights(
 
   return toAdd;
 }
-WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(size_t i,
+WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(std::size_t i,
                                                            const float *lor_start,
                                                            const float *lor_end,
                                                            float *image,
@@ -57,7 +57,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(size_t i,
 {
   // check whether the sum over TOF of the TOF sinogram to be backprojcted is > 0
   // if it is 0, we can skip the backprojection of this LOR
-  size_t lor_offset = (size_t)i * (size_t)num_tof_bins;
+  std::size_t lor_offset = (std::size_t)i * (std::size_t)num_tof_bins;
   float tof_lor_sum = 0.0f;
   for (short j = 0; j < num_tof_bins; ++j)
   {

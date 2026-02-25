@@ -1,11 +1,12 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
 // Function to save a 1D array to a text file
 template <typename T>
-void saveArrayToFile(const std::string &filename, const T *array, size_t size);
+void saveArrayToFile(const std::string &filename, const T *array, std::size_t size);
 
 // Function to read a 1D array from a text file
 template <typename T>
