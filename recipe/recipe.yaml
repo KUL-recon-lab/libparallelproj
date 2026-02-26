@@ -1,0 +1,142 @@
+# see e.g. https://rattler-build.prefix.dev/latest/variants/#the-down_prioritize_variant-option for CUDA/C++ variant handling
+context:
+  version: "2.0.0"
+  cuda_version: ${{ env.get("CONDA_OVERRIDE_CUDA", default="None") }}
+  cuda: ${{ "ON" if cuda_version != "None" else "OFF" }}
+
+recipe:
+  version: ${{ version }}
+
+source:
+  #url: https://github.com/KUL-recon-lab/libparallelproj/archive/refs/tags/v${{ version }}.tar.gz
+  url: https://github.com/KUL-recon-lab/libparallelproj/archive/refs/tags/v2.0.0-rc5.tar.gz
+  sha256: "67a0a0889ac3ec2a61534d6b96a342f41df8f93783757da9315b2c6fee68a7f5"
+
+outputs:
+  # -------------------------
+  # 1) C++ runtime + devel bits
+  # -------------------------
+  - package:
+      name: libparallelproj
+    build:
+      number: 0
+      script:
+        - |
+          cmake -S "$SRC_DIR" -B "$SRC_DIR/_build" -GNinja \
+            -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DUSE_CUDA=${{ cuda }} \
+            -DCMAKE_PREFIX_PATH="$PREFIX" \
+            -DBUILD_PYTHON=OFF \
+            -DBUILD_TESTS=OFF
+          cmake --build "$SRC_DIR/_build"
+          cmake --install "$SRC_DIR/_build"
+      variant:
+        use_keys:
+          - ${{ "cuda" if cuda == "ON" }}
+        down_prioritize_variant: ${{ 0 if cuda == "ON" else 1 }}
+
+    requirements:
+      build:
+        - ${{ compiler('cxx') }}
+        - cmake
+        - ninja
+        - if: cuda == "ON"
+          then: ${{ compiler('cuda') }}
+      host:
+        - if: osx
+          then: llvm-openmp
+        - if: cuda == "ON"
+          then: cuda-version ==${{ cuda_version }}
+      run:
+        - if: cuda == "ON"
+          then: __cuda
+
+    tests:
+      - package_contents:
+          lib:
+            - parallelproj
+          include:
+            - cuda_compat.h
+            - cuda_utils.h
+            - debug.h
+            - parallelproj.h
+            - parallelproj_export.h
+            - utils.h
+          files:
+            exists:
+              - lib/cmake/parallelproj/parallelprojConfig.cmake
+              - lib/cmake/parallelproj/parallelprojConfigVersion.cmake
+              - lib/cmake/parallelproj/parallelprojTargets.cmake
+
+  # -------------------------
+  # 2) Python extension only
+  # -------------------------
+  - package:
+      name: parallelproj-core
+    build:
+      number: 0
+      script:
+        - |
+          cmake -S "$SRC_DIR" -B "$SRC_DIR/_build_py" -GNinja \
+            -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+            -DUSE_CUDA=${{ cuda }} \
+            -DCMAKE_PREFIX_PATH="$PREFIX" \
+            -DPython_EXECUTABLE="$PYTHON" \
+            -DPython_ROOT_DIR="$PREFIX" \
+            -DBUILD_PYTHON=ON \
+            -DPYTHON_INTERFACE_INSTALL_DIR="$SP_DIR" \
+            -DBUILD_TESTS=OFF
+          cmake --build "$SRC_DIR/_build_py"
+          cmake --install "$SRC_DIR/_build_py"
+
+      variant:
+        use_keys:
+          - ${{ "cuda" if cuda == "ON" }}
+        down_prioritize_variant: ${{ 0 if cuda == "ON" else 1 }}
+
+      # Only ship the python extension from site-packages (no headers/cmake files)
+      files:
+        - lib/python*/site-packages/parallelproj_core*.so
+        - lib/python*/site-packages/parallelproj_core*.dylib
+        - lib/python*/site-packages/parallelproj_core*.pyd
+
+    requirements:
+      build:
+        - ${{ compiler('cxx') }}
+        - cmake
+        - ninja
+        - if: cuda == "ON"
+          then: ${{ compiler('cuda') }}
+      host:
+        - python
+        - nanobind
+        # build against the just-built library package (same variant)
+        - libparallelproj
+        - if: cuda == "ON"
+          then: cuda-version ==${{ cuda_version }}
+      run:
+        - ${{ pin_compatible('python') }}
+        - libparallelproj
+        - if: cuda == "ON"
+          then: __cuda
+
+    tests:
+      - script:
+          - pytest -v ./tests
+        requirements:
+          run:
+            - pytest
+            - numpy
+            - array-api-compat
+            - array-api-strict
+        files:
+          source:
+            - tests/*.py
+            - tests/*.txt
+
+about:
+  homepage: https://github.com/KUL-recon-lab/libparallelproj
+  license: Apache-2.0
+  license_file: LICENSE
+  summary: C++/CUDA backend projector library (parallelproj) for tomographic reconstruction
