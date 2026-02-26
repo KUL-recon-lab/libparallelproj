@@ -13,17 +13,35 @@
 # - SP_DIR is NOT available for Jinja; use globs instead
 # - keep forcing CMake to use $PYTHON to avoid ABI mismatches
 
+#export RATTLER_CUDA_VERSION=12.4
+#rattler-build build -r recipe/recipe.yaml
+
+#export RATTLER_USE_CUDA=1
+## optionally also set RATTLER_CUDA_VERSION if your recipe pins cuda-version
+#rattler-build build -r recipe/recipe.yaml
+
 context:
   version: "2.0.0"
-  cuda_version: ${{ env.get("CONDA_OVERRIDE_CUDA", default="None") }}
-  cuda: ${{ "ON" if cuda_version != "None" else "OFF" }}
+  # Prefer conda-forge's standard override when present,
+  # otherwise allow a local override.
+  cuda_version: >-
+    ${{ env.get(
+          "CONDA_OVERRIDE_CUDA",
+          default=env.get("RATTLER_CUDA_VERSION", default="None")
+       ) }}
+
+  # Allow an explicit local ON switch, otherwise infer from cuda_version
+  cuda: >-
+    ${{ "ON" if env.get("RATTLER_USE_CUDA", default="0") in ["1","ON","on","true","TRUE"]
+        else ("ON" if cuda_version != "None" else "OFF") }}
 
 recipe:
   version: ${{ version }}
 
 source:
-  url: https://github.com/KUL-recon-lab/libparallelproj/archive/refs/tags/v2.0.0-rc5.tar.gz
-  sha256: "67a0a0889ac3ec2a61534d6b96a342f41df8f93783757da9315b2c6fee68a7f5"
+  path: ..
+#  url: https://github.com/KUL-recon-lab/libparallelproj/archive/refs/tags/v2.0.0-rc5.tar.gz
+#  sha256: "67a0a0889ac3ec2a61534d6b96a342f41df8f93783757da9315b2c6fee68a7f5"
 
 outputs:
   # ---------------------------------------------------------------------------
@@ -60,19 +78,24 @@ outputs:
         - cmake
         - ninja
         - if: cuda == "ON"
-          then: ${{ compiler('cuda') }}
+          then:
+            - cuda-nvcc >=12.8,<12.9
+            - cuda-toolkit >=12.8,<12.9
+          #then: ${{ compiler('cuda') }}
       host:
         - if: osx
           then: llvm-openmp
         - if: cuda == "ON"
           then:
-            - cuda-version ==${{ cuda_version }}
+            - cuda-version ==12.8
         # If your non-CUDA build needs OpenMP at runtime on macOS, keep it in run too
       run:
         - if: osx
           then: llvm-openmp
         - if: cuda == "ON"
-          then: __cuda
+          then:
+            -  __cuda
+            - cuda-cudart
 
     tests:
       - package_contents:
@@ -157,7 +180,10 @@ outputs:
         - cmake
         - ninja
         - if: cuda == "ON"
-          then: ${{ compiler('cuda') }}
+          then:
+          - cuda-nvcc >=12.8,<12.9
+          - cuda-toolkit >=12.8,<12.9
+          #then: ${{ compiler('cuda') }}
       host:
         - python
         - nanobind
@@ -165,15 +191,13 @@ outputs:
         - libparallelproj
         - if: cuda == "ON"
           then:
-            - cuda-version ==${{ cuda_version }}
+            - cuda-version ==12.8
+            #- cuda-version ==${{ cuda_version }}
       run:
         - ${{ pin_compatible('python') }}
         - libparallelproj
         - if: osx
           then: llvm-openmp
-        - if: cuda == "ON"
-          then: __cuda
-
     tests:
       - script:
           - pytest -v ./tests
@@ -183,6 +207,8 @@ outputs:
             - numpy
             - array-api-compat
             - array-api-strict
+            - if: cuda == "ON"
+              then: cupy
         files:
           source:
             - tests/

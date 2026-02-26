@@ -2,6 +2,7 @@
 .DS_Store
 build*/*
 tests/__pycache__/*
+output/
 
 # Prerequisites
 *.d
