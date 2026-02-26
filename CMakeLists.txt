@@ -163,7 +163,7 @@ if(BUILD_PYTHON)
     find_package(Python 3.10 COMPONENTS Interpreter ${DEV_MODULE} REQUIRED)
 
     # Add an option for the Python interface install destination
-    set(PYTHON_INTERFACE_INSTALL_DIR ${Python_SITELIB})
+    set(PYTHON_INTERFACE_INSTALL_DIR ${CMAKE_INSTALL_LIBDIR} CACHE PATH "Directory to install the Python interface")
     message(STATUS "Python interface will be installed to: ${PYTHON_INTERFACE_INSTALL_DIR}")
 
     # Detect the installed nanobind package and import it into CMake
