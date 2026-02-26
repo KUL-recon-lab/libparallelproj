@@ -1,0 +1,24 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "default",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "BUILD_TESTS": "ON",
+        "BUILD_PYTHON": "ON"
+      }
+    },
+    {
+      "name": "cuda",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "BUILD_TESTS": "ON",
+        "BUILD_PYTHON": "ON",
+        "USE_CUDA": "ON"
+      }
+    }
+  ]
+}
