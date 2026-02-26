@@ -27,6 +27,12 @@ option(BUILD_PYTHON "Build the Python interface using nanobind" OFF)
 # Add an option to build the tests
 option(BUILD_TESTS "Build the tests" OFF)
 
+# Split packaging support:
+# - BUILD_LIBRARY: build the C++ shared library target (parallelproj)
+# - INSTALL_DEVEL: install headers + CMake package config files (devel bits)
+option(BUILD_LIBRARY "Build the C++ shared library (parallelproj)" ON)
+option(INSTALL_DEVEL "Install headers + CMake package config files" ON)
+
 # Enable automatic symbol export on Windows for shared libraries
 if(WIN32 AND BUILD_SHARED_LIBS)
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
@@ -95,7 +101,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_JOBS 4) # Adjust the number of jobs as needed
 endif()
 
-if(USE_CUDA)
+if(BUILD_LIBRARY AND USE_CUDA)
     message(STATUS "CUDA build enabled.")
 
     set(LIB_SOURCES
@@ -118,7 +124,7 @@ if(USE_CUDA)
     target_link_libraries(parallelproj PRIVATE CUDA::cudart)
     target_compile_definitions(parallelproj PUBLIC PARALLELPROJ_CUDA=1)
     target_compile_definitions(parallelproj PRIVATE PARALLELPROJ_EXPORTS PROJECT_VERSION="${PROJECT_VERSION}" PROJECT_VERSION_MAJOR=${PROJECT_VERSION_MAJOR} PROJECT_VERSION_MINOR=${PROJECT_VERSION_MINOR} PROJECT_VERSION_PATCH=${PROJECT_VERSION_PATCH})
-else()
+elseif(BUILD_LIBRARY)
     message(STATUS "CUDA build disabled.")
 
     set(LIB_SOURCES
@@ -141,12 +147,13 @@ else()
 
 endif()
 
-target_include_directories(parallelproj
-    PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
-)
-
+if(TARGET parallelproj)
+    target_include_directories(parallelproj
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
+    )
+endif()
 
 ################################################################################
 ### BUILD THE PYTHON INTERFACE #################################################
@@ -177,15 +184,18 @@ if(BUILD_PYTHON)
       python/bindings.cpp
     )
 
-    target_include_directories(parallelproj_core PRIVATE ${CMAKE_SOURCE_DIR}/include/parallelproj)
-    # Link the core library to the Python module
-    target_link_libraries(parallelproj_core PRIVATE parallelproj)
+    # Prefer linking against the in-tree target if we built it,
+    # otherwise link against an installed libparallelproj via its CMake package.
+    if(TARGET parallelproj)
+        target_link_libraries(parallelproj_core PRIVATE parallelproj)
+        add_dependencies(parallelproj_core parallelproj)
+    else()
+        find_package(parallelproj CONFIG REQUIRED)
+        target_link_libraries(parallelproj_core PRIVATE parallelproj::parallelproj)
+    endif()
 
     # Pass the PARALLELPROJ_CUDA definition to the Python module
     target_compile_definitions(parallelproj_core PRIVATE PARALLELPROJ_CUDA=${PARALLELPROJ_CUDA} PROJECT_VERSION="${PROJECT_VERSION}")
-
-    # Ensure parallelproj is built before parallelproj_core
-    add_dependencies(parallelproj_core parallelproj)
 
     # Install parallelproj_core to the specified destination
     install(TARGETS parallelproj_core
@@ -276,49 +286,54 @@ endif()
 ### INSTALL AND CONFIGS ########################################################
 ################################################################################
 
-# Install the library and headers
-install(TARGETS parallelproj
-    EXPORT parallelprojTargets
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
+if(TARGET parallelproj)
+    # Install the library runtime
+    install(TARGETS parallelproj
+        EXPORT parallelprojTargets
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
+endif()
 
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
+if(INSTALL_DEVEL AND TARGET parallelproj)
+    # Headers
+    install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
 
-# Export the build tree for other projects
-export(EXPORT parallelprojTargets
-    FILE ${CMAKE_BINARY_DIR}/parallelprojTargets.cmake
-    NAMESPACE parallelproj::
-)
+    # Export the build tree for other projects (build-tree usage)
+    export(EXPORT parallelprojTargets
+        FILE ${CMAKE_BINARY_DIR}/parallelprojTargets.cmake
+        NAMESPACE parallelproj::
+    )
 
-# Install the export configuration
-install(EXPORT parallelprojTargets
-    FILE parallelprojTargets.cmake
-    NAMESPACE parallelproj::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/parallelproj
-)
+    # Install the export configuration
+    install(EXPORT parallelprojTargets
+        FILE parallelprojTargets.cmake
+        NAMESPACE parallelproj::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/parallelproj
+    )
 
-# Create and install a package configuration file
-write_basic_package_version_file(
-    ${CMAKE_BINARY_DIR}/parallelprojConfigVersion.cmake
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY AnyNewerVersion
-)
+    # Create and install a package configuration file
+    write_basic_package_version_file(
+        ${CMAKE_BINARY_DIR}/parallelprojConfigVersion.cmake
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY AnyNewerVersion
+    )
 
-configure_file(${CMAKE_SOURCE_DIR}/cmake/parallelprojConfig.cmake.in
-    ${CMAKE_BINARY_DIR}/parallelprojConfig.cmake
-    @ONLY
-)
+    configure_file(${CMAKE_SOURCE_DIR}/cmake/parallelprojConfig.cmake.in
+        ${CMAKE_BINARY_DIR}/parallelprojConfig.cmake
+        @ONLY
+    )
 
-install(FILES
-    ${CMAKE_BINARY_DIR}/parallelprojConfig.cmake
-    ${CMAKE_BINARY_DIR}/parallelprojConfigVersion.cmake
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/parallelproj
-)
+    install(FILES
+        ${CMAKE_BINARY_DIR}/parallelprojConfig.cmake
+        ${CMAKE_BINARY_DIR}/parallelprojConfigVersion.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/parallelproj
+    )
+endif()
 
 ################################################################################
 ### UNINSTALL SCRIPT ###########################################################
@@ -354,7 +369,6 @@ if(BUILD_DOCS)
 
     # Configure the Doxyfile with project-specific variables
     configure_file(${DOXYGEN_INPUT_FILE} ${DOXYGEN_OUTPUT_FILE} @ONLY)
-
 
     # Add a custom target to generate the documentation
     add_custom_target(doxygen-docs
