@@ -2,9 +2,13 @@ import math
 import numpy as np
 import parallelproj_core as pp
 
+from pathlib import Path
 from types import ModuleType
 
 from .config import pytestmark
+
+
+HERE = Path(__file__).resolve().parent
 
 
 def test_forward_and_back_projection(xp: ModuleType, dev: str):
@@ -21,15 +25,17 @@ def test_forward_and_back_projection(xp: ModuleType, dev: str):
 
     # Read the image from file
     img = xp.reshape(
-        xp.asarray(np.loadtxt("img.txt", dtype=np.float32), device=dev), img_dim
+        xp.asarray(np.loadtxt(HERE / "img.txt", dtype=np.float32), device=dev), img_dim
     )
 
     # Read the ray start and end coordinates from file
     vstart = xp.reshape(
-        xp.asarray(np.loadtxt("vstart.txt", dtype=np.float32), device=dev), (2, 5, 3)
+        xp.asarray(np.loadtxt(HERE / "vstart.txt", dtype=np.float32), device=dev),
+        (2, 5, 3),
     )
     vend = xp.reshape(
-        xp.asarray(np.loadtxt("vend.txt", dtype=np.float32), device=dev), (2, 5, 3)
+        xp.asarray(np.loadtxt(HERE / "vend.txt", dtype=np.float32), device=dev),
+        (2, 5, 3),
     )
 
     # Calculate the start and end coordinates in world coordinates
@@ -38,7 +44,9 @@ def test_forward_and_back_projection(xp: ModuleType, dev: str):
 
     # Read the expected forward values from file
     expected_fwd_vals = xp.reshape(
-        xp.asarray(np.loadtxt("expected_fwd_vals.txt", dtype=np.float32), device=dev),
+        xp.asarray(
+            np.loadtxt(HERE / "expected_fwd_vals.txt", dtype=np.float32), device=dev
+        ),
         xstart.shape[:-1],
     )
 
