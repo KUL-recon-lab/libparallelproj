@@ -117,7 +117,11 @@ if(BUILD_LIBRARY AND USE_CUDA)
 
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
-    set(CMAKE_CUDA_ARCHITECTURES all)
+
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+      set(CMAKE_CUDA_ARCHITECTURES all-supported)
+    endif()
+
     set(PARALLELPROJ_CUDA 1)
 
     add_library(parallelproj SHARED ${LIB_SOURCES})
