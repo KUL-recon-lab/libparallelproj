@@ -22,36 +22,34 @@ else()
 endif()
 
 if(USE_CUDA)
-  # If user/toolchain did not provide architectures, choose a default based on nvcc version.
+  # get all the supported architectures from nvcc and set CMAKE_CUDA_ARCHITECTURES to that list if it's not already set by the user
+  # "all" does not seem to work with CUDA 13
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "")
     execute_process(
-      COMMAND "${CMAKE_CUDA_COMPILER}" --version
-      OUTPUT_VARIABLE _nvcc_version_out
-      ERROR_VARIABLE  _nvcc_version_err
+      COMMAND "${CMAKE_CUDA_COMPILER}" --list-gpu-arch
+      OUTPUT_VARIABLE _NVCC_ARCHS
       OUTPUT_STRIP_TRAILING_WHITESPACE
-      ERROR_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET
     )
 
-    # Extract the major version from nvcc output (works with typical "release 12.9" / "release 13.0" strings)
-    string(REGEX MATCH "release[ \t]+([0-9]+)\\." _ "${_nvcc_version_out}")
-    set(_nvcc_major "${CMAKE_MATCH_1}")
+    string(REGEX MATCHALL "compute_[0-9]+" _TOKENS "${_NVCC_ARCHS}")
 
-    if(_nvcc_major STREQUAL "")
-      message(WARNING "Could not parse nvcc version; defaulting to Turing+ arch set.")
-      set(_nvcc_major 13)
+    set(_ARCHS "")
+    foreach(t IN LISTS _TOKENS)
+      string(REPLACE "compute_" "" sm "${t}")
+      list(APPEND _ARCHS "${sm}")
+    endforeach()
+    list(REMOVE_DUPLICATES _ARCHS)
+
+    if(_ARCHS STREQUAL "")
+      message(WARNING "nvcc --list-gpu-arch returned nothing; falling back to 75;80;86;89;90")
+      set(_ARCHS 75 80 86 89 90)
     endif()
 
-    if(_nvcc_major GREATER_EQUAL 13)
-      # CUDA 13+: cannot compile sm_70 offline anymore -> start at 75
-      message(STATUS "Detected nvcc >= 13, targeting Turning-Blackwell")
-      set(CMAKE_CUDA_ARCHITECTURES "75;80;86;89;90;120" CACHE STRING "CUDA arch list")
-    else()
-      message(STATUS "Detected nvcc < 13, targeting Volta+")
-      set(CMAKE_CUDA_ARCHITECTURES "60;61;62;70;75;80;86;89;90" CACHE STRING "CUDA arch list")
-    endif()
-    message(STATUS "CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES}")
+    set(CMAKE_CUDA_ARCHITECTURES "${_ARCHS}" CACHE STRING "CUDA SM architectures" FORCE)
   endif()
 
+  message(STATUS "CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES}")
   enable_language(CUDA)
   find_package(CUDAToolkit REQUIRED)
 endif()
