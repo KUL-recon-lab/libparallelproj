@@ -22,31 +22,40 @@ else()
 endif()
 
 if(USE_CUDA)
-  # get all the supported architectures from nvcc and set CMAKE_CUDA_ARCHITECTURES to that list if it's not already set by the user
-  # "all" does not seem to work with CUDA 13
+  # if the user hasn't specified architectures, we'll query nvcc and filter to a curated list of archs we want to support.
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "")
+    # Curated superset (we'll filter it to what nvcc supports)
+    set(_CANDIDATE_ARCHS 70 75 80 86 89 90 120 121)
+
     execute_process(
       COMMAND "${CMAKE_CUDA_COMPILER}" --list-gpu-arch
       OUTPUT_VARIABLE _NVCC_ARCHS
       OUTPUT_STRIP_TRAILING_WHITESPACE
       ERROR_QUIET
     )
-
     string(REGEX MATCHALL "compute_[0-9]+" _TOKENS "${_NVCC_ARCHS}")
 
-    set(_ARCHS "")
+    set(_SUPPORTED_SMS "")
     foreach(t IN LISTS _TOKENS)
       string(REPLACE "compute_" "" sm "${t}")
-      list(APPEND _ARCHS "${sm}")
+      list(APPEND _SUPPORTED_SMS "${sm}")
     endforeach()
-    list(REMOVE_DUPLICATES _ARCHS)
+    list(REMOVE_DUPLICATES _SUPPORTED_SMS)
 
-    if(_ARCHS STREQUAL "")
-      message(WARNING "nvcc --list-gpu-arch returned nothing; falling back to 75;80;86;89;90")
-      set(_ARCHS 75 80 86 89 90)
+    set(_FINAL_ARCHS "")
+    foreach(sm IN LISTS _CANDIDATE_ARCHS)
+      list(FIND _SUPPORTED_SMS "${sm}" _idx)
+      if(NOT _idx EQUAL -1)
+        list(APPEND _FINAL_ARCHS "${sm}")
+      endif()
+    endforeach()
+
+    if(_FINAL_ARCHS STREQUAL "")
+      message(WARNING "No overlap between curated arch list and nvcc-supported list; falling back to nvcc list.")
+      set(_FINAL_ARCHS "${_SUPPORTED_SMS}")
     endif()
 
-    set(CMAKE_CUDA_ARCHITECTURES "${_ARCHS}" CACHE STRING "CUDA SM architectures" FORCE)
+    set(CMAKE_CUDA_ARCHITECTURES "${_FINAL_ARCHS}" CACHE STRING "CUDA SM architectures" FORCE)
   endif()
 
   message(STATUS "CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES}")
