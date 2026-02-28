@@ -21,6 +21,40 @@ else()
     option(USE_CUDA "Enable CUDA build" OFF)
 endif()
 
+if(USE_CUDA)
+  # If user/toolchain did not provide architectures, choose a default based on nvcc version.
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "")
+    execute_process(
+      COMMAND "${CMAKE_CUDA_COMPILER}" --version
+      OUTPUT_VARIABLE _nvcc_version_out
+      ERROR_VARIABLE  _nvcc_version_err
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_STRIP_TRAILING_WHITESPACE
+    )
+
+    # Extract the major version from nvcc output (works with typical "release 12.9" / "release 13.0" strings)
+    string(REGEX MATCH "release[ \t]+([0-9]+)\\." _ "${_nvcc_version_out}")
+    set(_nvcc_major "${CMAKE_MATCH_1}")
+
+    if(_nvcc_major STREQUAL "")
+      message(WARNING "Could not parse nvcc version; defaulting to Turing+ arch set.")
+      set(_nvcc_major 13)
+    endif()
+
+    if(_nvcc_major GREATER_EQUAL 13)
+      # CUDA 13+: cannot compile sm_70 offline anymore -> start at 75
+      message(STATUS "Detected nvcc >= 13, targeting Turning-Blackwell")
+      set(CMAKE_CUDA_ARCHITECTURES "75;80;86;89;90;120" CACHE STRING "CUDA arch list")
+    else()
+      message(STATUS "Detected nvcc < 13, targeting Volta+")
+      set(CMAKE_CUDA_ARCHITECTURES "60;61;62;70;75;80;86;89;90" CACHE STRING "CUDA arch list")
+    endif()
+  endif()
+
+  enable_language(CUDA)
+  find_package(CUDAToolkit REQUIRED)
+endif()
+
 # Add an option to build the Python interface
 option(BUILD_PYTHON "Build the Python interface using nanobind" OFF)
 
@@ -114,13 +148,6 @@ if(BUILD_LIBRARY AND USE_CUDA)
         src/cuda_utils.cu
         src/parallelproj_info.cpp
     )
-
-    enable_language(CUDA)
-    find_package(CUDAToolkit REQUIRED)
-
-    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-      set(CMAKE_CUDA_ARCHITECTURES all-supported)
-    endif()
 
     set(PARALLELPROJ_CUDA 1)
 
