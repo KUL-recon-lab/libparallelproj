@@ -49,6 +49,7 @@ if(USE_CUDA)
       message(STATUS "Detected nvcc < 13, targeting Volta+")
       set(CMAKE_CUDA_ARCHITECTURES "60;61;62;70;75;80;86;89;90" CACHE STRING "CUDA arch list")
     endif()
+    message(STATUS "CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES}")
   endif()
 
   enable_language(CUDA)
