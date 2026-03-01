@@ -21,7 +21,10 @@ cupy_available = (
 )
 if cupy_available:
     import array_api_compat.cupy as cp
-    num_cuda_devices = cp.cuda.runtime.getDeviceCount()
+    try:
+        num_cuda_devices = cp.cuda.runtime.getDeviceCount()
+    except:
+        num_cuda_devices = 0
 
 # %%
 
