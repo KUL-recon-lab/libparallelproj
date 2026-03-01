@@ -7,6 +7,7 @@
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "BUILD_TESTS": "ON",
+        "INSTALL_DEVEL": "ON",
         "BUILD_PYTHON": "ON"
       }
     },
@@ -17,7 +18,8 @@
       "cacheVariables": {
         "BUILD_TESTS": "ON",
         "BUILD_PYTHON": "ON",
-        "USE_CUDA": "ON"
+        "USE_CUDA": "ON",
+        "INSTALL_DEVEL": "ON"
       }
     }
   ]

@@ -7,6 +7,7 @@ dependencies:
   - cxx-compiler
   - cuda-compiler
   - cmake
+  - ninja
   - nanobind
   - numpy
   - array-api-compat

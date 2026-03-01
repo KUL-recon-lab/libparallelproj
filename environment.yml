@@ -6,6 +6,7 @@ channels:
 dependencies:
   - cxx-compiler
   - cmake
+  - ninja
   - nanobind
   - numpy
   - array-api-compat
