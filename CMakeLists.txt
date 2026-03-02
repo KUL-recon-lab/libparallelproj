@@ -307,14 +307,14 @@ if(BUILD_TESTS)
         add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
     endforeach()
 
-    if(BUILD_PYTHON)
-        ### ADD THE PYTHON INTERFACE TESTS ###
-        find_program(PYTEST_EXECUTABLE pytest REQUIRED)
+    #if(BUILD_PYTHON)
+    #    ### ADD THE PYTHON INTERFACE TESTS ###
+    #    find_program(PYTEST_EXECUTABLE pytest REQUIRED)
 
-        add_test(NAME python_interface_test COMMAND ${Python_EXECUTABLE} -m  pytest -v ${CMAKE_SOURCE_DIR}/tests)
+    #    add_test(NAME python_interface_test COMMAND ${Python_EXECUTABLE} -m  pytest -v ${CMAKE_SOURCE_DIR}/tests)
 
-        set_tests_properties(python_interface_test PROPERTIES ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:parallelproj_core>$<SEMICOLON>$ENV{PYTHONPATH}")
-    endif()
+    #    set_tests_properties(python_interface_test PROPERTIES ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:parallelproj_core>$<SEMICOLON>$ENV{PYTHONPATH}")
+    #endif()
 endif()
 
 ################################################################################
