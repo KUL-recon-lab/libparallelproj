@@ -30,23 +30,8 @@ jobs:
       fail-fast: true
 
     steps:
-      #- name: Checkout Repository
-      #  uses: actions/checkout@v3
-
-      #- name: Install CUDA Toolkit
-      #  id: cuda-toolkit
-      #  uses: Jimver/cuda-toolkit@v0.2.30
-      #  with:
-      #    cuda: ${{ matrix.cuda-version }}
-      #    method: 'local'
-      #    log-file-suffix: '${{ matrix.cuda-version }}.txt'
-
-      #- name: Check CUDA Setup
-      #  run: |
-      #    echo "CUDA Path: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}"
-      #    which nvcc
-      #    nvcc --version
-      #    g++ --version
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
       - uses: mamba-org/setup-micromamba@v2
         with:
@@ -61,8 +46,6 @@ jobs:
           micromamba activate libparallelproj_cuda_build_only
           python -V
 
-      #-DCUDAToolkit_ROOT=${{ steps.cuda-toolkit.outputs.CUDA_PATH }} \
-      #-DCMAKE_CUDA_COMPILER=${{ steps.cuda-toolkit.outputs.CUDA_PATH }}/bin/nvcc
       - name: Configure and Build with CMake
         shell: bash -l {0}
         run: |
