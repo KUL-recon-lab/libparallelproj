@@ -1,0 +1,16 @@
+name: libparallelproj_cuda_build_only
+
+channels:
+  - conda-forge
+
+dependencies:
+  - cxx-compiler
+  - cuda-compiler
+  - cmake
+  - ninja
+  - nanobind
+  - python >=3.12
+  - numpy
+  - array-api-compat
+  - array-api-strict
+  - pytest

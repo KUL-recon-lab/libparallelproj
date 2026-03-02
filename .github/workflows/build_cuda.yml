@@ -25,50 +25,49 @@ jobs:
       BUILD_DIR: build
 
     strategy:
-      matrix:
-        cuda-version: ['12.4.0', '13.1.0']
+      #matrix:
+      #  cuda-version: ['12.4.0', '13.1.0']
       fail-fast: true
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+      #- name: Checkout Repository
+      #  uses: actions/checkout@v3
 
-      - name: Install CUDA Toolkit
-        id: cuda-toolkit
-        uses: Jimver/cuda-toolkit@v0.2.30
-        with:
-          cuda: ${{ matrix.cuda-version }}
-          method: 'local'
-          log-file-suffix: '${{ matrix.cuda-version }}.txt'
+      #- name: Install CUDA Toolkit
+      #  id: cuda-toolkit
+      #  uses: Jimver/cuda-toolkit@v0.2.30
+      #  with:
+      #    cuda: ${{ matrix.cuda-version }}
+      #    method: 'local'
+      #    log-file-suffix: '${{ matrix.cuda-version }}.txt'
 
-      #- name: Install Build Tools
-      #  run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
-
-      - name: Check CUDA Setup
-        run: |
-          echo "CUDA Path: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}"
-          which nvcc
-          nvcc --version
-          g++ --version
+      #- name: Check CUDA Setup
+      #  run: |
+      #    echo "CUDA Path: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}"
+      #    which nvcc
+      #    nvcc --version
+      #    g++ --version
 
       - uses: mamba-org/setup-micromamba@v2
         with:
-          environment-file: environment.yml
+          environment-file: environment_cuda_build_only.yml
           micromamba-version: latest
           init-shell: bash
           post-cleanup: all
 
       - name: Show python version
         shell: bash -l {0}
-        run: python -V
+        run: |
+          micromamba activate libparallelproj_cuda_build_only
+          python -V
 
+      #-DCUDAToolkit_ROOT=${{ steps.cuda-toolkit.outputs.CUDA_PATH }} \
+      #-DCMAKE_CUDA_COMPILER=${{ steps.cuda-toolkit.outputs.CUDA_PATH }}/bin/nvcc
       - name: Configure and Build with CMake
         shell: bash -l {0}
         run: |
-          micromamba activate libparallelproj
+          micromamba activate libparallelproj_cuda_build_only
           cmake --preset cuda -B $BUILD_DIR \
-            -DCUDAToolkit_ROOT=${{ steps.cuda-toolkit.outputs.CUDA_PATH }} \
-            -DCMAKE_CUDA_COMPILER=${{ steps.cuda-toolkit.outputs.CUDA_PATH }}/bin/nvcc
           cmake --build $BUILD_DIR
 
       - name: Run python tests (should be skipped if no physical GPU is available)
@@ -76,23 +75,26 @@ jobs:
         env:
           PYTHON: ${{ env.BUILD_DIR }}
         run: |
-          micromamba activate libparallelproj
+          micromamba activate libparallelproj_cuda_build_only
           pytest -v tests
 
       - name: Install
         shell: bash -el {0}
         run: |
+          micromamba activate libparallelproj_cuda_build_only
           cmake --install $BUILD_DIR
 
       - name: Uninstall
         shell: bash -el {0}
         run: |
+          micromamba activate libparallelproj_cuda_build_only
           cmake --build $BUILD_DIR --target uninstall
 
       - name: Clean up CUDA Toolkit
         shell: bash -l {0}
         if: always()
         run: |
+          micromamba activate libparallelproj_cuda_build_only
           echo "Cleaning up CUDA install..."
           sudo rm -rf /usr/local/cuda*
           sudo rm -rf ~/.cuda-toolkit
