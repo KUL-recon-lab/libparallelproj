@@ -62,7 +62,7 @@ jobs:
         shell: bash -el {0}
         run: |
           micromamba activate libparallelproj
-          cmake -preset default -B build
+          cmake --preset default -B build
           cmake --build build
 
       # Step 4: Run Tests
