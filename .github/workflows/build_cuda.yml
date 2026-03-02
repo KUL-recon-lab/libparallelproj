@@ -67,7 +67,12 @@ jobs:
         shell: bash -el {0}
         run: |
           micromamba activate libparallelproj_cuda_build_only
-          cmake --preset cuda -B $BUILD_DIR
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            NVCC_PATH="$CONDA_PREFIX/bin/nvcc.exe"
+          else
+            NVCC_PATH="$CONDA_PREFIX/bin/nvcc"
+          fi
+          cmake --preset cuda -B $BUILD_DIR -DCMAKE_CUDA_COMPILER="$NVCC_PATH"
           cmake --build $BUILD_DIR
 
       # Step 4: Run python tests (should be skipped if no physical GPU is available)
