@@ -58,6 +58,18 @@ jobs:
           which nvcc && nvcc --version
           nvcc --list-gpu-arch || true
 
+      - name: Debug (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          micromamba activate $env:ENV_NAME
+          python -V
+          where.exe cl
+          cl /Bv
+          where.exe nvcc
+          nvcc --version
+          nvcc --list-gpu-arch
+
       - name: Configure & Build (Linux)
         if: runner.os == 'Linux'
         shell: bash -l {0}
