@@ -23,21 +23,11 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        include:
-          - os: ubuntu-latest
-            shell: bash -l {0}
-            cmake_extra: ""
-          - os: windows-latest
-            shell: pwsh
-            cmake_extra: >
-              -DCMAKE_C_COMPILER=cl
-              -DCMAKE_CXX_COMPILER=cl
-              -DCMAKE_CUDA_HOST_COMPILER=cl
+        os: [ubuntu-latest, windows-latest]
 
     env:
       ENV_NAME: libparallelproj_cuda_build_only
       BUILD_DIR: build
-      CMAKE_GEN: Ninja
 
     steps:
       - uses: actions/checkout@v4
@@ -46,47 +36,53 @@ jobs:
         with:
           environment-file: environment_cuda_build_only.yml
           micromamba-version: latest
-          init-shell: bash powershell
+          # no need for init-shell if we only use "micromamba run"
           post-cleanup: all
           create-args: >-
             python=3.12
             pip
 
-      # Needed on Windows so nvcc can find cl.exe
+      # Windows only: nvcc needs MSVC cl.exe available
       - name: Setup MSVC Developer Command Prompt
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Debug toolchain
-        shell: ${{ matrix.shell }}
         run: |
           micromamba run -n ${{ env.ENV_NAME }} -- python -V
           micromamba run -n ${{ env.ENV_NAME }} -- nvcc --version
           micromamba run -n ${{ env.ENV_NAME }} -- nvcc --list-gpu-arch
 
-      - name: Configure
-        shell: ${{ matrix.shell }}
+      # Configure Linux
+      - name: Configure (Linux)
+        if: runner.os == 'Linux'
         run: |
-          micromamba run -n ${{ env.ENV_NAME }} -- cmake --preset cuda -B ${{ env.BUILD_DIR }} -G ${{ env.CMAKE_GEN }} ${{ matrix.cmake_extra }}
+          micromamba run -n ${{ env.ENV_NAME }} -- cmake --preset cuda -B ${{ env.BUILD_DIR }}
+
+      # Configure Windows (force MSVC host compiler for nvcc)
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          micromamba run -n ${{ env.ENV_NAME }} -- cmake --preset cuda -B ${{ env.BUILD_DIR }} -G Ninja ^
+            -DCMAKE_C_COMPILER=cl ^
+            -DCMAKE_CXX_COMPILER=cl ^
+            -DCMAKE_CUDA_HOST_COMPILER=cl
+        shell: cmd
 
       - name: Build
-        shell: ${{ matrix.shell }}
         run: |
           micromamba run -n ${{ env.ENV_NAME }} -- cmake --build ${{ env.BUILD_DIR }} --config Release
 
       - name: Test
-        shell: ${{ matrix.shell }}
         env:
           PYTHONPATH: ${{ env.BUILD_DIR }}
         run: |
           micromamba run -n ${{ env.ENV_NAME }} -- pytest -v tests
 
       - name: Install
-        shell: ${{ matrix.shell }}
         run: |
           micromamba run -n ${{ env.ENV_NAME }} -- cmake --install ${{ env.BUILD_DIR }} --config Release
 
       - name: Uninstall
-        shell: ${{ matrix.shell }}
         run: |
           micromamba run -n ${{ env.ENV_NAME }} -- cmake --build ${{ env.BUILD_DIR }} --target uninstall --config Release
