@@ -67,12 +67,6 @@ void joseph3d_fwd_py(ConstFloatNDArray lor_start,
     throw std::invalid_argument("All input arrays must be on the same device ID");
   }
 
-  // 6 check that image_origin and voxel_size have length 3
-  if (image_origin.shape(0) != 3)
-    throw std::invalid_argument("image_origin must be a 1D array with 3 elements");
-  if (voxel_size.shape(0) != 3)
-    throw std::invalid_argument("voxel_size must be a 1D array with 3 elements");
-
   // 7 compute the number of LORs as the product of all dimensions except the last
   // the last dimension must be 3 (3 floating point values per LOR endpoint)
   std::size_t num_lors = 1;
@@ -143,12 +137,6 @@ void joseph3d_back_py(ConstFloatNDArray lor_start,
   {
     throw std::invalid_argument("All input arrays must be on the same device ID");
   }
-
-  // 6 check that image_origin and voxel_size have length 3
-  if (image_origin.shape(0) != 3)
-    throw std::invalid_argument("image_origin must be a 1D array with 3 elements");
-  if (voxel_size.shape(0) != 3)
-    throw std::invalid_argument("voxel_size must be a 1D array with 3 elements");
 
   // 7 compute the number of LORs as the product of all dimensions except the last
   // the last dimension must be 3 (3 floating point values per LOR endpoint)
@@ -231,12 +219,6 @@ void joseph3d_tof_sino_fwd_py(ConstFloatNDArray lor_start,
   {
     throw std::invalid_argument("All input arrays must be on the same device ID");
   }
-
-  // 6 check that image_origin and voxel_size have length 3
-  if (image_origin.shape(0) != 3)
-    throw std::invalid_argument("image_origin must be a 1D array with 3 elements");
-  if (voxel_size.shape(0) != 3)
-    throw std::invalid_argument("voxel_size must be a 1D array with 3 elements");
 
   // 7 compute the number of LORs as the product of all dimensions except the last
   // the last dimension must be 3 (3 floating point values per LOR endpoint)
@@ -374,12 +356,6 @@ void joseph3d_tof_back_fwd_py(ConstFloatNDArray lor_start,
     throw std::invalid_argument("All input arrays must be on the same device ID");
   }
 
-  // 6 check that image_origin and voxel_size have length 3
-  if (image_origin.shape(0) != 3)
-    throw std::invalid_argument("image_origin must be a 1D array with 3 elements");
-  if (voxel_size.shape(0) != 3)
-    throw std::invalid_argument("voxel_size must be a 1D array with 3 elements");
-
   // 7 compute the number of LORs as the product of all dimensions except the last
   // the last dimension must be 3 (3 floating point values per LOR endpoint)
   std::size_t num_lors = 1;
@@ -514,12 +490,6 @@ void joseph3d_tof_lm_fwd_py(ConstFloatNDArray event_start,
     throw std::invalid_argument("All input arrays must be on the same device ID");
   }
 
-  // 5 check that image_origin and voxel_size have length 3
-  if (image_origin.shape(0) != 3)
-    throw std::invalid_argument("image_origin must be a 1D array with 3 elements");
-  if (voxel_size.shape(0) != 3)
-    throw std::invalid_argument("voxel_size must be a 1D array with 3 elements");
-
   int image_dim[3] = {static_cast<int>(image.shape(0)),
                       static_cast<int>(image.shape(1)),
                       static_cast<int>(image.shape(2))};
@@ -637,12 +607,6 @@ void joseph3d_tof_lm_back_py(ConstFloatNDArray event_start,
   {
     throw std::invalid_argument("All input arrays must be on the same device ID");
   }
-
-  // 5 check that image_origin and voxel_size have length 3
-  if (image_origin.shape(0) != 3)
-    throw std::invalid_argument("image_origin must be a 1D array with 3 elements");
-  if (voxel_size.shape(0) != 3)
-    throw std::invalid_argument("voxel_size must be a 1D array with 3 elements");
 
   int image_dim[3] = {static_cast<int>(image.shape(0)),
                       static_cast<int>(image.shape(1)),
