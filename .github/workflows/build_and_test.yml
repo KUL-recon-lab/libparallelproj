@@ -62,26 +62,22 @@ jobs:
         shell: bash -el {0}
         run: |
           micromamba activate libparallelproj
-          mkdir build
-          cd build
-          cmake .. -G Ninja -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DBUILD_PYTHON=ON -DBUILD_TESTS=ON
-          cmake --build .
+          cmake -preset default -B build
+          cmake --build build
 
       # Step 4: Run Tests
       - name: Run Tests
         shell: bash -el {0}
         run: |
           micromamba activate libparallelproj
-          cd build
-          ctest --output-on-failure
+          ctest --output-on-failure --test-dir build
 
       # Step 5: Install
       - name: Install
         shell: bash -el {0}
         run: |
           micromamba activate libparallelproj
-          cd build
-          cmake --install .
+          cmake --install build
 
       # Step 6: Uninstall
       - name: Uninstall
@@ -89,4 +85,4 @@ jobs:
         run: |
           micromamba activate libparallelproj
           cd build
-          cmake --build . --target uninstall
+          cmake --build build --target uninstall
