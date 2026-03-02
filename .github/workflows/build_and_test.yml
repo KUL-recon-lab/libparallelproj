@@ -22,6 +22,9 @@ jobs:
   build-and-test:
     runs-on: ${{ matrix.os }}
 
+    env:
+      BUILD_DIR: build
+
     strategy:
       fail-fast: true
       matrix:
@@ -62,27 +65,26 @@ jobs:
         shell: bash -el {0}
         run: |
           micromamba activate libparallelproj
-          cmake --preset default -B build
-          cmake --build build
+          cmake --preset default -B $BUILD_DIR
+          cmake --build $BUILD_DIR
 
       # Step 4: Run Tests
       - name: Run Tests
         shell: bash -el {0}
         run: |
           micromamba activate libparallelproj
-          ctest --output-on-failure --test-dir build
+          ctest --output-on-failure --test-dir $BUILD_DIR
 
       # Step 5: Install
       - name: Install
         shell: bash -el {0}
         run: |
           micromamba activate libparallelproj
-          cmake --install build
+          cmake --install $BUILD_DIR
 
       # Step 6: Uninstall
       - name: Uninstall
         shell: bash -el {0}
         run: |
           micromamba activate libparallelproj
-          cd build
-          cmake --build build --target uninstall
+          cmake --build $BUILD_DIR --target uninstall
