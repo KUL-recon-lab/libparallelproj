@@ -50,7 +50,7 @@ jobs:
         shell: bash -l {0}
         run: |
           micromamba activate libparallelproj_cuda_build_only
-          cmake --preset cuda -B $BUILD_DIR \
+          cmake --preset cuda -B $BUILD_DIR
           cmake --build $BUILD_DIR
 
       - name: Run python tests (should be skipped if no physical GPU is available)
