@@ -63,12 +63,19 @@ jobs:
         shell: bash -l {0}
         run: python -V
 
+      # Step 2c: Install coverage tools (Ubuntu only)
+      - name: Install coverage tools
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        shell: bash -l {0}
+        run: |
+          micromamba install -y -c conda-forge lcov pytest-cov gcovr
+
       # Step 3: Configure and Build with CMake and Ninja
       - name: Configure and Build
         shell: bash -el {0}
         run: |
           micromamba activate libparallelproj
-          cmake --preset default -B $BUILD_DIR
+          cmake --preset default -B $BUILD_DIR ${{ matrix.os == 'ubuntu-latest' && matrix.python == '3.12' && '-DCMAKE_CXX_FLAGS="--coverage" -DCMAKE_C_FLAGS="--coverage"' || '' }}
           cmake --build $BUILD_DIR
 
       # Step 4: Run Tests
@@ -85,7 +92,28 @@ jobs:
           PYTHONPATH: ${{ env.BUILD_DIR }}
         run: |
           micromamba activate libparallelproj
-          pytest -v tests
+          pytest -v ${{ matrix.os == 'ubuntu-latest' && matrix.python == '3.12' && '--cov=parallelproj_core --cov-report=xml:coverage_python.xml --cov-report=term' || '' }} tests
+
+      # Step 4c: Generate C++ coverage report
+      - name: Generate C++ coverage report
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        shell: bash -el {0}
+        run: |
+          micromamba activate libparallelproj
+          lcov --capture --directory $BUILD_DIR --output-file coverage_cpp.info
+          lcov --remove coverage_cpp.info '/usr/*' '*/tests/*' --output-file coverage_cpp_filtered.info
+          lcov --list coverage_cpp_filtered.info
+
+      # Step 4d: Upload coverage to Codecov
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage_cpp_filtered.info,./coverage_python.xml
+          flags: unittests
+          name: codecov-libparallelproj
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       # Step 5: Install
       - name: Install

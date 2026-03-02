@@ -18,6 +18,9 @@
   <a href="https://libparallelproj.readthedocs.io">
     <img src="https://readthedocs.org/projects/libparallelproj/badge/?version=latest" alt="Documentation Status">
   </a>
+  <a href="https://codecov.io/gh/KUL-recon-lab/libparallelproj">
+    <img src="https://codecov.io/gh/KUL-recon-lab/libparallelproj/branch/main/graph/badge.svg" alt="Code Coverage">
+  </a>
   <a href="https://github.com/KUL-recon-lab/libparallelproj/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License">
   </a>
