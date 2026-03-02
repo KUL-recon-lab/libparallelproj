@@ -34,6 +34,7 @@ if(USE_CUDA)
       ERROR_QUIET
     )
     string(REGEX MATCHALL "compute_[0-9]+" _TOKENS "${_NVCC_ARCHS}")
+    message(STATUS "nvcc supports the following architectures: ${_TOKENS}")
 
     set(_SUPPORTED_SMS "")
     foreach(t IN LISTS _TOKENS)
