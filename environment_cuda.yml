@@ -15,4 +15,4 @@ dependencies:
   - array-api-strict
   - pytest
   - cupy
-  - pytorch=*=cuda*
+  - pytorch=*=cuda* # optional to test with pytorch
