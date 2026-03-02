@@ -21,6 +21,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.12', '3.x']
 
     steps:
       # Step 0: Setup MSVC Developer Command Prompt for Windows
@@ -40,6 +41,8 @@ jobs:
           micromamba-version: latest
           init-shell: bash
           post-cleanup: all
+          create-args: >-
+            python=${{ matrix.python-version }}
 
       # Step 3: Configure and Build with CMake and Ninja
       - name: Configure and Build
