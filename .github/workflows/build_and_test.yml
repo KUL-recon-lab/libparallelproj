@@ -79,7 +79,7 @@ jobs:
       - name: Run python tests
         shell: bash -el {0}
         run: |
-          micromamba activate libparallelproj_cuda_build_only
+          micromamba activate libparallelproj
           pytest -v tests
 
       # Step 5: Install
