@@ -13,6 +13,18 @@
       }
     },
     {
+      "name": "docs",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "BUILD_TESTS": "OFF",
+        "INSTALL_DEVEL": "ON",
+        "BUILD_PYTHON": "ON",
+        "BUILD_DOCS": "ON",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install"
+      }
+    },
+    {
       "name": "cuda",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",

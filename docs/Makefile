@@ -18,7 +18,7 @@ help:
 doxygen:
 	@echo "Generating Doxygen XML..."
 	@mkdir -p _build_doxygen && cd _build_doxygen && \
-		cmake ../.. -DBUILD_DOCS=ON -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF -DUSE_CUDA=OFF && \
+		cmake ../.. --preset docs && \
 		cmake --build . --target doxygen-docs && \
 		cmake --build .
 
