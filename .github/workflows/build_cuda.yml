@@ -1,8 +1,9 @@
-name: CUDA Build
+name: Build CUDA
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - 'src/*_worker.h'
       - 'src/*.cu'
@@ -18,67 +19,74 @@ on:
       - '.github/workflows/build_cuda.yml'
 
 jobs:
-  cuda-build:
-    runs-on: ubuntu-latest
+  build-and-test:
+    runs-on: ${{ matrix.os }}
 
     env:
       BUILD_DIR: build
 
     strategy:
-      #matrix:
-      #  cuda-version: ['12.4.0', '13.1.0']
       fail-fast: true
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python:
+          - "3.12"
+          #- "3.x"   # means: latest available 3.* from conda-forge
 
     steps:
-      - name: Checkout Repository
+      # Step 0: Setup MSVC Developer Command Prompt for Windows
+      # without that step we don't have access no the Ninja generator
+      - name: Setup MSVC Developer Command Prompt
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # Step 1: Checkout the repository
+      - name: Checkout repository
         uses: actions/checkout@v3
 
+      # Step 2: Set up Micromamba
       - uses: mamba-org/setup-micromamba@v2
         with:
           environment-file: environment_cuda_build_only.yml
           micromamba-version: latest
           init-shell: bash
           post-cleanup: all
+          create-args: >-
+            ${{ matrix.python == '3.x' && 'python>=3,<4' || format('python={0}', matrix.python) }}
+            pip
 
+      # Step 2b: Show python version for debugging purposes
       - name: Show python version
         shell: bash -l {0}
         run: |
           micromamba activate libparallelproj_cuda_build_only
           python -V
 
-      - name: Configure and Build with CMake
-        shell: bash -l {0}
+      # Step 3: Configure and Build with CMake and Ninja
+      - name: Configure and Build
+        shell: bash -el {0}
         run: |
           micromamba activate libparallelproj_cuda_build_only
           cmake --preset cuda -B $BUILD_DIR
           cmake --build $BUILD_DIR
 
-      - name: Run python tests (should be skipped if no physical GPU is available)
-        shell: bash -l {0}
-        env:
-          PYTHONPATH: ${{ env.BUILD_DIR }}
+      # Step 4: Run Tests
+      - name: Run Tests
+        shell: bash -el {0}
         run: |
           micromamba activate libparallelproj_cuda_build_only
-          pytest -v tests
+          ctest --output-on-failure --test-dir $BUILD_DIR
 
+      # Step 5: Install
       - name: Install
         shell: bash -el {0}
         run: |
           micromamba activate libparallelproj_cuda_build_only
           cmake --install $BUILD_DIR
 
+      # Step 6: Uninstall
       - name: Uninstall
         shell: bash -el {0}
         run: |
           micromamba activate libparallelproj_cuda_build_only
           cmake --build $BUILD_DIR --target uninstall
-
-      - name: Clean up CUDA Toolkit
-        shell: bash -l {0}
-        if: always()
-        run: |
-          micromamba activate libparallelproj_cuda_build_only
-          echo "Cleaning up CUDA install..."
-          sudo rm -rf /usr/local/cuda*
-          sudo rm -rf ~/.cuda-toolkit
-          sudo rm -rf ~/cuda_installer*
