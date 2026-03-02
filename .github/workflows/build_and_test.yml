@@ -78,6 +78,8 @@ jobs:
       # Step 4b: Run python tests (should be skipped if no physical GPU is available)
       - name: Run python tests
         shell: bash -el {0}
+        env:
+          PYTHONPATH: ${{ env.BUILD_DIR }}
         run: |
           micromamba activate libparallelproj
           pytest -v tests
