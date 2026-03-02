@@ -62,6 +62,21 @@ jobs:
           micromamba activate libparallelproj_cuda_build_only
           python -V
 
+      # Step 2c: Debug nvcc
+      - name: Debug nvcc
+        shell: bash -l {0}
+        run: |
+          micromamba activate libparallelproj_cuda_build_only
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            NVCC_PATH="$CONDA_PREFIX/bin/nvcc.exe"
+          else
+            NVCC_PATH="$CONDA_PREFIX/bin/nvcc"
+          fi
+          echo "NVCC path: $NVCC_PATH"
+          "$NVCC_PATH" --version || echo "nvcc --version failed"
+          "$NVCC_PATH" --list-gpu-arch || echo "nvcc --list-gpu-arch failed"
+          "$NVCC_PATH" --list-gpu-code || echo "nvcc --list-gpu-code failed"
+
       # Step 3: Configure and Build with CMake and Ninja
       - name: Configure and Build
         shell: bash -el {0}

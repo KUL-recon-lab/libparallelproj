@@ -56,6 +56,12 @@ if(USE_CUDA)
       set(_FINAL_ARCHS "${_SUPPORTED_SMS}")
     endif()
 
+    # Final fallback if still empty (e.g., nvcc --list-gpu-arch not supported)
+    if(_FINAL_ARCHS STREQUAL "")
+      message(WARNING "Could not determine architectures from nvcc; using default fallback list.")
+      set(_FINAL_ARCHS "75;80;86;89;90")
+    endif()
+
     set(CMAKE_CUDA_ARCHITECTURES "${_FINAL_ARCHS}" CACHE STRING "CUDA SM architectures" FORCE)
   endif()
 
