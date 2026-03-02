@@ -58,17 +58,7 @@ jobs:
           which nvcc && nvcc --version
           nvcc --list-gpu-arch || true
 
-      - name: Debug (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          micromamba activate $env:ENV_NAME
-          python -V
-          where.exe cl
-          cl /Bv
-          where.exe nvcc
-          nvcc --version
-          nvcc --list-gpu-arch
+
 
       - name: Configure & Build (Linux)
         if: runner.os == 'Linux'
@@ -87,6 +77,32 @@ jobs:
             -DCMAKE_C_COMPILER=cl `
             -DCMAKE_CXX_COMPILER=cl `
             -DCMAKE_CUDA_HOST_COMPILER=cl
+          cmake --build $env:BUILD_DIR --config Release
+
+      - name: Configure & Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          ENV_NAME: libparallelproj_cuda_build_only
+          BUILD_DIR: build
+        run: |
+          micromamba activate $env:ENV_NAME
+
+          $cl   = (Get-Command cl.exe).Source
+          $nvcc = (Get-Command nvcc.exe).Source
+          $ninja = (Get-Command ninja.exe).Source
+
+          Write-Host "cl   = $cl"
+          Write-Host "nvcc = $nvcc"
+          Write-Host "ninja= $ninja"
+
+          cmake --preset cuda -B $env:BUILD_DIR -G Ninja `
+            -DCMAKE_MAKE_PROGRAM="$ninja" `
+            -DCMAKE_C_COMPILER="$cl" `
+            -DCMAKE_CXX_COMPILER="$cl" `
+            -DCMAKE_CUDA_COMPILER="$nvcc" `
+            -DCMAKE_CUDA_HOST_COMPILER="$cl"
+
           cmake --build $env:BUILD_DIR --config Release
 
       - name: Test (Linux)
