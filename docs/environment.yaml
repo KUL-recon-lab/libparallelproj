@@ -2,6 +2,7 @@ name: readthedocs
 channels:
   - conda-forge
 dependencies:
+  - cxx-compiler
   - cmake
   - ninja
   - doxygen

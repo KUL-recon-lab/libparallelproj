@@ -17,10 +17,9 @@ help:
 # Generate Doxygen XML first
 doxygen:
 	@echo "Generating Doxygen XML..."
-	@mkdir -p _build_doxygen && cd _build_doxygen && \
-		cmake ../.. --preset docs && \
-		cmake --build . --target doxygen-docs && \
-		cmake --build .
+	@cmake .. --preset docs && \
+		cmake --build _build_doxygen --target doxygen-docs && \
+		cmake --build _build_doxygen
 
 # Build HTML with Doxygen and Python module first
 html: doxygen

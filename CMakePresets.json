@@ -15,7 +15,7 @@
     {
       "name": "docs",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build",
+      "binaryDir": "${sourceDir}/docs/_build_doxygen",
       "cacheVariables": {
         "BUILD_TESTS": "OFF",
         "INSTALL_DEVEL": "ON",
