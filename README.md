@@ -25,50 +25,49 @@ We recommend to install pre-compiled versions of `libparallelproj` from conda fo
 - **CMake** (version 3.18 or higher)
 - **C++17** compatible compiler
 - **OpenMP** (for non-CUDA builds)
+- **python** (optional, version >= 3.12, for the python API)
+- **nanobind** (optional, for the python API)
 
 ### CUDA-Specific Requirements
 - **CUDA Toolkit** (if building with CUDA support)
 
-All build and test requirements can be installed from `conda-forge` using
-`environment.yaml` or `environment_cuda.yaml`.
 ---
 
 ## Building the Project
 
-To build the project with CUDA support:
+### Configure the project for cuda / vs non-cuda build
 
-1. Create a build directory:
-   ```bash
-   mkdir -p build && cd build
-   ```
+```
+# cuda build
+cmake --preset cuda
+```
 
-2. Configure the project with CMake:
-   ```bash
-   cmake ..
-   ```
+or
 
-   The following CMake option can be used to cofigure the build:
-   `-DUSE_CUDA`, `-DBUILD_PYTHON`, `-DBUILD_TESTS`, `-DBUILD_DOCS`
+```
+# non-cuda build
+cmake --preset default
+```
 
+### Build the project
 
-3. Build the project:
-   ```bash
-   cmake --build .
-   ```
+```
+cmake --build build
+```
 
-4. In case the tests where build, they can be executed via:
-   ```bash
-   ctest --output-on-failure
-   ```
+### Run tests
 
----
+```
+ctest --test-dir build
+```
 
 ## Notes
 
-- for CUDA builds, ensure that the CUDA Toolkit is installed and properly configured.
-- for non-CUDA builds, OpenMP is required for parallelization.
-- many important tests are written in python and requires the python interface
-
+- Have a look into [CMakePresets.json](CMakePresets.json) to better understand the `cuda` / `default` cmake presets and options
+- For CUDA builds, ensure that the CUDA Toolkit is installed and properly configured.
+- For non-CUDA builds, OpenMP is required for parallelization.
+- You can use [environment.yaml](environment.yaml) or [environment_cuda.yaml](environment_cuda.yaml) to create the respective build environments
+- Both presets also build the python interface. This can be disabled by using `-DBUILD_PYTHON=OFF`
 
 ## Linking against libparallelproj
 
