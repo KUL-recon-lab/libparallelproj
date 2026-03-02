@@ -8,11 +8,15 @@ on:
       - 'src/*_worker.h'
       - 'src/*.cpp'
       - 'python/bindings.cpp'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build_and_test.yml'
   pull_request:
     paths:
       - 'src/*_worker.h'
       - 'src/*.cpp'
       - 'python/bindings.cpp'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build_and_test.yml'
 
 jobs:
   build-and-test:
