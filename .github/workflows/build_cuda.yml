@@ -70,12 +70,12 @@ jobs:
           cmake --preset cuda -B $BUILD_DIR
           cmake --build $BUILD_DIR
 
-      # Step 4: Run Tests
-      - name: Run Tests
+      # Step 4: Run python tests (should be skipped if no physical GPU is available)
+      - name: Run python tests
         shell: bash -el {0}
         run: |
           micromamba activate libparallelproj_cuda_build_only
-          ctest --output-on-failure --test-dir $BUILD_DIR
+          pytest -v tests
 
       # Step 5: Install
       - name: Install

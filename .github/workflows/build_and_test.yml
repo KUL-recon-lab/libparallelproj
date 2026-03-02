@@ -75,6 +75,13 @@ jobs:
           micromamba activate libparallelproj
           ctest --output-on-failure --test-dir $BUILD_DIR
 
+      # Step 4b: Run python tests (should be skipped if no physical GPU is available)
+      - name: Run python tests
+        shell: bash -el {0}
+        run: |
+          micromamba activate libparallelproj_cuda_build_only
+          pytest -v tests
+
       # Step 5: Install
       - name: Install
         shell: bash -el {0}
