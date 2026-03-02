@@ -68,7 +68,7 @@ jobs:
         run: |
           micromamba activate libparallelproj_cuda_build_only
           if [ "$RUNNER_OS" == "Windows" ]; then
-            NVCC_PATH="$CONDA_PREFIX/bin/nvcc.exe"
+            NVCC_PATH="${CONDA_PREFIX//\\//}/bin/nvcc.exe"
           else
             NVCC_PATH="$CONDA_PREFIX/bin/nvcc"
           fi
@@ -83,7 +83,7 @@ jobs:
         run: |
           micromamba activate libparallelproj_cuda_build_only
           if [ "$RUNNER_OS" == "Windows" ]; then
-            NVCC_PATH="$CONDA_PREFIX/bin/nvcc.exe"
+            NVCC_PATH="${CONDA_PREFIX//\\//}/bin/nvcc.exe"
           else
             NVCC_PATH="$CONDA_PREFIX/bin/nvcc"
           fi
