@@ -63,6 +63,10 @@ jobs:
             -DCMAKE_CUDA_COMPILER=${{ steps.cuda-toolkit.outputs.CUDA_PATH }}/bin/nvcc
           cmake --build $BUILD_DIR
 
+      - name: Run python tests (should be skipped if no physical GPU is available)
+        run: |
+          pytest -v tests
+
       - name: Install
         shell: bash -el {0}
         run: |
