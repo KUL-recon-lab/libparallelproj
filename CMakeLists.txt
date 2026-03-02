@@ -14,14 +14,25 @@ include(CMakePackageConfigHelpers)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-check_language(CUDA)
-if(CMAKE_CUDA_COMPILER)
-    option(USE_CUDA "Enable CUDA build" ON)
-else()
-    option(USE_CUDA "Enable CUDA build" OFF)
+# Add an option to enable CUDA support
+option(USE_CUDA "Build with CUDA support" OFF)
+# Add an option to build the Python interface
+option(BUILD_PYTHON "Build the Python interface using nanobind" OFF)
+# Add an option to build the tests
+option(BUILD_TESTS "Build the tests" OFF)
+# Split packaging support:
+# - BUILD_LIBRARY: build the C++ shared library target (parallelproj)
+# - INSTALL_DEVEL: install headers + CMake package config files (devel bits)
+option(BUILD_LIBRARY "Build the C++ shared library (parallelproj)" ON)
+option(INSTALL_DEVEL "Install headers + CMake package config files" ON)
+
+# CUDA is only required at *build time* if we compile CUDA sources.
+set(PP_NEED_CUDA_TOOLCHAIN OFF)
+if(USE_CUDA AND (BUILD_LIBRARY OR BUILD_TESTS))
+  set(PP_NEED_CUDA_TOOLCHAIN ON)
 endif()
 
-if(USE_CUDA)
+if(PP_NEED_CUDA_TOOLCHAIN)
   # if the user hasn't specified architectures, we'll query nvcc and filter to a curated list of archs we want to support.
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "")
     # Curated superset (we'll filter it to what nvcc supports)
@@ -69,18 +80,6 @@ if(USE_CUDA)
   enable_language(CUDA)
   find_package(CUDAToolkit REQUIRED)
 endif()
-
-# Add an option to build the Python interface
-option(BUILD_PYTHON "Build the Python interface using nanobind" OFF)
-
-# Add an option to build the tests
-option(BUILD_TESTS "Build the tests" OFF)
-
-# Split packaging support:
-# - BUILD_LIBRARY: build the C++ shared library target (parallelproj)
-# - INSTALL_DEVEL: install headers + CMake package config files (devel bits)
-option(BUILD_LIBRARY "Build the C++ shared library (parallelproj)" ON)
-option(INSTALL_DEVEL "Install headers + CMake package config files" ON)
 
 # Enable automatic symbol export on Windows for shared libraries
 if(WIN32 AND BUILD_SHARED_LIBS)
@@ -164,7 +163,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 if(BUILD_LIBRARY AND USE_CUDA)
-    message(STATUS "CUDA build enabled.")
+    message(STATUS "CUDA library build enabled.")
 
     set(LIB_SOURCES
         src/joseph3d_fwd.cu
@@ -184,7 +183,7 @@ if(BUILD_LIBRARY AND USE_CUDA)
     target_compile_definitions(parallelproj PUBLIC PARALLELPROJ_CUDA=1)
     target_compile_definitions(parallelproj PRIVATE PARALLELPROJ_EXPORTS PROJECT_VERSION="${PROJECT_VERSION}" PROJECT_VERSION_MAJOR=${PROJECT_VERSION_MAJOR} PROJECT_VERSION_MINOR=${PROJECT_VERSION_MINOR} PROJECT_VERSION_PATCH=${PROJECT_VERSION_PATCH})
 elseif(BUILD_LIBRARY)
-    message(STATUS "CUDA build disabled.")
+    message(STATUS "CUDA library build disabled.")
 
     set(LIB_SOURCES
         src/joseph3d_fwd.cpp

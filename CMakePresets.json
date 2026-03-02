@@ -6,6 +6,8 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
+        "USE_CUDA": "OFF",
+        "BUILD_LIBRARY": "ON",
         "BUILD_TESTS": "ON",
         "INSTALL_DEVEL": "ON",
         "BUILD_PYTHON": "ON",
@@ -17,6 +19,8 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/docs/_build_doxygen",
       "cacheVariables": {
+        "USE_CUDA": "OFF",
+        "BUILD_LIBRARY": "ON",
         "BUILD_TESTS": "OFF",
         "INSTALL_DEVEL": "ON",
         "BUILD_PYTHON": "ON",
@@ -29,9 +33,10 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
+        "USE_CUDA": "ON",
+        "BUILD_LIBRARY": "ON",
         "BUILD_TESTS": "ON",
         "BUILD_PYTHON": "ON",
-        "USE_CUDA": "ON",
         "INSTALL_DEVEL": "ON",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/install"
       }
