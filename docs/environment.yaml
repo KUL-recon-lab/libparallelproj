@@ -2,6 +2,9 @@ name: readthedocs
 channels:
   - conda-forge
 dependencies:
+  - cmake
+  - doxygen
+  - graphviz
   - python
   - pip
   - sphinx>=7,<9
@@ -14,3 +17,4 @@ dependencies:
   - matplotlib
   - array-api-compat
   - pytorch
+
