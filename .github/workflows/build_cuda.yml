@@ -7,19 +7,27 @@ on:
       - 'src/*_worker.h'
       - 'src/*.cu'
       - 'python/bindings.cpp'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build_cuda.yml'
   pull_request:
     paths:
       - 'src/*_worker.h'
       - 'src/*.cu'
       - 'python/bindings.cpp'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build_cuda.yml'
 
 jobs:
   cuda-build:
     runs-on: ubuntu-latest
+
+    env:
+      BUILD_DIR: build
+
     strategy:
       matrix:
         cuda-version: ['12.4.0', '13.1.0']
-      fail-fast: false
+      fail-fast: true
 
     steps:
       - name: Checkout Repository
@@ -50,29 +58,20 @@ jobs:
 
       - name: Configure and Build with CMake
         run: |
-          mkdir build
-          cd build
-          cmake .. \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
+          cmake --preset cuda -B $BUILD_DIR \
             -DCUDAToolkit_ROOT=${{ steps.cuda-toolkit.outputs.CUDA_PATH }} \
-            -DCMAKE_CUDA_COMPILER=${{ steps.cuda-toolkit.outputs.CUDA_PATH }}/bin/nvcc \
-            -DUSE_CUDA=ON \
-            -DBUILD_TESTS=OFF \
-            -DBUILD_PYTHON=ON
-          cmake --build .
+            -DCMAKE_CUDA_COMPILER=${{ steps.cuda-toolkit.outputs.CUDA_PATH }}/bin/nvcc
+          cmake --build $BUILD_DIR
 
       - name: Install
         shell: bash -el {0}
         run: |
-          cd build
-          sudo cmake --install .
+          cmake --install $BUILD_DIR
 
       - name: Uninstall
         shell: bash -el {0}
         run: |
-          cd build
-          sudo cmake --build . --target uninstall
+          cmake --build $BUILD_DIR --target uninstall
 
       - name: Clean up CUDA Toolkit
         if: always()
