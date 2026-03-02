@@ -4,7 +4,7 @@ channels:
   - conda-forge
 
 dependencies:
-  - cxx-compiler
+  - cxx-compiler            # [linux]
   - cuda-compiler
   - cmake
   - ninja

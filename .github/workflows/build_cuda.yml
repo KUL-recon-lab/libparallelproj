@@ -24,6 +24,7 @@ jobs:
       fail-fast: true
       matrix:
         os: [ubuntu-latest, windows-latest]
+        python: ["3.12"]
 
     env:
       ENV_NAME: libparallelproj_cuda_build_only
@@ -32,57 +33,76 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: mamba-org/setup-micromamba@v2
+      - name: Set up Micromamba
+        uses: mamba-org/setup-micromamba@v2
         with:
           environment-file: environment_cuda_build_only.yml
           micromamba-version: latest
-          # no need for init-shell if we only use "micromamba run"
+          init-shell: bash powershell
           post-cleanup: all
           create-args: >-
-            python=3.12
+            ${{ format('python={0}', matrix.python) }}
             pip
 
-      # Windows only: nvcc needs MSVC cl.exe available
       - name: Setup MSVC Developer Command Prompt
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Debug toolchain
-        run: |
-          micromamba run -n ${{ env.ENV_NAME }} python -V
-          micromamba run -n ${{ env.ENV_NAME }} nvcc --version
-          micromamba run -n ${{ env.ENV_NAME }} nvcc --list-gpu-arch
-
-      # Configure Linux
-      - name: Configure (Linux)
+      - name: Debug (Linux)
         if: runner.os == 'Linux'
+        shell: bash -l {0}
         run: |
-          micromamba run -n ${{ env.ENV_NAME }} cmake --preset cuda -B ${{ env.BUILD_DIR }}
+          micromamba activate "$ENV_NAME"
+          python -V
+          which c++ && c++ --version
+          which nvcc && nvcc --version
+          nvcc --list-gpu-arch || true
 
-      # Configure Windows (force MSVC host compiler for nvcc)
-      - name: Configure (Windows)
+      - name: Debug (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          micromamba run -n ${{ env.ENV_NAME }} cmake --preset cuda -B ${{ env.BUILD_DIR }} -G Ninja ^
-            -DCMAKE_C_COMPILER=cl ^
-            -DCMAKE_CXX_COMPILER=cl ^
+          micromamba activate $env:ENV_NAME
+          python -V
+          where.exe cl
+          cl /Bv
+          where.exe nvcc
+          nvcc --version
+          nvcc --list-gpu-arch
+
+      - name: Configure & Build (Linux)
+        if: runner.os == 'Linux'
+        shell: bash -l {0}
+        run: |
+          micromamba activate "$ENV_NAME"
+          cmake --preset cuda -B "$BUILD_DIR"
+          cmake --build "$BUILD_DIR" --config Release
+
+      - name: Configure & Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          micromamba activate $env:ENV_NAME
+          cmake --preset cuda -B $env:BUILD_DIR -G Ninja `
+            -DCMAKE_C_COMPILER=cl `
+            -DCMAKE_CXX_COMPILER=cl `
             -DCMAKE_CUDA_HOST_COMPILER=cl
-        shell: cmd
+          cmake --build $env:BUILD_DIR --config Release
 
-      - name: Build
-        run: |
-          micromamba run -n ${{ env.ENV_NAME }} cmake --build ${{ env.BUILD_DIR }} --config Release
-
-      - name: Test
+      - name: Test (Linux)
+        if: runner.os == 'Linux'
+        shell: bash -l {0}
         env:
           PYTHONPATH: ${{ env.BUILD_DIR }}
         run: |
-          micromamba run -n ${{ env.ENV_NAME }} pytest -v tests
+          micromamba activate "$ENV_NAME"
+          pytest -v tests
 
-      - name: Install
+      - name: Test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PYTHONPATH: ${{ env.BUILD_DIR }}
         run: |
-          micromamba run -n ${{ env.ENV_NAME }} cmake --install ${{ env.BUILD_DIR }} --config Release
-
-      - name: Uninstall
-        run: |
-          micromamba run -n ${{ env.ENV_NAME }} cmake --build ${{ env.BUILD_DIR }} --target uninstall --config Release
+          micromamba activate $env:ENV_NAME
+          pytest -v tests
