@@ -56,7 +56,7 @@ jobs:
       - name: Run python tests (should be skipped if no physical GPU is available)
         shell: bash -l {0}
         env:
-          PYTHON: ${{ env.BUILD_DIR }}
+          PYTHONPATH: ${{ env.BUILD_DIR }}
         run: |
           micromamba activate libparallelproj_cuda_build_only
           pytest -v tests
