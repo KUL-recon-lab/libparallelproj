@@ -34,6 +34,7 @@ Content
    C API Reference <c_api>
    Python API Reference <python_api>
    Examples <auto_examples/index>
+   Changelog <changelog>
 
 References
 ----------
