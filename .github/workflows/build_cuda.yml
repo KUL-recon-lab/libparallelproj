@@ -49,21 +49,21 @@ jobs:
 
       - name: Debug toolchain
         run: |
-          micromamba run -n ${{ env.ENV_NAME }} -- python -V
-          micromamba run -n ${{ env.ENV_NAME }} -- nvcc --version
-          micromamba run -n ${{ env.ENV_NAME }} -- nvcc --list-gpu-arch
+          micromamba run -n ${{ env.ENV_NAME }} python -V
+          micromamba run -n ${{ env.ENV_NAME }} nvcc --version
+          micromamba run -n ${{ env.ENV_NAME }} nvcc --list-gpu-arch
 
       # Configure Linux
       - name: Configure (Linux)
         if: runner.os == 'Linux'
         run: |
-          micromamba run -n ${{ env.ENV_NAME }} -- cmake --preset cuda -B ${{ env.BUILD_DIR }}
+          micromamba run -n ${{ env.ENV_NAME }} cmake --preset cuda -B ${{ env.BUILD_DIR }}
 
       # Configure Windows (force MSVC host compiler for nvcc)
       - name: Configure (Windows)
         if: runner.os == 'Windows'
         run: |
-          micromamba run -n ${{ env.ENV_NAME }} -- cmake --preset cuda -B ${{ env.BUILD_DIR }} -G Ninja ^
+          micromamba run -n ${{ env.ENV_NAME }} cmake --preset cuda -B ${{ env.BUILD_DIR }} -G Ninja ^
             -DCMAKE_C_COMPILER=cl ^
             -DCMAKE_CXX_COMPILER=cl ^
             -DCMAKE_CUDA_HOST_COMPILER=cl
@@ -71,18 +71,18 @@ jobs:
 
       - name: Build
         run: |
-          micromamba run -n ${{ env.ENV_NAME }} -- cmake --build ${{ env.BUILD_DIR }} --config Release
+          micromamba run -n ${{ env.ENV_NAME }} cmake --build ${{ env.BUILD_DIR }} --config Release
 
       - name: Test
         env:
           PYTHONPATH: ${{ env.BUILD_DIR }}
         run: |
-          micromamba run -n ${{ env.ENV_NAME }} -- pytest -v tests
+          micromamba run -n ${{ env.ENV_NAME }} pytest -v tests
 
       - name: Install
         run: |
-          micromamba run -n ${{ env.ENV_NAME }} -- cmake --install ${{ env.BUILD_DIR }} --config Release
+          micromamba run -n ${{ env.ENV_NAME }} cmake --install ${{ env.BUILD_DIR }} --config Release
 
       - name: Uninstall
         run: |
-          micromamba run -n ${{ env.ENV_NAME }} -- cmake --build ${{ env.BUILD_DIR }} --target uninstall --config Release
+          micromamba run -n ${{ env.ENV_NAME }} cmake --build ${{ env.BUILD_DIR }} --target uninstall --config Release
