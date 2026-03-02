@@ -33,6 +33,14 @@ if(USE_CUDA AND (BUILD_LIBRARY OR BUILD_TESTS))
 endif()
 
 if(PP_NEED_CUDA_TOOLCHAIN)
+  check_language(CUDA)
+  if(NOT CMAKE_CUDA_COMPILER)
+    message(FATAL_ERROR
+      "USE_CUDA=ON but no CUDA compiler was found by CMake. "
+      "Install a CUDA toolkit / nvcc, or configure with -DUSE_CUDA=OFF."
+    )
+  endif()
+
   # if the user hasn't specified architectures, we'll query nvcc and filter to a curated list of archs we want to support.
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "")
     # Curated superset (we'll filter it to what nvcc supports)
