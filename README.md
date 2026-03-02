@@ -66,7 +66,7 @@ ctest --test-dir build
 - Have a look into [CMakePresets.json](CMakePresets.json) to better understand the `cuda` / `default` cmake presets and options
 - For CUDA builds, ensure that the CUDA Toolkit is installed and properly configured.
 - For non-CUDA builds, OpenMP is required for parallelization.
-- You can use [environment.yaml](environment.yaml) or [environment_cuda.yaml](environment_cuda.yaml) to create the respective build environments
+- You can use [environment.yml](environment.yml) or [environment_cuda.yml](environment_cuda.yml) to create the respective build environments
 - Both presets also build the python interface. This can be disabled by using `-DBUILD_PYTHON=OFF`
 
 ## Linking against libparallelproj
