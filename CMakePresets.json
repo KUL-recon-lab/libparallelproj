@@ -8,7 +8,8 @@
       "cacheVariables": {
         "BUILD_TESTS": "ON",
         "INSTALL_DEVEL": "ON",
-        "BUILD_PYTHON": "ON"
+        "BUILD_PYTHON": "ON",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install"
       }
     },
     {
@@ -19,7 +20,8 @@
         "BUILD_TESTS": "ON",
         "BUILD_PYTHON": "ON",
         "USE_CUDA": "ON",
-        "INSTALL_DEVEL": "ON"
+        "INSTALL_DEVEL": "ON",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install"
       }
     }
   ]
