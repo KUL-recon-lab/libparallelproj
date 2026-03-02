@@ -58,8 +58,6 @@ jobs:
           which nvcc && nvcc --version
           nvcc --list-gpu-arch || true
 
-
-
       - name: Configure & Build (Linux)
         if: runner.os == 'Linux'
         shell: bash -l {0}
@@ -67,17 +65,6 @@ jobs:
           micromamba activate "$ENV_NAME"
           cmake --preset cuda -B "$BUILD_DIR"
           cmake --build "$BUILD_DIR" --config Release
-
-      - name: Configure & Build (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          micromamba activate $env:ENV_NAME
-          cmake --preset cuda -B $env:BUILD_DIR -G Ninja `
-            -DCMAKE_C_COMPILER=cl `
-            -DCMAKE_CXX_COMPILER=cl `
-            -DCMAKE_CUDA_HOST_COMPILER=cl
-          cmake --build $env:BUILD_DIR --config Release
 
       - name: Configure & Build (Windows)
         if: runner.os == 'Windows'
