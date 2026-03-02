@@ -1,9 +1,38 @@
+<p align="center">
+  <img src="docs/_static/logo.png" alt="libparallelproj logo" width="220">
+</p>
+
 # libparallelproj
+
+<p align="center">
+  <a href="https://github.com/KUL-recon-lab/libparallelproj/actions/workflows/build_and_test.yml">
+    <img src="https://github.com/KUL-recon-lab/libparallelproj/actions/workflows/build_and_test.yml/badge.svg" alt="Build and Test">
+  </a>
+  <a href="https://github.com/KUL-recon-lab/libparallelproj/actions/workflows/build_cuda.yml">
+    <img src="https://github.com/KUL-recon-lab/libparallelproj/actions/workflows/build_cuda.yml/badge.svg" alt="Build CUDA">
+  </a>
+  <a href="https://github.com/KUL-recon-lab/libparallelproj/actions/workflows/build_docs.yml">
+    <img src="https://github.com/KUL-recon-lab/libparallelproj/actions/workflows/build_docs.yml/badge.svg" alt="Build Documentation">
+  </a>
+  <br>
+  <a href="https://libparallelproj.readthedocs.io">
+    <img src="https://readthedocs.org/projects/libparallelproj/badge/?version=latest" alt="Documentation Status">
+  </a>
+  <a href="https://github.com/KUL-recon-lab/libparallelproj/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License">
+  </a>
+  <a href="https://github.com/KUL-recon-lab/libparallelproj/tags">
+    <img src="https://img.shields.io/github/v/tag/KUL-recon-lab/libparallelproj" alt="Latest Tag">
+  </a>
+  <a href="https://anaconda.org/conda-forge/libparallelproj">
+    <img src="https://img.shields.io/conda/vn/conda-forge/libparallelproj.svg" alt="conda-forge version">
+  </a>
+</p>
 
 libparallelproj is a high-performance library for 3D forward and backward projection,
 supporting both CUDA and non-CUDA builds and a minimal python interface.
 
-Official documentation: [link to readthedocs](https://libparallelproj.readthedocs.io)
+Official documentation: [https://libparallelproj.readthedocs.io](https://libparallelproj.readthedocs.io)
 
 ## Table of Contents
 - [Installation](#installation)
