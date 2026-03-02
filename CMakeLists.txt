@@ -200,13 +200,8 @@ endif()
 
 # Build the Python interface if enabled
 if(BUILD_PYTHON)
-    if (CMAKE_VERSION VERSION_LESS 3.18)
-      set(DEV_MODULE Development)
-    else()
-      set(DEV_MODULE Development.Module)
-    endif()
-
-    find_package(Python 3.10 COMPONENTS Interpreter ${DEV_MODULE} REQUIRED)
+    find_package(Python 3.12 REQUIRED COMPONENTS Interpreter Development.Module
+             OPTIONAL_COMPONENTS Development.SABIModule)
 
     # Add an option for the Python interface install destination
     set(PYTHON_INTERFACE_INSTALL_DIR ${CMAKE_INSTALL_LIBDIR} CACHE PATH "Directory to install the Python interface")
@@ -220,6 +215,7 @@ if(BUILD_PYTHON)
 
     nanobind_add_module(
       parallelproj_core
+      STABLE_ABI
       python/bindings.cpp
     )
 
