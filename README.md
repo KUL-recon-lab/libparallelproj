@@ -25,8 +25,10 @@ We recommend to install pre-compiled versions of `libparallelproj` from conda fo
 - **CMake** (version 3.18 or higher)
 - **C++17** compatible compiler
 - **OpenMP** (for non-CUDA builds)
-- **python** (optional, version >= 3.12, for the python API)
-- **nanobind** (optional, for the python API)
+
+### Optional Requirements for python API
+- **python** (version >= 3.12)
+- **nanobind**
 
 ### CUDA-Specific Requirements
 - **CUDA Toolkit** (if building with CUDA support)
@@ -68,6 +70,13 @@ ctest --test-dir build
 - For non-CUDA builds, OpenMP is required for parallelization.
 - You can use [environment.yml](environment.yml) or [environment_cuda.yml](environment_cuda.yml) to create the respective build environments
 - Both presets also build the python interface. This can be disabled by using `-DBUILD_PYTHON=OFF`
+
+## Building the docs with Sphinx
+
+```
+cd docs
+make html
+```
 
 ## Linking against libparallelproj
 
