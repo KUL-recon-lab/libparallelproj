@@ -11,36 +11,35 @@ build:
     - ninja-build
 
   jobs:
-    # Make sure git history + tags are available so `git describe` works reliably
     post_checkout:
       # --- DEBUG: verify checkout/tag visibility + detect "dirty" state early ---
-      - echo "=== HEAD and tags ==="
-      - git rev-parse --short HEAD
-      - git tag --points-at HEAD || true
-      - echo "=== describe ==="
-      - git describe --tags --long --dirty || true
-      - echo "=== status porcelain ==="
-      - git status --porcelain=v1 || true
-      - echo "=== diff names (tracked changes) ==="
-      - git diff --name-only || true
-      - echo "=== untracked files ==="
-      - git ls-files --others --exclude-standard || true
+      - 'echo "=== HEAD and tags ==="'
+      - 'git rev-parse --short HEAD'
+      - 'git tag --points-at HEAD || true'
+      - 'echo "=== describe ==="'
+      - 'git describe --tags --long --dirty || true'
+      - 'echo "=== status porcelain ==="'
+      - 'git status --porcelain=v1 || true'
+      - 'echo "=== diff names (tracked changes) ==="'
+      - 'git diff --name-only || true'
+      - 'echo "=== untracked files ==="'
+      - 'git ls-files --others --exclude-standard || true'
 
       # --- Your existing fetch steps ---
-      - git fetch --unshallow || true
-      - git fetch --tags --force || true
+      - 'git fetch --unshallow || true'
+      - 'git fetch --tags --force || true'
 
       # --- DEBUG: re-check after unshallow/tags fetch ---
-      - echo "=== AFTER fetch: describe ==="
-      - git describe --tags --long --dirty || true
-      - echo "=== AFTER fetch: status porcelain ==="
-      - git status --porcelain=v1 || true
+      - 'echo "=== AFTER fetch: describe ==="'
+      - 'git describe --tags --long --dirty || true'
+      - 'echo "=== AFTER fetch: status porcelain ==="'
+      - 'git status --porcelain=v1 || true'
 
     pre_build:
-      - mkdir -p docs/_build_doxygen
-      - cd docs/_build_doxygen && cmake ../.. -DBUILD_DOCS=ON -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF -DUSE_CUDA=OFF
-      - cd docs/_build_doxygen && cmake --build . --target doxygen-docs
-      - cd docs/_build_doxygen && cmake --build .
+      - 'mkdir -p docs/_build_doxygen'
+      - 'cd docs/_build_doxygen && cmake ../.. -DBUILD_DOCS=ON -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF -DUSE_CUDA=OFF'
+      - 'cd docs/_build_doxygen && cmake --build . --target doxygen-docs'
+      - 'cd docs/_build_doxygen && cmake --build .'
 
 conda:
   environment: docs/environment.yaml
