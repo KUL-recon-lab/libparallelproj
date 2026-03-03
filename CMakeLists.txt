@@ -101,8 +101,10 @@ endif()
 # 0) Allow packagers to force a version deterministically
 if(DEFINED ENV{READTHEDOCS_VERSION} AND NOT "$ENV{READTHEDOCS_VERSION}" STREQUAL "")
   set(PROJECT_VERSION "$ENV{READTHEDOCS_VERSION}")
+  message(STATUS "Using version from READTHEDOCS_VERSION environment variable: ${PROJECT_VERSION}")
 elseif(DEFINED PROJECT_VERSION_OVERRIDE AND NOT PROJECT_VERSION_OVERRIDE STREQUAL "")
   set(PROJECT_VERSION "${PROJECT_VERSION_OVERRIDE}")
+  message(STATUS "Using version from PROJECT_VERSION_OVERRIDE CMake variable: ${PROJECT_VERSION}")
 elseif(EXISTS "${CMAKE_SOURCE_DIR}/.git")
   execute_process(
     COMMAND git describe --tags --long --dirty
