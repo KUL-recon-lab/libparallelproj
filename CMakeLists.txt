@@ -99,7 +99,9 @@ endif()
 ################################################################################
 
 # 0) Allow packagers to force a version deterministically
-if(DEFINED PROJECT_VERSION_OVERRIDE AND NOT PROJECT_VERSION_OVERRIDE STREQUAL "")
+if(DEFINED ENV{READTHEDOCS_VERSION} AND NOT "$ENV{READTHEDOCS_VERSION}" STREQUAL "")
+  set(PROJECT_VERSION "$ENV{READTHEDOCS_VERSION}")
+elseif(DEFINED PROJECT_VERSION_OVERRIDE AND NOT PROJECT_VERSION_OVERRIDE STREQUAL "")
   set(PROJECT_VERSION "${PROJECT_VERSION_OVERRIDE}")
 elseif(EXISTS "${CMAKE_SOURCE_DIR}/.git")
   execute_process(
