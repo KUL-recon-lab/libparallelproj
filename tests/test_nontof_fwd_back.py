@@ -78,6 +78,21 @@ def test_forward_and_back_projection(xp: ModuleType, dev: str):
     eps = 1e-7
     assert abs(ip1 - ip2) / abs(ip1) < eps, "Back projection test failed."
 
+    # test whether back projection of a zero image gives zero
+    bimg_zero = xp.zeros(img_dim, dtype=xp.float32, device=dev)
+    zeroes = xp.zeros(xstart.shape[:-1], dtype=xp.float32, device=dev)
+    pp.joseph3d_back(xstart, xend, bimg_zero, img_origin, voxsize, zeroes)
+
+    assert float(xp.max(xp.abs(bimg_zero))) == 0, "Back projection of zero singoram test failed."
+
+    # test whether a back projection of a single ray that does not intersect the image gives zero
+    bimg_zero2 = xp.zeros(img_dim, dtype=xp.float32, device=dev)
+    xstart_zero = xp.asarray([[1000, 1000, 1000]], dtype=xp.float32, device=dev)
+    xend_zero = xp.asarray([[-1000, 1000, 1000]], dtype=xp.float32, device=dev)
+    ones2 = xp.ones(xstart_zero.shape[:-1], dtype=xp.float32, device=dev)
+    pp.joseph3d_back(xstart_zero, xend_zero, bimg_zero2, img_origin, voxsize, ones2)
+
+    assert float(xp.max(xp.abs(bimg_zero2))) == 0, "Back projection of ray that does not intersect the image test failed."
 
 def test_box_projection(xp: ModuleType, dev: str):
     """test forward projection through a uniform box along different axes / angles"""
