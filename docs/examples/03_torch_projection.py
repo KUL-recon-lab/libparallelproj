@@ -48,8 +48,8 @@ class FwdProjLayer(torch.autograd.Function):
 
 
 # %%
-# import array API compatible library (CuPy if CUDA is available, otherwise NumPy).
-if parallelproj_core.cuda_enabled == 1:
+# select device
+if torch.cuda.is_available() and parallelproj_core.cuda_enabled == 1:
     dev = "cuda"
 else:
     dev = "cpu"
