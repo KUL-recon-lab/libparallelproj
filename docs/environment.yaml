@@ -3,14 +3,14 @@ channels:
   - conda-forge
 dependencies:
   - cxx-compiler
-  - cmake
+  - cmake>=3.18
   - ninja
   - doxygen
   - graphviz
-  - python
+  - python>=3.12
   - pip
-  - sphinx>=7,<9
-  - breathe
+  - sphinx>=8,<9 # build does not work with sphinx 9 yet, probably breath 5 needed
+  - breathe>=4,<5
   - sphinx-gallery
   - sphinx-design
   - furo
