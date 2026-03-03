@@ -6,6 +6,9 @@ on:
     paths:
       - 'src/*_worker.h'
       - 'src/*.cu'
+      - 'tests/*.cu'
+      - 'tests/*.cpp'
+      - 'tests/*.py'
       - 'python/bindings.cpp'
       - 'CMakeLists.txt'
       - '.github/workflows/build_cuda.yml'
@@ -13,6 +16,9 @@ on:
     paths:
       - 'src/*_worker.h'
       - 'src/*.cu'
+      - 'tests/*.cu'
+      - 'tests/*.cpp'
+      - 'tests/*.py'
       - 'python/bindings.cpp'
       - 'CMakeLists.txt'
       - '.github/workflows/build_cuda.yml'

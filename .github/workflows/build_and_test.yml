@@ -7,6 +7,8 @@ on:
     paths:
       - 'src/*_worker.h'
       - 'src/*.cpp'
+      - 'tests/*.cpp'
+      - 'tests/*.py'
       - 'python/bindings.cpp'
       - 'CMakeLists.txt'
       - '.github/workflows/build_and_test.yml'
@@ -14,6 +16,8 @@ on:
     paths:
       - 'src/*_worker.h'
       - 'src/*.cpp'
+      - 'tests/*.cpp'
+      - 'tests/*.py'
       - 'python/bindings.cpp'
       - 'CMakeLists.txt'
       - '.github/workflows/build_and_test.yml'
