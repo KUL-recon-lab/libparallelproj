@@ -218,6 +218,12 @@ elseif(BUILD_LIBRARY)
 endif()
 
 if(TARGET parallelproj)
+  # versioned .so + SONAME
+  set_target_properties(parallelproj PROPERTIES
+    VERSION   ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR}
+  )
+
     target_include_directories(parallelproj
         PUBLIC
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

@@ -132,3 +132,11 @@ jobs:
         run: |
           micromamba activate libparallelproj
           cmake --build $BUILD_DIR --target uninstall
+
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ runner.os }}-py${{ matrix.python }}
+          path: ${{ env.BUILD_DIR }}/**
+          if-no-files-found: warn
