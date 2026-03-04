@@ -1,6 +1,13 @@
 Changelog
 =========
 
+v2.0.0 (2026-03-04)
+-------------------
+
+Added
+^^^^^
+
+* add VERSION and SOVERSION number to build of shared library libparallelproj
 
 v2.0.0 (2026-03-03)
 -------------------
