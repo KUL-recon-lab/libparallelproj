@@ -1,7 +1,16 @@
 Changelog
 =========
 
-v2.0.0 (2026-03-04)
+v2.0.2 (2026-03-04)
+-------------------
+
+Added
+^^^^^
+
+* better default install directories of python bindings compatible with conda-forge
+
+
+v2.0.1 (2026-03-04)
 -------------------
 
 Added
