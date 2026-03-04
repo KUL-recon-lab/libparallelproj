@@ -169,21 +169,6 @@ endif()
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # ------------------------------------------------------------------------------
-# LTO (keep optional; conda-forge toolchains may not always like forced IPO)
-# ------------------------------------------------------------------------------
-include(CheckIPOSupported)
-check_ipo_supported(RESULT _ipo_ok OUTPUT _ipo_msg)
-if(_ipo_ok AND CMAKE_BUILD_TYPE STREQUAL "Release")
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
-  # You can omit JOBS; keep it conservative if you want.
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_JOBS 4)
-else()
-  if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    message(STATUS "IPO/LTO not enabled: ${_ipo_msg}")
-  endif()
-endif()
-
-# ------------------------------------------------------------------------------
 # C++ library target: parallelproj
 # ------------------------------------------------------------------------------
 set(PARALLELPROJ_CUDA 0)
