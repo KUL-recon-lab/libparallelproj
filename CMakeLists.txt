@@ -292,7 +292,7 @@ if(BUILD_PYTHON)
             PROJECT_VERSION="${PROJECT_VERSION}"
   )
 
-  message(STATUS "Installed Python extension to ${Python_SITEARCH}")
+  message(STATUS "Installing Python extension to ${Python_SITEARCH}")
 
   install(TARGETS parallelproj_core
   LIBRARY DESTINATION "${Python_SITEARCH}"   # Unix/macOS
