@@ -1,6 +1,17 @@
 Changelog
 =========
 
+v2.0.3 (2026-03-05)
+-------------------
+
+Added
+^^^^^
+
+* bugfix to support all cuda 12.x versions (cudaMemLocation)
+
+* improved auto version detection from git in build process
+
+
 v2.0.2 (2026-03-04)
 -------------------
 
