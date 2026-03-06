@@ -41,7 +41,7 @@ jobs:
 
     env:
       ENV_NAME: ${{ matrix.cuda.env_name }}
-      BUILD_DIR: build
+      BUILD_DIR: ${{ format('build_{0}_cuda{1}_py{2}', matrix.os, matrix.cuda.version, matrix.python) }}
 
     steps:
       - uses: actions/checkout@v4
