@@ -38,6 +38,10 @@ jobs:
           - version: "13.x"
             env_file: environment_cuda13_build_only.yml
             env_name: libparallelproj_cuda13_build_only
+        exclude:
+          - os: windows-latest
+            cuda:
+              version: "12.0"
 
     env:
       ENV_NAME: ${{ matrix.cuda.env_name }}
