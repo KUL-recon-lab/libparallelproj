@@ -153,7 +153,7 @@ if(PP_NEED_CUDA_TOOLCHAIN)
 
   message(STATUS "CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES}")
   enable_language(CUDA)
-  find_package(CUDAToolkit REQUIRED)
+  find_package(CUDAToolkit 12.0 REQUIRED)
 endif()
 
 # ------------------------------------------------------------------------------
