@@ -4,7 +4,7 @@ Changelog
 v2.0.3 (2026-03-05)
 -------------------
 
-Added
+Fixed
 ^^^^^
 
 * bugfix to support all cuda 12.x versions (cudaMemLocation)
@@ -15,7 +15,7 @@ Added
 v2.0.2 (2026-03-04)
 -------------------
 
-Added
+Fixed
 ^^^^^
 
 * better default install directories of python bindings compatible with conda-forge
@@ -24,7 +24,7 @@ Added
 v2.0.1 (2026-03-04)
 -------------------
 
-Added
+Fixed
 ^^^^^
 
 * add VERSION and SOVERSION number to build of shared library libparallelproj
