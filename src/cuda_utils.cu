@@ -1,73 +1,83 @@
 #include "cuda_utils.h"
 #include <iostream>
 
-// Helper function to create cudaMemLocation from device ID (for CUDA 11.2+)
+#if CUDART_VERSION >= 13000
 static inline cudaMemLocation make_mem_location(int device_id) {
-    cudaMemLocation location;
-    location.type = cudaMemLocationTypeDevice;
-    location.id = device_id;
-    return location;
+  cudaMemLocation location;
+  location.type = cudaMemLocationTypeDevice;
+  location.id = device_id;
+  return location;
 }
+#endif
 
-// Overload for constant input_ptr (const T*)
 template <typename T>
-void handle_cuda_input_array(const T *input_ptr, T **device_ptr, std::size_t size, bool &free_flag, int device_id, cudaMemoryAdvise memory_hint)
+void handle_cuda_input_array(const T *input_ptr, T **device_ptr,
+                             std::size_t size, bool &free_flag,
+                             int device_id, cudaMemoryAdvise memory_hint)
 {
-    cudaPointerAttributes attr;
-    cudaError_t err = cudaPointerGetAttributes(&attr, input_ptr);
-    free_flag = false;
+  cudaPointerAttributes attr;
+  cudaError_t err = cudaPointerGetAttributes(&attr, input_ptr);
+  free_flag = false;
 
-    if (err == cudaSuccess && attr.type == cudaMemoryTypeManaged)
-    {
-        // Prefetch and advise for managed memory
-        cudaMemLocation loc = make_mem_location(device_id);
-        cudaMemPrefetchAsync(const_cast<void *>(static_cast<const void *>(input_ptr)), size, loc, 0, (cudaStream_t)0);
-        cudaMemAdvise(const_cast<void *>(static_cast<const void *>(input_ptr)), size, memory_hint, loc);
-    }
+  if (err == cudaSuccess && attr.type == cudaMemoryTypeManaged) {
+#if CUDART_VERSION >= 13000
+    cudaMemLocation loc = make_mem_location(device_id);
+    cudaMemPrefetchAsync(
+        const_cast<void *>(static_cast<const void *>(input_ptr)),
+        size, loc, 0, (cudaStream_t)0);
+    cudaMemAdvise(
+        const_cast<void *>(static_cast<const void *>(input_ptr)),
+        size, memory_hint, loc);
+#else
+    cudaMemPrefetchAsync(
+        const_cast<void *>(static_cast<const void *>(input_ptr)),
+        size, device_id, (cudaStream_t)0);
+    cudaMemAdvise(
+        const_cast<void *>(static_cast<const void *>(input_ptr)),
+        size, memory_hint, device_id);
+#endif
+  }
 
-    if (err == cudaSuccess && (attr.type == cudaMemoryTypeManaged || attr.type == cudaMemoryTypeDevice))
-    {
-        // Assign managed or device pointer
-        *device_ptr = const_cast<T *>(input_ptr);
-    }
-    else
-    {
-        // Host pointer case, transfer to device
-        cudaMalloc(device_ptr, size);
-        cudaMemcpy(*device_ptr, input_ptr, size, cudaMemcpyHostToDevice);
-        free_flag = true;
-    }
+  if (err == cudaSuccess &&
+      (attr.type == cudaMemoryTypeManaged || attr.type == cudaMemoryTypeDevice)) {
+    *device_ptr = const_cast<T *>(input_ptr);
+  } else {
+    cudaMalloc(device_ptr, size);
+    cudaMemcpy(*device_ptr, input_ptr, size, cudaMemcpyHostToDevice);
+    free_flag = true;
+  }
 }
 
-// Overload for non-constant input_ptr (T*) (not const)
 template <typename T>
-void handle_cuda_input_array(T *input_ptr, T **device_ptr, std::size_t size, bool &free_flag, int device_id, cudaMemoryAdvise memory_hint)
+void handle_cuda_input_array(T *input_ptr, T **device_ptr,
+                             std::size_t size, bool &free_flag,
+                             int device_id, cudaMemoryAdvise memory_hint)
 {
-    cudaPointerAttributes attr;
-    cudaError_t err = cudaPointerGetAttributes(&attr, input_ptr);
-    free_flag = false;
+  cudaPointerAttributes attr;
+  cudaError_t err = cudaPointerGetAttributes(&attr, input_ptr);
+  free_flag = false;
 
-    if (err == cudaSuccess && attr.type == cudaMemoryTypeManaged)
-    {
-        // Prefetch and advise for managed memory
-        cudaMemLocation loc = make_mem_location(device_id);
-        cudaMemPrefetchAsync(input_ptr, size, loc, 0, (cudaStream_t)0);
-        cudaMemAdvise(input_ptr, size, memory_hint, loc);
-    }
+  if (err == cudaSuccess && attr.type == cudaMemoryTypeManaged) {
+#if CUDART_VERSION >= 13000
+    cudaMemLocation loc = make_mem_location(device_id);
+    cudaMemPrefetchAsync(input_ptr, size, loc, 0, (cudaStream_t)0);
+    cudaMemAdvise(input_ptr, size, memory_hint, loc);
+#else
+    cudaMemPrefetchAsync(input_ptr, size, device_id, (cudaStream_t)0);
+    cudaMemAdvise(input_ptr, size, memory_hint, device_id);
+#endif
+  }
 
-    if (err == cudaSuccess && (attr.type == cudaMemoryTypeManaged || attr.type == cudaMemoryTypeDevice))
-    {
-        // Assign managed or device pointer
-        *device_ptr = input_ptr;
-    }
-    else
-    {
-        // Host pointer case, transfer to device
-        cudaMalloc(device_ptr, size);
-        cudaMemcpy(*device_ptr, input_ptr, size, cudaMemcpyHostToDevice);
-        free_flag = true;
-    }
+  if (err == cudaSuccess &&
+      (attr.type == cudaMemoryTypeManaged || attr.type == cudaMemoryTypeDevice)) {
+    *device_ptr = input_ptr;
+  } else {
+    cudaMalloc(device_ptr, size);
+    cudaMemcpy(*device_ptr, input_ptr, size, cudaMemcpyHostToDevice);
+    free_flag = true;
+  }
 }
+
 
 // Explicit template instantiations
 template void handle_cuda_input_array<double>(const double *, double **, std::size_t, bool &, int, cudaMemoryAdvise);

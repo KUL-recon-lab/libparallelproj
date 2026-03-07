@@ -6,4 +6,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/parallelprojConfigVersion.cmake")
 set(PARALLELPROJ_CUDA @PARALLELPROJ_CUDA@)
 set(PARALLELPROJ_INCLUDE_DIRS "${CMAKE_INSTALL_INCLUDEDIR}")
 set(PARALLELPROJ_LIBRARY_DIRS "${CMAKE_INSTALL_LIBDIR}")
+# numeric version string - only really meaningful, if we build a non-dirty version
 set(PARALLELPROJ_VERSION "@PROJECT_VERSION@")
+# Full version string that potentially contains "dirty" suffixes
+set(PARALLELPROJ_VERSION_STRING "@PARALLELPROJ_VERSION_STRING@")

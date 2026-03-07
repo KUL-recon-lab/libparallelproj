@@ -11,8 +11,8 @@ int parallelproj_cuda_enabled(void)
 
 const char *parallelproj_version(void)
 {
-#ifdef PROJECT_VERSION
-  return PROJECT_VERSION;
+#ifdef PARALLELPROJ_VERSION_STRING
+  return PARALLELPROJ_VERSION_STRING;
 #else
   return "unknown";
 #endif

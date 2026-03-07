@@ -20,7 +20,7 @@ extern "C"
   */
   PARALLELPROJ_API int parallelproj_cuda_enabled(void);
 
-  /*! @brief Query the version string of this libparallelproj library.
+  /*! @brief Query the version string of this libparallelproj library. Potentially includes extra suffix for "dirty" versions.
 
   @return Null-terminated version string.
   */

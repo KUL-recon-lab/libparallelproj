@@ -42,7 +42,7 @@ Official documentation: [https://libparallelproj.readthedocs.io](https://libpara
 - [Build Requirements](#requirements)
 - [Building and Testing](#building-the-project)
 - [Python Interface](#python-interface)
-- [Linking against libparallelproj](#linking)
+- [Using libparallelproj from another CMake project](#using-libparallelproj-from-another-cmake-project)
 
 ---
 
@@ -110,32 +110,114 @@ cd docs
 make html
 ```
 
-## Linking against libparallelproj
+## Using libparallelproj from another CMake project
 
-When building a project with cmake and linking against `libparallelproj`, the following
-lines can be used to see whether it was built with or without CUDA.
+After installing `libparallelproj`, downstream CMake projects can locate it via:
 
+```cmake
+find_package(parallelproj CONFIG REQUIRED)
 ```
+
+This provides the imported CMake target:
+
+```cmake
+parallelproj::parallelproj
+```
+
+which should be linked to your executable or library.
+
+### Minimal example
+
+```cmake
+cmake_minimum_required(VERSION 3.18)
+project(my_project LANGUAGES C CXX)
+
+find_package(parallelproj CONFIG REQUIRED)
+
+add_executable(my_app main.cpp)
+target_link_libraries(my_app PRIVATE parallelproj::parallelproj)
+```
+
+### If CMake cannot find the package
+
+If `libparallelproj` was installed into a non-standard location, point CMake to the installation prefix:
+
+```bash
+cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/libparallelproj/install
+```
+
+CMake will then look for the installed package configuration files in the corresponding install tree.
+
+### Package version selection
+
+You can request a minimum version in `find_package`, for example:
+
+```cmake
+find_package(parallelproj 2.0 CONFIG REQUIRED)
+```
+
+The exported package version is numeric, for example `2.0.2`, so standard CMake version matching works as expected.
+
+### Available CMake variables
+
+After calling
+
+```cmake
+find_package(parallelproj CONFIG REQUIRED)
+```
+
+the following variables are available:
+
+- `PARALLELPROJ_CUDA`
+  `1` if `libparallelproj` was built with CUDA support, otherwise `0`
+
+- `PARALLELPROJ_VERSION`
+  Numeric package version, for example `2.0.2`
+
+- `PARALLELPROJ_INCLUDE_DIRS`
+  Install include directory
+
+- `PARALLELPROJ_LIBRARY_DIRS`
+  Install library directory
+
+- `PARALLELPROJ_VERSION_STRING`
+  full (more descriptive) package version containing labels for "dirty" versions, for example `2.0.2-dirty-0-12ab3`
+
+In most cases, it is best to link against the imported target `parallelproj::parallelproj` rather than manually using include and library directory variables.
+
+### Checking whether the installed library was built with CUDA
+
+At CMake configure time:
+
+```cmake
 find_package(parallelproj CONFIG REQUIRED)
 
 if(PARALLELPROJ_CUDA)
-  message(STATUS "parallelproj was built WITH CUDA")
+  message(STATUS "parallelproj was built WITH CUDA support")
 else()
-  message(STATUS "parallelproj was built WITHOUT CUDA")
+  message(STATUS "parallelproj was built WITHOUT CUDA support")
 endif()
 ```
 
-At runtime, call the C API helper:
+At runtime, the linked library can be queried via the C API:
 
 ```c
 #include "parallelproj.h"
 
 if (parallelproj_cuda_enabled()) {
-   /* built with CUDA support */
+    /* built with CUDA support */
 } else {
-   /* built without CUDA support */
+    /* built without CUDA support */
 }
 
+// full version string, with potential "dirty" suffix
 const char* version = parallelproj_version();
-/* e.g. "2.0.0-alpha..." */
+
+// assuming you are building a clean version, the numeric version can be checked via
+int pp_major_version = parallelproj_version_major();
+int pp_minor_version = parallelproj_version_minor();
+int pp_patch_version = parallelproj_version_patch();
 ```
+
+**Note**:
+- `parallelproj_version()` returns the full library version string potentially including "dirty" suffixes.

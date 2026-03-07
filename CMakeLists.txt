@@ -1,96 +1,142 @@
 cmake_minimum_required(VERSION 3.18)
 
-# Policy used in newer CMake; keep compatible with older CMake by guarding.
 if(POLICY CMP0177)
   cmake_policy(SET CMP0177 NEW)
 endif()
 
 # ------------------------------------------------------------------------------
-# Project
+# OPTIONS
 # ------------------------------------------------------------------------------
-project(PARALLELPROJ LANGUAGES CXX)
 
-include(CheckLanguage)
-include(GNUInstallDirs)
-include(CMakePackageConfigHelpers)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# ------------------------------------------------------------------------------
-# Options (conda-forge friendly “split” builds)
-# ------------------------------------------------------------------------------
 option(USE_CUDA       "Build with CUDA support" OFF)
 option(BUILD_PYTHON   "Build the Python interface using nanobind" OFF)
 option(BUILD_TESTS    "Build the tests" OFF)
-
-# Split packaging support:
-# - BUILD_LIBRARY : build the C++ shared library target (parallelproj)
-# - INSTALL_DEVEL : install headers + CMake package config files (devel bits)
 option(BUILD_LIBRARY  "Build the C++ shared library (parallelproj)" ON)
 option(INSTALL_DEVEL  "Install headers + CMake package config files" ON)
+option(DEBUG          "Enable custom debug print statements" OFF)
 
-# Optional debug prints
-option(DEBUG "Enable debug printing" OFF)
+if(BUILD_TESTS AND NOT BUILD_LIBRARY)
+  message(FATAL_ERROR "BUILD_TESTS=ON requires BUILD_LIBRARY=ON")
+endif()
+
 if(DEBUG)
   add_compile_definitions(DEBUG)
 endif()
 
 # ------------------------------------------------------------------------------
-# Versioning (conda-forge override friendly)
+# Determine version before project()
 # ------------------------------------------------------------------------------
-# Use project version override if provided by packager; otherwise best effort.
-if(DEFINED ENV{READTHEDOCS_VERSION} AND NOT "$ENV{READTHEDOCS_VERSION}" STREQUAL "")
-  set(PROJECT_VERSION "$ENV{READTHEDOCS_VERSION}")
-  message(STATUS "Using version from READTHEDOCS_VERSION environment variable: ${PROJECT_VERSION}")
-elseif(DEFINED PROJECT_VERSION_OVERRIDE AND NOT PROJECT_VERSION_OVERRIDE STREQUAL "")
-  set(PROJECT_VERSION "${PROJECT_VERSION_OVERRIDE}")
-  message(STATUS "Using version from PROJECT_VERSION_OVERRIDE CMake variable: ${PROJECT_VERSION}")
-elseif(EXISTS "${CMAKE_SOURCE_DIR}/.git")
-  execute_process(
-    COMMAND git describe --tags --long --dirty
-    OUTPUT_VARIABLE GIT_DESCRIBE
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
-  )
-  execute_process(
-    COMMAND git describe --tags --exact-match
-    OUTPUT_VARIABLE GIT_TAG
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
-  )
-  if(GIT_TAG AND NOT GIT_DESCRIBE MATCHES "-dirty$")
-    set(PROJECT_VERSION "${GIT_TAG}")
-  elseif(GIT_DESCRIBE)
-    set(PROJECT_VERSION "${GIT_DESCRIBE}")
+
+set(PARALLELPROJ_VERSION "")
+set(PARALLELPROJ_VERSION_STRING "")
+
+# Accept only numeric CMake project versions: X.Y.Z or X.Y.Z.T
+set(_PP_NUMERIC_VERSION_REGEX "^v?([0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?)$")
+
+# 1) Explicit override from packager
+if(DEFINED PROJECT_VERSION_OVERRIDE AND NOT PROJECT_VERSION_OVERRIDE STREQUAL "")
+  if(PROJECT_VERSION_OVERRIDE MATCHES "${_PP_NUMERIC_VERSION_REGEX}")
+    string(REGEX REPLACE "^v" "" PARALLELPROJ_VERSION "${PROJECT_VERSION_OVERRIDE}")
+    set(PARALLELPROJ_VERSION_STRING "${PROJECT_VERSION_OVERRIDE}")
+    message(STATUS "Using version from PROJECT_VERSION_OVERRIDE: ${PROJECT_VERSION_OVERRIDE}")
   else()
-    set(PROJECT_VERSION "0.0.0-unknown")
+    message(FATAL_ERROR
+      "PROJECT_VERSION_OVERRIDE='${PROJECT_VERSION_OVERRIDE}' is not a valid numeric "
+      "CMake project version. Expected X.Y.Z or X.Y.Z.T"
+    )
   endif()
-else()
-  get_filename_component(_FOLDER_NAME "${CMAKE_SOURCE_DIR}" NAME)
-  string(REGEX MATCH "v?([0-9]+\\.[0-9]+\\.[0-9]+([-.][A-Za-z0-9]+)?)" _m "${_FOLDER_NAME}")
-  if(_m)
-    set(PROJECT_VERSION "${CMAKE_MATCH_1}")
-  else()
-    set(PROJECT_VERSION "0.0.0-unknown")
+
+# 2) Read the Docs
+elseif(DEFINED ENV{READTHEDOCS_VERSION} AND NOT "$ENV{READTHEDOCS_VERSION}" STREQUAL "")
+  set(_rtd_version "$ENV{READTHEDOCS_VERSION}")
+
+  if(_rtd_version MATCHES "${_PP_NUMERIC_VERSION_REGEX}")
+    string(REGEX REPLACE "^v" "" PARALLELPROJ_VERSION "${_rtd_version}")
+    set(PARALLELPROJ_VERSION_STRING "${_rtd_version}")
+    message(STATUS "Using version from READTHEDOCS_VERSION: ${_rtd_version}")
   endif()
 endif()
 
-# Extract numeric major/minor/patch safely
-string(REGEX MATCHALL "[0-9]+" _VERSION_PARTS "${PROJECT_VERSION}")
-list(LENGTH _VERSION_PARTS _n)
-if(_n GREATER_EQUAL 3)
-  list(GET _VERSION_PARTS 0 PROJECT_VERSION_MAJOR)
-  list(GET _VERSION_PARTS 1 PROJECT_VERSION_MINOR)
-  list(GET _VERSION_PARTS 2 PROJECT_VERSION_PATCH)
-else()
-  set(PROJECT_VERSION_MAJOR 0)
-  set(PROJECT_VERSION_MINOR 0)
-  set(PROJECT_VERSION_PATCH 0)
+# 3) Git checkout
+if(PARALLELPROJ_VERSION STREQUAL "")
+  find_package(Git QUIET)
+
+  set(_git_ok FALSE)
+  if(Git_FOUND)
+    execute_process(
+      COMMAND "${GIT_EXECUTABLE}" rev-parse --is-inside-work-tree
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+      RESULT_VARIABLE _git_revparse_result
+      OUTPUT_VARIABLE _git_revparse_output
+      ERROR_QUIET
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(_git_revparse_result EQUAL 0 AND _git_revparse_output STREQUAL "true")
+      set(_git_ok TRUE)
+    endif()
+  endif()
+
+  if(_git_ok)
+    execute_process(
+      COMMAND "${GIT_EXECUTABLE}" describe --tags --long --dirty
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+      RESULT_VARIABLE _git_describe_result
+      OUTPUT_VARIABLE _git_describe
+      ERROR_QUIET
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    execute_process(
+      COMMAND "${GIT_EXECUTABLE}" describe --tags --abbrev=0
+      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+      RESULT_VARIABLE _git_tag_result
+      OUTPUT_VARIABLE _git_tag
+      ERROR_QUIET
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+
+    if(_git_tag_result EQUAL 0 AND _git_tag MATCHES "${_PP_NUMERIC_VERSION_REGEX}")
+      string(REGEX REPLACE "^v" "" PARALLELPROJ_VERSION "${_git_tag}")
+      if(_git_describe_result EQUAL 0 AND NOT _git_describe STREQUAL "")
+        set(PARALLELPROJ_VERSION_STRING "${_git_describe}")
+      else()
+        set(PARALLELPROJ_VERSION_STRING "${_git_tag}")
+      endif()
+    endif()
+  endif()
 endif()
 
-message(STATUS "Building version ${PROJECT_VERSION}")
-message(STATUS "Version components: major=${PROJECT_VERSION_MAJOR}, minor=${PROJECT_VERSION_MINOR}, patch=${PROJECT_VERSION_PATCH}")
+# 4) Tarball / source directory fallback
+if(PARALLELPROJ_VERSION STREQUAL "")
+  get_filename_component(_folder_name "${CMAKE_SOURCE_DIR}" NAME)
+  if(_folder_name MATCHES "${_PP_NUMERIC_VERSION_REGEX}")
+    set(PARALLELPROJ_VERSION "${CMAKE_MATCH_1}")
+    set(PARALLELPROJ_VERSION_STRING "${CMAKE_MATCH_1}")
+  else()
+    string(REGEX MATCH "v?([0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?)" _m "${_folder_name}")
+    if(_m)
+      set(PARALLELPROJ_VERSION "${CMAKE_MATCH_1}")
+      set(PARALLELPROJ_VERSION_STRING "${CMAKE_MATCH_1}")
+    endif()
+  endif()
+endif()
+
+if(PARALLELPROJ_VERSION STREQUAL "")
+  set(PARALLELPROJ_VERSION "0.0.0")
+endif()
+
+if(PARALLELPROJ_VERSION_STRING STREQUAL "")
+  set(PARALLELPROJ_VERSION_STRING "${PARALLELPROJ_VERSION}")
+endif()
+
+project(PARALLELPROJ VERSION ${PARALLELPROJ_VERSION} LANGUAGES CXX)
+
+message(STATUS "PARALLELPROJ_VERSION: ${PARALLELPROJ_VERSION}")
+message(STATUS "PARALLELPROJ_VERSION_STRING: ${PARALLELPROJ_VERSION_STRING}")
+
+include(CheckLanguage)
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
 # ------------------------------------------------------------------------------
 # CUDA toolchain (only when needed)
@@ -153,7 +199,7 @@ if(PP_NEED_CUDA_TOOLCHAIN)
 
   message(STATUS "CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES}")
   enable_language(CUDA)
-  find_package(CUDAToolkit REQUIRED)
+  find_package(CUDAToolkit 12.0 REQUIRED)
 endif()
 
 # ------------------------------------------------------------------------------
@@ -194,6 +240,7 @@ if(BUILD_LIBRARY AND USE_CUDA)
     PUBLIC  PARALLELPROJ_CUDA=1
     PRIVATE PARALLELPROJ_EXPORTS
             PROJECT_VERSION="${PROJECT_VERSION}"
+            PARALLELPROJ_VERSION_STRING="${PARALLELPROJ_VERSION_STRING}"
             PROJECT_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
             PROJECT_VERSION_MINOR=${PROJECT_VERSION_MINOR}
             PROJECT_VERSION_PATCH=${PROJECT_VERSION_PATCH}
@@ -221,6 +268,7 @@ elseif(BUILD_LIBRARY)
     PUBLIC  PARALLELPROJ_CUDA=0
     PRIVATE PARALLELPROJ_EXPORTS
             PROJECT_VERSION="${PROJECT_VERSION}"
+            PARALLELPROJ_VERSION_STRING="${PARALLELPROJ_VERSION_STRING}"
             PROJECT_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
             PROJECT_VERSION_MINOR=${PROJECT_VERSION_MINOR}
             PROJECT_VERSION_PATCH=${PROJECT_VERSION_PATCH}
@@ -271,11 +319,6 @@ if(BUILD_PYTHON)
     find_package(parallelproj CONFIG REQUIRED)
     target_link_libraries(parallelproj_core PRIVATE parallelproj::parallelproj)
   endif()
-
-  target_compile_definitions(parallelproj_core
-    PRIVATE PARALLELPROJ_CUDA=${PARALLELPROJ_CUDA}
-            PROJECT_VERSION="${PROJECT_VERSION}"
-  )
 
   message(STATUS "Installing Python extension to ${Python_SITEARCH}")
 
