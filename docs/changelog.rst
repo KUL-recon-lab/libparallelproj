@@ -45,3 +45,12 @@ Breaking Changes
 ^^^^^^^^^^^^^^^^
 
 * TOF forward and backward projectors now require the extra argument ``num_tof_bins`` to specify the number of TOF bins, which can be even or odd.
+
+* renaming: ``joseph3d_fwd_tof_sino`` to ``joseph3d_tof_sino_fwd``
+
+* renaming: ``joseph3d_back_tof_sino`` to ``joseph3d_tof_sino_back``
+
+* renaming: ``joseph3d_fwd_tof_lm`` to ``joseph3d_tof_lm_fwd``
+
+* renaming: ``joseph3d_back_tof_lm`` to ``joseph3d_tof_lm_back``
+
