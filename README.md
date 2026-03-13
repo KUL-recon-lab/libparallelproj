@@ -48,8 +48,8 @@ Official documentation: [https://libparallelproj.readthedocs.io](https://libpara
 
 ## Installation
 
-We recommend to install pre-compiled versions of `libparallelproj` from conda forge.
-(**to come in the near future**).
+We recommend to install pre-compiled versions of `libparallelproj` from conda-forge
+where cuda 12/13 and non-cuda builds are available (see official docs).
 
 ## Build requirements
 

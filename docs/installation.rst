@@ -31,13 +31,29 @@ Install the conda-forge package ``libparallelproj`` (version >= 2.0.0):
 
 		.. code-block:: bash
 
-			mamba install -c conda-forge "libparallelproj>=2.0.0"
+			mamba install -c conda-forge libparallelproj=2
 
 	.. tab-item:: conda
 
 		.. code-block:: bash
 
-			conda install -c conda-forge "libparallelproj>=2.0.0"
+			conda install -c conda-forge libparallelproj=2
+
+.. note::
+
+	On systems with a CUDA device, the conda-forge solver should select a CUDA build of ``libparallelproj`` automatically.
+	At least ``cuda >= 12.9`` is required for CUDA builds, and this and newer CUDA versions are available on conda-forge.
+	To force a specific build, use one of the following patterns:
+
+	.. code-block:: bash
+
+		mamba install -c conda-forge "libparallelproj=2=cuda12*"
+		mamba install -c conda-forge "libparallelproj=2=cuda13*"
+		mamba install -c conda-forge "libparallelproj=2=*cpu*"
+
+.. warning::
+
+	In existing conda environments that contain older CUDA versions (``cuda < 12.9``), the CUDA build of ``libparallelproj`` cannot be installed.
 
 Python API (includes C-API)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
