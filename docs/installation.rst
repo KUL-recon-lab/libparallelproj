@@ -32,13 +32,13 @@ C-API only
 
 		.. code-block:: bash
 
-			mamba create -n my_new_env -c conda-forge libparallelproj=2
+			mamba create -n my_new_env -c conda-forge "libparallelproj>=2"
 
 	.. tab-item:: conda
 
 		.. code-block:: bash
 
-			conda create -n my_new_env -c conda-forge libparallelproj=2
+			conda create -n my_new_env -c conda-forge "libparallelproj>=2"
 
 .. note::
 
@@ -52,19 +52,19 @@ C-API only
 
 		.. code-block:: bash
 
-			mamba create -n my_new_env -c conda-forge "libparallelproj=2=cuda129*"
+			mamba create -n my_new_env -c conda-forge "libparallelproj>=2=cuda129*"
 
 	.. tab-item:: CUDA 13.x
 
 		.. code-block:: bash
 
-			mamba create -n my_new_env -c conda-forge "libparallelproj=2=cuda13*"
+			mamba create -n my_new_env -c conda-forge "libparallelproj>=2=cuda13*"
 
 	.. tab-item:: CPU
 
 		.. code-block:: bash
 
-			mamba create -n my_new_env -c conda-forge "libparallelproj=2=cpu*"
+			mamba create -n my_new_env -c conda-forge "libparallelproj>=2=cpu*"
 
 
 Python API (includes C-API)
@@ -84,7 +84,7 @@ Install the conda-forge package ``parallelproj-core``:
 
 		.. code-block:: bash
 
-			conda create -n my_new_env -c conda-forge parallelproj-core
+			conda create -n my_new_env -c conda-forge "parallelproj-core"
 
 .. note::
 
@@ -96,19 +96,19 @@ Install the conda-forge package ``parallelproj-core``:
 
 		.. code-block:: bash
 
-			mamba create -n my_new_env -c conda-forge parallelproj-core "libparallelproj=*=cuda129*"
+			mamba create -n my_new_env -c conda-forge "parallelproj-core" "libparallelproj=*=cuda129*"
 
 	.. tab-item:: CUDA 13.x
 
 		.. code-block:: bash
 
-			mamba create -n my_new_env -c conda-forge parallelproj-core "libparallelproj=*=cuda13*"
+			mamba create -n my_new_env -c conda-forge "parallelproj-core" "libparallelproj=*=cuda13*"
 
 	.. tab-item:: CPU
 
 		.. code-block:: bash
 
-			mamba create -n my_new_env -c conda-forge parallelproj-core "libparallelproj=*=cpu*"
+			mamba create -n my_new_env -c conda-forge "parallelproj-core" "libparallelproj=*=cpu*"
 
 
 

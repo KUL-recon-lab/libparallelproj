@@ -18,5 +18,5 @@ dependencies:
   - sphinxcontrib-bibtex
   - matplotlib
   - array-api-compat
-  - pytorch=2=cpu*
+  - pytorch
 
