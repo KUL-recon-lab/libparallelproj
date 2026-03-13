@@ -49,7 +49,7 @@ Install the conda-forge package ``libparallelproj`` (version >= 2.0.0):
 
 		mamba install -c conda-forge "libparallelproj=2=cuda12*"
 		mamba install -c conda-forge "libparallelproj=2=cuda13*"
-		mamba install -c conda-forge "libparallelproj=2=*cpu*"
+		mamba install -c conda-forge "libparallelproj=2=cpu*"
 
 .. warning::
 
