@@ -76,7 +76,7 @@ Install the conda-forge package ``parallelproj-core``:
 
 .. note::
 
-	``parallelproj-core`` depends on ``libparallelproj``. Therefore, you can force a specific CUDA 12, CUDA 13, or CPU-only build of ``parallelproj-core`` by pinning ``libparallelproj`` as shown in the note above.
+	``parallelproj-core`` depends on ``libparallelproj``. In case the solver wants to install the wrong build (cuda vs non-cuda), use the note above to force the correct build of ``libparallelproj``.
 
 
 Option 2: compile from source
