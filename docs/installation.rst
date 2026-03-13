@@ -17,8 +17,8 @@ Installation
    The project consolidation provides a cleaner separation of concerns and improved maintainability. Version 2.0.0 and later are the recommended versions for all new projects and updates.
 
 
-Option 1 (recommended): install pre-compiled package from conda-forge
----------------------------------------------------------------------
+Install pre-compiled package from conda-forge
+---------------------------------------------
 
 C-API only
 ^^^^^^^^^^
@@ -79,7 +79,7 @@ Install the conda-forge package ``parallelproj-core``:
 	``parallelproj-core`` depends on ``libparallelproj``. In case the solver wants to install the wrong build (cuda vs non-cuda), use the note above to force the correct build of ``libparallelproj``.
 
 
-Option 2: compile from source
------------------------------
+Compile from source
+-------------------
 
 For source builds, follow the instructions in the `GitHub project README <https://github.com/KUL-recon-lab/libparallelproj/blob/main/README.md>`_
