@@ -107,6 +107,7 @@ ctest --test-dir build
 - For non-CUDA builds, OpenMP is required for parallelization.
 - You can use [environment.yml](environment.yml) or [environment_cuda.yml](environment_cuda.yml) to create the respective build environments
 - Both presets also build the python interface. This can be disabled by using `-DBUILD_PYTHON=OFF`
+- The `cuda` preset uses `"CMAKE_CUDA_ARCHITECTURES": "native"` for local builds. You might want to change that for local builds that are supposed to run on several architectures (e.g. `all` or `all-major`) - see [here](https://cmake.org/cmake/help/latest/prop_tgt/CUDA_ARCHITECTURES.html).
 
 ## Building the docs with Sphinx
 
