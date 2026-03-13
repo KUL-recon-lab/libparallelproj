@@ -17,13 +17,14 @@ Installation
    The project consolidation provides a cleaner separation of concerns and improved maintainability. Version 2.0.0 and later are the recommended versions for all new projects and updates.
 
 
-Option 1 (recommended): install pre-compiled package from conda-forge
----------------------------------------------------------------------
+Install pre-compiled package from conda-forge
+---------------------------------------------
+
+We strongly recommend setting up a new conda environment for using ``libparallelproj``.
+This ensures that the correct dependencies are installed and prevents conflicts with other packages in existing environments (especially when using CUDA).
 
 C-API only
 ^^^^^^^^^^
-
-Install the conda-forge package ``libparallelproj`` (version >= 2.0.0):
 
 .. tab-set::
 
@@ -31,13 +32,40 @@ Install the conda-forge package ``libparallelproj`` (version >= 2.0.0):
 
 		.. code-block:: bash
 
-			mamba install -c conda-forge "libparallelproj>=2.0.0"
+			mamba create -n my_new_env -c conda-forge "libparallelproj>=2"
 
 	.. tab-item:: conda
 
 		.. code-block:: bash
 
-			conda install -c conda-forge "libparallelproj>=2.0.0"
+			conda create -n my_new_env -c conda-forge "libparallelproj>=2"
+
+.. note::
+
+	On systems with a CUDA device, the conda-forge solver should select a CUDA build of ``libparallelproj`` automatically.
+	At least ``cuda >= 12.9`` is required for CUDA builds, and this and newer CUDA versions are available on conda-forge.
+	To force a specific build (specific CUDA version or CPU build), use one of the following patterns:
+
+.. tab-set::
+
+	.. tab-item:: CUDA 12.9
+
+		.. code-block:: bash
+
+			mamba create -n my_new_env -c conda-forge "libparallelproj>=2=cuda129*"
+
+	.. tab-item:: CUDA 13.x
+
+		.. code-block:: bash
+
+			mamba create -n my_new_env -c conda-forge "libparallelproj>=2=cuda13*"
+
+	.. tab-item:: CPU
+
+		.. code-block:: bash
+
+			mamba create -n my_new_env -c conda-forge "libparallelproj>=2=cpu*"
+
 
 Python API (includes C-API)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -50,16 +78,42 @@ Install the conda-forge package ``parallelproj-core``:
 
 		.. code-block:: bash
 
-			mamba install -c conda-forge "parallelproj-core"
+			mamba create -n my_new_env -c conda-forge "parallelproj-core"
 
 	.. tab-item:: conda
 
 		.. code-block:: bash
 
-			conda install -c conda-forge "parallelproj-core"
+			conda create -n my_new_env -c conda-forge "parallelproj-core"
+
+.. note::
+
+	``parallelproj-core`` depends on ``libparallelproj``. In case the solver wants to install the wrong build (e.g. CUDA vs CPU), use the note above to force the correct build of ``libparallelproj`` by adding the it as a dependency in the command above, e.g.:
+
+.. tab-set::
+
+	.. tab-item:: CUDA 12.9
+
+		.. code-block:: bash
+
+			mamba create -n my_new_env -c conda-forge "parallelproj-core" "libparallelproj=*=cuda129*"
+
+	.. tab-item:: CUDA 13.x
+
+		.. code-block:: bash
+
+			mamba create -n my_new_env -c conda-forge "parallelproj-core" "libparallelproj=*=cuda13*"
+
+	.. tab-item:: CPU
+
+		.. code-block:: bash
+
+			mamba create -n my_new_env -c conda-forge "parallelproj-core" "libparallelproj=*=cpu*"
 
 
-Option 2: compile from source
------------------------------
+
+
+Compile from source
+-------------------
 
 For source builds, follow the instructions in the `GitHub project README <https://github.com/KUL-recon-lab/libparallelproj/blob/main/README.md>`_

@@ -1,8 +1,4 @@
-cmake_minimum_required(VERSION 3.18)
-
-if(POLICY CMP0177)
-  cmake_policy(SET CMP0177 NEW)
-endif()
+cmake_minimum_required(VERSION 3.31)
 
 # ------------------------------------------------------------------------------
 # OPTIONS
@@ -138,69 +134,6 @@ include(CheckLanguage)
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
-# ------------------------------------------------------------------------------
-# CUDA toolchain (only when needed)
-# ------------------------------------------------------------------------------
-set(PP_NEED_CUDA_TOOLCHAIN OFF)
-if(USE_CUDA AND (BUILD_LIBRARY OR BUILD_TESTS))
-  set(PP_NEED_CUDA_TOOLCHAIN ON)
-endif()
-
-if(PP_NEED_CUDA_TOOLCHAIN)
-  check_language(CUDA)
-  if(NOT CMAKE_CUDA_COMPILER)
-    message(FATAL_ERROR
-      "USE_CUDA=ON but no CUDA compiler was found by CMake. "
-      "Install a CUDA toolkit / nvcc, or configure with -DUSE_CUDA=OFF."
-    )
-  endif()
-
-  # Curated list (filtered against what this nvcc supports)
-  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "")
-    set(_CANDIDATE_ARCHS 70 75 80 86 89 90 120 121)
-
-    execute_process(
-      COMMAND "${CMAKE_CUDA_COMPILER}" --list-gpu-arch
-      OUTPUT_VARIABLE _NVCC_ARCHS
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      ERROR_QUIET
-    )
-
-    string(REGEX MATCHALL "compute_[0-9]+" _TOKENS "${_NVCC_ARCHS}")
-    message(STATUS "nvcc supports the following architectures: ${_TOKENS}")
-
-    set(_SUPPORTED_SMS "")
-    foreach(t IN LISTS _TOKENS)
-      string(REPLACE "compute_" "" sm "${t}")
-      list(APPEND _SUPPORTED_SMS "${sm}")
-    endforeach()
-    list(REMOVE_DUPLICATES _SUPPORTED_SMS)
-
-    set(_FINAL_ARCHS "")
-    foreach(sm IN LISTS _CANDIDATE_ARCHS)
-      list(FIND _SUPPORTED_SMS "${sm}" _idx)
-      if(NOT _idx EQUAL -1)
-        list(APPEND _FINAL_ARCHS "${sm}")
-      endif()
-    endforeach()
-
-    if(_FINAL_ARCHS STREQUAL "")
-      message(WARNING "No overlap between curated arch list and nvcc-supported list; falling back to nvcc list.")
-      set(_FINAL_ARCHS "${_SUPPORTED_SMS}")
-    endif()
-
-    if(_FINAL_ARCHS STREQUAL "")
-      message(WARNING "Could not determine architectures from nvcc; using default fallback list.")
-      set(_FINAL_ARCHS "75;80;86;89;90")
-    endif()
-
-    set(CMAKE_CUDA_ARCHITECTURES "${_FINAL_ARCHS}" CACHE STRING "CUDA SM architectures" FORCE)
-  endif()
-
-  message(STATUS "CMAKE_CUDA_ARCHITECTURES ${CMAKE_CUDA_ARCHITECTURES}")
-  enable_language(CUDA)
-  find_package(CUDAToolkit 12.0 REQUIRED)
-endif()
 
 # ------------------------------------------------------------------------------
 # Toolchain / platform tweaks
@@ -220,6 +153,14 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(PARALLELPROJ_CUDA 0)
 
 if(BUILD_LIBRARY AND USE_CUDA)
+  enable_language(CUDA)
+  find_package(CUDAToolkit 12.0 REQUIRED)
+
+  # nvcc>=12.8 init scripts on conda-forge set CUDAARCHS which is used to init CMAKE_CUDA_ARCHITECTURES
+  # for local builds it is best to set CMAKE_CUDA_ARCHITECTURES explicitly to "local" (as being done in the preset)
+  message(STATUS "ENV{CUDAARCHS}=$ENV{CUDAARCHS}")
+  message(STATUS "CMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES}")
+
   message(STATUS "CUDA library build enabled.")
   set(PARALLELPROJ_CUDA 1)
 

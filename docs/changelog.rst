@@ -1,6 +1,16 @@
 Changelog
 =========
 
+v2.0.4 (2026-03-13)
+-------------------
+
+Fixed
+^^^^^
+
+* remove cuda arch auto detection magic (conda-forge sets CUDAARCHS env variable)
+
+* improve install docs
+
 v2.0.3 (2026-03-05)
 -------------------
 
