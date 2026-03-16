@@ -49,7 +49,7 @@ Added
 
 * support for even number of TOF bins in TOF projectors
 
-* nanobind python API using python abi3 (python 3.12+ required) for better compatibility and easier installation
+* nanobind Python API using python abi3 (python 3.12+ required) for better compatibility and easier installation
 
 Breaking Changes
 ^^^^^^^^^^^^^^^^
@@ -64,4 +64,4 @@ Breaking Changes
 
 * renaming: ``joseph3d_back_tof_lm`` to ``joseph3d_tof_lm_back``
 
-* In the **python API** to all **tof projectors**, the **order of the TOF related arguments** has changed. ``num_sigmas`` is now last and has a default value of ``3.0``
+* In the **Python API** to all **TOF projectors**, the **order of the TOF related arguments** has changed. ``num_sigmas`` is now last and has a default value of ``3.0``
