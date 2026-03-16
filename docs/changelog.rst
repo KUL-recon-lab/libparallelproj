@@ -64,3 +64,4 @@ Breaking Changes
 
 * renaming: ``joseph3d_back_tof_lm`` to ``joseph3d_tof_lm_back``
 
+* In the **python API** to all **tof projectors**, the **order of the TOF related arguments** has changed. ``num_sigmas`` is now last and has a default value of ``3.0``
