@@ -36,8 +36,12 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(std::size_t i,
   float a0, a1, a2;
   float b0, b1, b2;
 
+  // start and end plane index along the principal axis direction according to TOF limits
   int istart = -1;
   int iend = -1;
+  // start / end plane where the ray intersects the image cube along the principal axis direction
+  int istart_vol = -1;
+  int iend_vol = -1;
   int it = tof_bin_index[i];
 
   float d0 = lor_end[3 * i + 0] - lor_start[3 * i + 0];
@@ -52,11 +56,11 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(std::size_t i,
   // and istart and iend are set to the first and last voxel planes
   // that are intersected
   // cf is the correction factor voxel_size[dir]/cos[dir]
-  ray_cube_intersection_joseph(lor_start + 3 * i, lor_end + 3 * i, image_origin, voxel_size, image_dim, direction, cf, istart, iend);
+  ray_cube_intersection_joseph(lor_start + 3 * i, lor_end + 3 * i, image_origin, voxel_size, image_dim, direction, cf, istart_vol, iend_vol);
 
   // if the ray does not intersect the image cube, return
   // istart and iend are set to -1
-  if (istart == -1)
+  if (istart_vol == -1)
   {
     return;
   }
@@ -112,6 +116,15 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(std::size_t i,
   // this is the "corrected" value up to the tof_plane_weight that we have to inject into the planes using the adjoint of the bilinear interpolation
   toAdd = projection_values[i] * tof_bin_width / tof_plane_weights_sum;
 
+   
+  // in case the calculated istart based on TOF is smaller than the first plane intersected by the ray through the image (istart_vol), 
+  // we reset istart to istart_vol, because we need to make sure to loop through all planes that are intersected by the ray through the image
+  istart = (istart < istart_vol) ? istart_vol : istart;
+
+  // in case the calculated iend based on TOF is larger than the last plane intersected by the ray through the image (iend_vol),
+  // we reset iend to iend_vol, because we need to make sure to loop through all planes that are intersected by the ray through the image
+  iend = (iend > iend_vol) ? iend_vol : iend;
+  
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////
@@ -126,12 +139,6 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(std::size_t i,
     a2 = (d2 * voxel_size[direction]) / (voxel_size[2] * dr);
     b2 = (lor_start[3 * i + 2] - image_origin[2] + d2 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[2];
 
-    // truncate istart and iend to the image boundaries
-    istart = (istart < 0) ? 0 : istart;
-    istart = (istart > n0 - 1) ? n0 - 1 : istart;
-
-    iend = (iend < 0) ? 0 : iend;
-    iend = (iend > n0 - 1) ? n0 - 1 : iend;
 
     // get the intersection points of the ray and the start image plane in voxel coordinates
     i1_f = istart * a1 + b1;
@@ -160,13 +167,6 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(std::size_t i,
     a2 = (d2 * voxel_size[direction]) / (voxel_size[2] * dr);
     b2 = (lor_start[3 * i + 2] - image_origin[2] + d2 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[2];
 
-    // truncate istart and iend to the image boundaries
-    istart = (istart < 0) ? 0 : istart;
-    istart = (istart > n1 - 1) ? n1 - 1 : istart;
-
-    iend = (iend < 0) ? 0 : iend;
-    iend = (iend > n1 - 1) ? n1 - 1 : iend;
-
     // get the intersection points of the ray and the start image plane in voxel coordinates
     i0_f = istart * a0 + b0;
     i2_f = istart * a2 + b2;
@@ -193,13 +193,6 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(std::size_t i,
 
     a1 = (d1 * voxel_size[direction]) / (voxel_size[1] * dr);
     b1 = (lor_start[3 * i + 1] - image_origin[1] + d1 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[1];
-
-    // truncate istart and iend to the image boundaries
-    istart = (istart < 0) ? 0 : istart;
-    istart = (istart > n2 - 1) ? n2 - 1 : istart;
-
-    iend = (iend < 0) ? 0 : iend;
-    iend = (iend > n2 - 1) ? n2 - 1 : iend;
 
     // get the intersection points of the ray and the start image plane in voxel coordinates
     i0_f = istart * a0 + b0;
