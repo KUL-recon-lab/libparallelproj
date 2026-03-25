@@ -31,8 +31,12 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
   float a0, a1, a2;
   float b0, b1, b2;
 
+  // start and end plane index along the principal axis direction according to TOF limits
   int istart = -1;
   int iend = -1;
+  // start / end plane where the ray intersects the image cube along the principal axis direction
+  int istart_vol = -1;
+  int iend_vol = -1;
   int it = tof_bin_index[i];
 
   float d0 = lor_end[3 * i + 0] - lor_start[3 * i + 0];
@@ -47,11 +51,11 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
   // and istart and iend are set to the first and last voxel planes
   // that are intersected
   // cf is the correction factor voxel_size[dir]/cos[dir]
-  ray_cube_intersection_joseph(lor_start + 3 * i, lor_end + 3 * i, image_origin, voxel_size, image_dim, direction, cf, istart, iend);
+  ray_cube_intersection_joseph(lor_start + 3 * i, lor_end + 3 * i, image_origin, voxel_size, image_dim, direction, cf, istart_vol, iend_vol);
 
   // if the ray does not intersect the image cube, return
   // istart and iend are set to -1
-  if (istart == -1)
+  if (istart_vol == -1)
   {
     return;
   }
@@ -117,7 +121,8 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
       tof_plane_weight = effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width);
       tof_plane_weights_sum += tof_plane_weight;
 
-      if (i0 >= 0 && i0 < n0)
+      // we only add contribution from valid planes where the ray intersects the image cube
+      if (i0 >= istart_vol && i0 <= iend_vol)
       {
         toAdd += tof_plane_weight * bilinear_interp_fixed0(image, n0, n1, n2, i0, i1_f, i2_f);
       }
@@ -147,7 +152,8 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
       tof_plane_weight = effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width);
       tof_plane_weights_sum += tof_plane_weight;
 
-      if (i1 >= 0 && i1 < n1)
+      // we only add contribution from valid planes where the ray intersects the image cube
+      if (i1 >= istart_vol && i1 <= iend_vol)
       {
         toAdd += tof_plane_weight * bilinear_interp_fixed1(image, n0, n1, n2, i0_f, i1, i2_f);
       }
@@ -177,7 +183,8 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
       tof_plane_weight = effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width);
       tof_plane_weights_sum += tof_plane_weight;
 
-      if (i2 >= 0 && i2 < n2)
+      // we only add contribution from valid planes where the ray intersects the image cube
+      if (i2 >= istart_vol && i2 <= iend_vol)
       {
         toAdd += tof_plane_weight * bilinear_interp_fixed2(image, n0, n1, n2, i0_f, i1_f, i2);
       }

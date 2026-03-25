@@ -1,10 +1,19 @@
 import pytest
 import math
 import random
+import array_api_compat
 import parallelproj_core as ppb
 
 from types import ModuleType
 from .config import pytestmark
+
+
+def allclose(x, y, atol: float = 1e-8, rtol: float = 1e-5) -> bool:
+    """check if two arrays are close to each other, given absolute and relative error
+    inspired by numpy.allclose
+    """
+    xp = array_api_compat.array_namespace(x)
+    return bool(xp.all(xp.less_equal(xp.abs(x - y), atol + rtol * xp.abs(y))))
 
 
 @pytest.mark.parametrize(
@@ -222,3 +231,189 @@ def test_tof_lm_adjointness(
         print(f"Inner product 2: {innerprod2:.5E}")
 
     assert math.isclose(innerprod1, innerprod2, abs_tol=3e-4)
+
+
+@pytest.mark.parametrize(
+    "direction",
+    [0, 1, 2],
+)
+def test_tof_lm_vs_sino_fwd(xp: ModuleType, dev: str, direction: int):
+
+    vx = (2.0, 2.0, 2.0)
+    img_shape = (40, 40, 40)
+
+    num_tofbins = 44
+    tofbin_width = 3.0
+    sigma_tof = 12.0
+    num_sigmas = 3.0
+    tofcenter_offset = 0
+
+    img_origin = xp.asarray([-39.0, -39.0, -39.0], dtype=xp.float32, device=dev)
+    voxel_size = xp.asarray([2.0, 2.0, 2.0], dtype=xp.float32, device=dev)
+
+    if direction == 0:
+        iy = 0
+        iz = img_shape[2] // 2
+
+        xstart = xp.asarray(
+            [
+                [
+                    -0.6 * vx[0] * img_shape[0],
+                    float(img_origin[1] + voxel_size[1] * iy),
+                    float(img_origin[2] + voxel_size[2] * iz),
+                ]
+            ],
+            dtype=xp.float32,
+            device=dev,
+        )
+        xend = xp.asarray(
+            [
+                [
+                    0.6 * vx[0] * img_shape[0],
+                    float(img_origin[1] + voxel_size[1] * (iy - 1)),
+                    float(img_origin[2] + voxel_size[2] * iz),
+                ]
+            ],
+            dtype=xp.float32,
+            device=dev,
+        )
+
+        x_true = xp.zeros(img_shape, dtype=xp.float32, device=dev)
+        x_true[10:-10, iy, iz] = 1.0
+    elif direction == 1:
+        ix = 0
+        iz = img_shape[2] // 2
+
+        xstart = xp.asarray(
+            [
+                [
+                    float(img_origin[0] + voxel_size[0] * ix),
+                    -0.6 * vx[1] * img_shape[1],
+                    float(img_origin[2] + voxel_size[2] * iz),
+                ]
+            ],
+            dtype=xp.float32,
+            device=dev,
+        )
+        xend = xp.asarray(
+            [
+                [
+                    float(img_origin[0] + voxel_size[0] * (ix - 1)),
+                    0.6 * vx[1] * img_shape[1],
+                    float(img_origin[2] + voxel_size[2] * iz),
+                ]
+            ],
+            dtype=xp.float32,
+            device=dev,
+        )
+
+        x_true = xp.zeros(img_shape, dtype=xp.float32, device=dev)
+        x_true[ix, 10:-10, iz] = 1.0
+    elif direction == 2:
+        ix = 0
+        iy = img_shape[1] // 2
+
+        xstart = xp.asarray(
+            [
+                [
+                    float(img_origin[0] + voxel_size[0] * ix),
+                    float(img_origin[1] + voxel_size[1] * iy),
+                    -0.6 * vx[2] * img_shape[2],
+                ]
+            ],
+            dtype=xp.float32,
+            device=dev,
+        )
+        xend = xp.asarray(
+            [
+                [
+                    float(img_origin[0] + voxel_size[0] * (ix - 1)),
+                    float(img_origin[1] + voxel_size[1] * iy),
+                    0.6 * vx[2] * img_shape[2],
+                ]
+            ],
+            dtype=xp.float32,
+            device=dev,
+        )
+
+        x_true = xp.zeros(img_shape, dtype=xp.float32, device=dev)
+        x_true[ix, iy, 10:-10] = 1.0
+    else:
+        raise ValueError("direction must be 0, 1, or 2")
+
+    # %%
+    # TOF fwd projection in listmode
+    x_fwd_lm_tof = xp.zeros(num_tofbins, dtype=xp.float32, device=dev)
+
+    for tb in range(num_tofbins):
+        tof_bin = xp.asarray([tb], dtype=xp.int16, device=dev)
+
+        ppb.joseph3d_tof_lm_fwd(
+            xstart,
+            xend,
+            x_true,
+            img_origin,
+            voxel_size,
+            x_fwd_lm_tof[tb : tb + 1],
+            tofbin_width,
+            xp.asarray(
+                [sigma_tof],
+                dtype=xp.float32,
+                device=dev,
+            ),
+            xp.asarray(
+                [tofcenter_offset],
+                dtype=xp.float32,
+                device=dev,
+            ),
+            tof_bin,
+            num_tofbins,
+            num_sigmas,
+        )
+
+    # %%
+    # TOF fwd projection in sinogram mode
+    x_fwd_sino_tof = xp.zeros(
+        (xstart.shape[0], num_tofbins), dtype=xp.float32, device=dev
+    )
+
+    ppb.joseph3d_tof_sino_fwd(
+        xstart,
+        xend,
+        x_true,
+        img_origin,
+        voxel_size,
+        x_fwd_sino_tof,
+        tofbin_width,
+        xp.asarray(
+            [sigma_tof],
+            dtype=xp.float32,
+            device=dev,
+        ),
+        xp.asarray(
+            [tofcenter_offset],
+            dtype=xp.float32,
+            device=dev,
+        ),
+        num_tofbins,
+        num_sigmas,
+    )
+
+    # %%
+    # non-TOF fwd projection
+    x_fwd_sino = xp.zeros((xstart.shape[0],), dtype=xp.float32, device=dev)
+
+    ppb.joseph3d_fwd(
+        xstart,
+        xend,
+        x_true,
+        img_origin,
+        voxel_size,
+        x_fwd_sino,
+    )
+
+    assert allclose(x_fwd_lm_tof, x_fwd_sino_tof, atol=1e-3)
+    assert math.isclose(float(x_fwd_sino[0]), float(xp.sum(x_fwd_lm_tof)), abs_tol=1e-3)
+    assert math.isclose(
+        float(x_fwd_sino[0]), float(xp.sum(x_fwd_sino_tof)), abs_tol=1e-3
+    )
