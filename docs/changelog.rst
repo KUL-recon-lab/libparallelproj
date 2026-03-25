@@ -1,6 +1,15 @@
 Changelog
 =========
 
+v2.0.5 (2026-03-25)
+-------------------
+
+Fixed
+^^^^^
+
+* Fix bug in TOF listmode forward and backprojector such that only image planes are taken that where the ray intersects the image volume. 
+  Now the behavior of sinogram and LM TOF projectors should be very close for all LORs and the sum over TOF should be very close to non-TOF.
+
 v2.0.4 (2026-03-13)
 -------------------
 
