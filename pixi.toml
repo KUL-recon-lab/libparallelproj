@@ -117,7 +117,7 @@ llvm-openmp = "*"
 
 [feature.docs.tasks]
 configure-docs = "cmake --preset docs"
-build-doxygen  = "cmake --build docs/_build_doxygen --target doxygen-docs"
+build-doxygen  = {cmd = "cmake --build docs/_build_doxygen --target doxygen-docs", depends-on = ["configure-docs"]}
 build-docs     = {cmd = "cd docs && make html", depends-on = ["build-doxygen"]}
 
 # ── Environments ───────────────────────────────────────────────────────────
