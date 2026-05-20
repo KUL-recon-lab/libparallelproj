@@ -18,7 +18,7 @@ build:
       - asdf global pixi latest
 
     install:
-      - pixi install --locked -e docs
+      - pixi install -e docs
 
     build:
       html:
