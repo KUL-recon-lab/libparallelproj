@@ -15,12 +15,13 @@ nanobind         = "*"
 numpy            = "*"
 array-api-compat = "*"
 
-# conda-forge's cxx-compiler on Windows sets CMAKE_GENERATOR_PLATFORM=x64 in
-# its activation scripts (intended for the Visual Studio generator). Ninja does
-# not accept a platform specification and errors immediately. Clearing it here
-# overrides the activation-script value for every environment.
+# conda-forge's cxx-compiler on Windows sets these in its activation scripts
+# for use with the Visual Studio generator. Ninja rejects both — it supports
+# neither platform nor toolset specification. Clearing them here overrides the
+# activation-script values for every environment.
 [activation.env]
 CMAKE_GENERATOR_PLATFORM = ""
+CMAKE_GENERATOR_TOOLSET  = ""
 
 # ── test feature ───────────────────────────────────────────────────────────
 # Pure test deps — not needed to build or run the library itself.
