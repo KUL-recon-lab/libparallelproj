@@ -10,25 +10,22 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Setup micromamba
-        uses: mamba-org/setup-micromamba@v1
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0
         with:
-          environment-file: docs/environment.yaml
-          init-shell: bash
-          cache-environment: true
+          environments: docs
+          cache: true
 
-      - name: Build Documentation
-        shell: bash -l {0}
-        working-directory: docs
-        run: make html
+      - name: Build documentation
+        run: pixi run -e docs build-docs
 
-      - name: Upload Documentation Artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload documentation artifact
+        uses: actions/upload-artifact@v7
         with:
           name: docs-html
           path: docs/_build/html

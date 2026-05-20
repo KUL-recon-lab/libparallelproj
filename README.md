@@ -53,67 +53,112 @@ where cuda 12/13 and non-cuda builds are available (see official docs).
 
 ## Build requirements
 
-### General Requirements
-- **CMake** (version 3.18 or higher)
-- **C++17** compatible compiler
-- **OpenMP** (for non-CUDA builds)
+The recommended way to build from source is with [pixi](https://pixi.sh), which manages all
+toolchain and library dependencies (compiler, CMake, Ninja, nanobind, CUDA toolkit, …)
+automatically.
 
-### Optional Requirements for python API
-- **python** (version >= 3.12)
-- **nanobind**
+If you prefer to drive CMake directly, install the dependencies listed below yourself and
+use the presets in [CMakePresets.json](CMakePresets.json).
 
-### CUDA-Specific Requirements
-- **CUDA Toolkit** (if building with CUDA support)
+### Dependencies (only needed without pixi)
+
+| Category | Requirement |
+|----------|-------------|
+| Build tools | CMake ≥ 3.18, Ninja, C++17 compiler |
+| Non-CUDA builds | OpenMP |
+| Python extension | Python ≥ 3.12, nanobind |
+| CUDA builds | CUDA Toolkit 12 or 13 |
+| Testing | pytest, numpy, array-api-compat, array-api-strict, pytorch |
+| Documentation | Doxygen, Sphinx ≥ 8, breathe, furo, sphinx-gallery, … |
 
 ---
 
 ## Building the Project
 
-### Configure the project for cuda / vs non-cuda build
+### Recommended: build with pixi
+
+[pixi](https://pixi.sh) resolves and installs all dependencies into isolated environments.
+Each environment (`default`, `cuda12`, `cuda13`, `docs`) exposes the same set of tasks:
+
+**Non-CUDA build** (CPU / OpenMP, all platforms):
 
 ```bash
-# enter the root directory of this repository
-cd libparallelproj
+pixi run -e default configure   # cmake --preset non-cuda
+pixi run -e default build       # cmake --build build
+pixi run -e default test        # ctest + pytest
+pixi run -e default install     # cmake --install build
 ```
 
+**CUDA build** (requires a CUDA 12 or 13 driver on the machine):
+
 ```bash
-# cuda build
-cmake --preset cuda
+# CUDA 12
+pixi run -e cuda12 configure    # cmake --preset cuda12
+pixi run -e cuda12 build
+pixi run -e cuda12 test
+
+# CUDA 13
+pixi run -e cuda13 configure    # cmake --preset cuda13
+pixi run -e cuda13 build
+pixi run -e cuda13 test
 ```
 
-or
+All available tasks:
+
+| Task | Description |
+|------|-------------|
+| `configure` | CMake configure (uses the environment's preset) |
+| `build` | CMake build |
+| `test-cpp` | C++ tests via ctest |
+| `test-python` | Python tests via pytest |
+| `test` | Both test suites |
+| `install` | `cmake --install` |
+| `uninstall` | Remove installed files (`default` env only) |
+
+The `default` environment additionally provides `configure-coverage`, `test-python-cov`, and
+`collect-coverage-cpp` for coverage reporting.
+
+### Alternative: build directly with CMake
+
+Install the dependencies listed above yourself, then use the CMake presets directly:
 
 ```bash
-# non-cuda build
+# Non-CUDA
 cmake --preset non-cuda
-```
-
-### Build the project
-
-```bash
 cmake --build build
+ctest --output-on-failure --test-dir build
+
+# CUDA 12
+cmake --preset cuda12
+cmake --build build-cuda12
+
+# CUDA 13
+cmake --preset cuda13
+cmake --build build-cuda13
 ```
 
-### Run tests
-
-```bash
-ctest --test-dir build
-```
+See [CMakePresets.json](CMakePresets.json) for all preset options.
 
 ## Notes
 
-- Have a look into [CMakePresets.json](CMakePresets.json) to better understand the `cuda` / `non-cuda` cmake presets and options
-- For CUDA builds, ensure that the CUDA Toolkit is installed and properly configured.
-- For non-CUDA builds, OpenMP is required for parallelization.
-- You can use [environment.yml](environment.yml) or [environment_cuda.yml](environment_cuda.yml) to create the respective build environments
-- Both presets also build the python interface. This can be disabled by using `-DBUILD_PYTHON=OFF`
-- The `cuda` preset uses `"CMAKE_CUDA_ARCHITECTURES": "native"` for local builds. You might want to change that for local builds that are supposed to run on several architectures (e.g. `all` or `all-major`) - see [here](https://cmake.org/cmake/help/latest/prop_tgt/CUDA_ARCHITECTURES.html).
+- Both `cuda12` and `cuda13` presets use `CMAKE_CUDA_ARCHITECTURES=native`. For builds targeting multiple GPU generations, override with `all` or `all-major` — see the [CMake docs](https://cmake.org/cmake/help/latest/prop_tgt/CUDA_ARCHITECTURES.html).
+- The Python extension build can be disabled by passing `-DBUILD_PYTHON=OFF` to the configure step.
 
 ## Building the docs with Sphinx
 
+**With pixi (recommended):**
+
+```bash
+pixi run -e docs build-docs
 ```
-cd docs
-make html
+
+This runs the full chain: CMake configure → Doxygen XML → full project build → `sphinx-build`.
+The output is written to `docs/_build/html`.
+
+**Without pixi:** install the documentation dependencies and run:
+
+```bash
+cd docs && make html
 ```
 
 ## Using libparallelproj from another CMake project

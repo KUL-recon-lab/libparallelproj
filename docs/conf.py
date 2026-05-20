@@ -9,8 +9,12 @@ import sys
 from sphinx_gallery.sorting import FileNameSortKey
 from typing import Optional
 
+# Anchor all build-directory paths to conf.py's own location so sphinx-build
+# can be invoked from any working directory (e.g. the project root on RTD).
+_BUILD_DOXYGEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_build_doxygen")
+
 # Add the build directory to the path so we can import the Python module
-sys.path.insert(0, os.path.abspath("_build_doxygen"))
+sys.path.insert(0, _BUILD_DOXYGEN)
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
@@ -39,9 +43,7 @@ def _resolve_release() -> str:
     if env_release:
         return env_release
 
-    cmake_config_version = os.path.abspath(
-        os.path.join("_build_doxygen", "parallelprojConfigVersion.cmake")
-    )
+    cmake_config_version = os.path.join(_BUILD_DOXYGEN, "parallelprojConfigVersion.cmake")
     cmake_release = _read_version_from_cmake_config(cmake_config_version)
     if cmake_release:
         return cmake_release
@@ -78,7 +80,7 @@ sphinx_gallery_conf = {
 }
 
 # -- Breathe configuration ---------------------------------------------------
-breathe_projects = {"parallelproj": "_build_doxygen/docs/xml"}
+breathe_projects = {"parallelproj": os.path.join(_BUILD_DOXYGEN, "docs", "xml")}
 breathe_default_project = "parallelproj"
 
 # -- Options for HTML output -------------------------------------------------
