@@ -53,14 +53,34 @@ where cuda 12/13 and non-cuda builds are available (see official docs).
 
 ## Build requirements
 
-Building from source requires [pixi](https://pixi.sh).
-Pixi manages all toolchain and library dependencies (compiler, CMake, Ninja, nanobind, …) automatically — no manual environment setup needed.
+The recommended way to build from source is with [pixi](https://pixi.sh), which manages all
+toolchain and library dependencies (compiler, CMake, Ninja, nanobind, CUDA toolkit, …)
+automatically.
+
+If you prefer to drive CMake directly, install the dependencies listed below yourself and
+use the presets in [CMakePresets.json](CMakePresets.json).
+
+### Dependencies (only needed without pixi)
+
+| Category | Requirement |
+|----------|-------------|
+| Build tools | CMake ≥ 3.18, Ninja, C++17 compiler |
+| Non-CUDA builds | OpenMP |
+| Python extension | Python ≥ 3.12, nanobind |
+| CUDA builds | CUDA Toolkit 12 or 13 |
+| Testing | pytest, numpy, array-api-compat, array-api-strict, pytorch |
+| Documentation | Doxygen, Sphinx ≥ 8, breathe, furo, sphinx-gallery, … |
 
 ---
 
 ## Building the Project
 
-### Non-CUDA build (CPU / OpenMP)
+### Recommended: build with pixi
+
+[pixi](https://pixi.sh) resolves and installs all dependencies into isolated environments.
+Each environment (`default`, `cuda12`, `cuda13`, `docs`) exposes the same set of tasks:
+
+**Non-CUDA build** (CPU / OpenMP, all platforms):
 
 ```bash
 pixi run -e default configure   # cmake --preset non-cuda
@@ -69,9 +89,7 @@ pixi run -e default test        # ctest + pytest
 pixi run -e default install     # cmake --install build
 ```
 
-### CUDA build
-
-Requires a machine with a CUDA 12 or CUDA 13 driver installed.
+**CUDA build** (requires a CUDA 12 or 13 driver on the machine):
 
 ```bash
 # CUDA 12
@@ -85,9 +103,7 @@ pixi run -e cuda13 build
 pixi run -e cuda13 test
 ```
 
-### Available tasks
-
-All environments expose the same task names:
+All available tasks:
 
 | Task | Description |
 |------|-------------|
@@ -97,23 +113,53 @@ All environments expose the same task names:
 | `test-python` | Python tests via pytest |
 | `test` | Both test suites |
 | `install` | `cmake --install` |
-| `uninstall` | Remove installed files (default env only) |
+| `uninstall` | Remove installed files (`default` env only) |
 
-The `default` environment additionally has `configure-coverage` / `test-python-cov` / `collect-coverage-cpp` for coverage reporting.
+The `default` environment additionally provides `configure-coverage`, `test-python-cov`, and
+`collect-coverage-cpp` for coverage reporting.
+
+### Alternative: build directly with CMake
+
+Install the dependencies listed above yourself, then use the CMake presets directly:
+
+```bash
+# Non-CUDA
+cmake --preset non-cuda
+cmake --build build
+ctest --output-on-failure --test-dir build
+
+# CUDA 12
+cmake --preset cuda12
+cmake --build build-cuda12
+
+# CUDA 13
+cmake --preset cuda13
+cmake --build build-cuda13
+```
+
+See [CMakePresets.json](CMakePresets.json) for all preset options.
 
 ## Notes
 
-- See [CMakePresets.json](CMakePresets.json) for the full set of CMake options used by each preset.
 - Both `cuda12` and `cuda13` presets use `CMAKE_CUDA_ARCHITECTURES=native`. For builds targeting multiple GPU generations, override with `all` or `all-major` — see the [CMake docs](https://cmake.org/cmake/help/latest/prop_tgt/CUDA_ARCHITECTURES.html).
 - The Python extension build can be disabled by passing `-DBUILD_PYTHON=OFF` to the configure step.
 
 ## Building the docs with Sphinx
 
+**With pixi (recommended):**
+
 ```bash
 pixi run -e docs build-docs
 ```
 
-This runs the full chain: CMake configure → Doxygen XML → full project build → `sphinx-build`. The output is written to `docs/_build/html`.
+This runs the full chain: CMake configure → Doxygen XML → full project build → `sphinx-build`.
+The output is written to `docs/_build/html`.
+
+**Without pixi:** install the documentation dependencies and run:
+
+```bash
+cd docs && make html
+```
 
 ## Using libparallelproj from another CMake project
 
