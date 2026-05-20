@@ -30,15 +30,25 @@ on:
 jobs:
   build-and-test:
     runs-on: ${{ matrix.os }}
+    # CONDA_OVERRIDE_CUDA tells the pixi solver to treat CUDA as available even
+    # on runners without a physical GPU or CUDA driver installed.
+    env:
+      CONDA_OVERRIDE_CUDA: ${{ matrix.cuda-version }}
     strategy:
       fail-fast: true
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        pixi-env: [cuda12, cuda13]
-        exclude:
-          # CUDA 12 support was dropped for Windows in conda-forge
-          - os: windows-latest
+        # Explicit include list — cleaner than a cross-product + exclude when
+        # only 3 of 4 combinations are valid.
+        include:
+          - os: ubuntu-latest
             pixi-env: cuda12
+            cuda-version: "12.0"
+          - os: ubuntu-latest
+            pixi-env: cuda13
+            cuda-version: "13.0"
+          - os: windows-latest
+            pixi-env: cuda13
+            cuda-version: "13.0"
 
     steps:
       - name: Checkout repository
