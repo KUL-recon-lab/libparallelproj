@@ -134,9 +134,12 @@ llvm-openmp = "*"
 llvm-openmp = "*"
 
 [feature.docs.tasks]
-configure-docs = "cmake --preset docs"
-build-doxygen  = {cmd = "cmake --build docs/_build_doxygen --target doxygen-docs", depends-on = ["configure-docs"]}
-build-docs     = {cmd = "cd docs && make html", depends-on = ["build-doxygen"]}
+configure-docs   = "cmake --preset docs"
+build-doxygen    = {cmd = "cmake --build docs/_build_doxygen --target doxygen-docs", depends-on = ["configure-docs"]}
+# Full cmake build (library + parallelproj_core) without running sphinx.
+# Used by RTD so sphinx-build can be invoked directly into $READTHEDOCS_OUTPUT.
+build-for-sphinx = {cmd = "cmake --build docs/_build_doxygen", depends-on = ["build-doxygen"]}
+build-docs       = {cmd = "cd docs && make html", depends-on = ["build-doxygen"]}
 
 # ── Environments ───────────────────────────────────────────────────────────
 [environments]

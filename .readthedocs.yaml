@@ -3,46 +3,27 @@ version: 2
 build:
   os: ubuntu-24.04
   tools:
-    python: miniconda-latest
-
-  apt_packages:
-    - doxygen
-    - cmake
-    - ninja-build
+    python: "latest"
 
   jobs:
     post_checkout:
-      # --- DEBUG: verify checkout/tag visibility + detect "dirty" state early ---
-      - 'echo "=== HEAD and tags ==="'
-      - 'git rev-parse --short HEAD'
-      - 'git tag --points-at HEAD || true'
-      - 'echo "=== describe ==="'
-      - 'git describe --tags --long --dirty || true'
-      - 'echo "=== status porcelain ==="'
-      - 'git status --porcelain=v1 || true'
-      - 'echo "=== diff names (tracked changes) ==="'
-      - 'git diff --name-only || true'
-      - 'echo "=== untracked files ==="'
-      - 'git ls-files --others --exclude-standard || true'
+      # Fetch full history and tags — CMake version detection reads git describe
+      - git fetch --unshallow || true
+      - git fetch --tags --force || true
 
-      # --- Your existing fetch steps ---
-      - 'git fetch --unshallow || true'
-      - 'git fetch --tags --force || true'
+    create_environment:
+      # Install pixi via asdf (recommended RTD approach)
+      - asdf plugin add pixi
+      - asdf install pixi latest
+      - asdf global pixi latest
 
-      # --- DEBUG: re-check after unshallow/tags fetch ---
-      - 'echo "=== AFTER fetch: describe ==="'
-      - 'git describe --tags --long --dirty || true'
-      - 'echo "=== AFTER fetch: status porcelain ==="'
-      - 'git status --porcelain=v1 || true'
+    install:
+      - pixi install --locked -e docs
 
-    pre_build:
-      - 'mkdir -p docs/_build_doxygen'
-      - 'cd docs/_build_doxygen && cmake ../.. -DBUILD_DOCS=ON -DBUILD_PYTHON=ON -DBUILD_TESTS=OFF -DUSE_CUDA=OFF'
-      - 'cd docs/_build_doxygen && cmake --build . --target doxygen-docs'
-      - 'cd docs/_build_doxygen && cmake --build .'
-
-conda:
-  environment: docs/environment.yaml
-
-sphinx:
-  configuration: docs/conf.py
+    build:
+      html:
+        # cmake configure → doxygen XML → full project build (produces parallelproj_core)
+        - pixi run -e docs build-for-sphinx
+        # sphinx-build writes directly into RTD's output directory;
+        # conf.py uses __file__-anchored paths so CWD does not matter
+        - pixi run -e docs sphinx-build -T -b html docs "$READTHEDOCS_OUTPUT/html"
