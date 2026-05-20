@@ -1,0 +1,118 @@
+[workspace]
+name = "libparallelproj"
+channels = ["conda-forge"]
+platforms = ["linux-64", "win-64", "osx-64", "osx-arm64"]
+
+# ── Default feature: shared build infrastructure + test/runtime deps ───────
+# cmake/ninja are "build tools" (conda: build), but needed in every environment
+# python/nanobind are "host deps" (conda: host), linked against when compiling
+# numpy/pytest/* are test/runtime deps
+[dependencies]
+cmake            = ">=3.18"
+ninja            = "*"
+python           = ">=3.12,<4"
+nanobind         = "*"
+numpy            = "*"
+array-api-compat = "*"
+array-api-strict = "*"
+pytest           = "*"
+
+# ── cpu feature ────────────────────────────────────────────────────────────
+# build tool (conda: build)
+[feature.cpu.dependencies]
+cxx-compiler = "*"
+
+# host dep (conda: host + run) — macOS system clang has no OpenMP; must be
+# explicit. Linux/Windows get OpenMP from the compiler package itself.
+[feature.cpu.target.osx-64.dependencies]
+llvm-openmp = "*"
+
+[feature.cpu.target.osx-arm64.dependencies]
+llvm-openmp = "*"
+
+[feature.cpu.tasks]
+configure   = "cmake --preset non-cuda"
+build       = "cmake --build build"
+test-cpp    = "ctest --output-on-failure --test-dir build"
+test-python = {cmd = "pytest -v tests", env = {PYTHONPATH = "build"}}
+test        = {depends-on = ["test-cpp", "test-python"]}
+install     = "cmake --install build"
+uninstall   = "cmake --build build --target uninstall"
+
+# ── cuda12 feature ─────────────────────────────────────────────────────────
+[feature.cuda12]
+platforms = ["linux-64", "win-64"]
+
+# tells the solver the host machine provides a CUDA 12 driver
+[feature.cuda12.system-requirements]
+cuda = "12"
+
+# build tools (conda: build): cxx-compiler + nvcc
+# host dep   (conda: host):   cuda-cudart-dev — CUDA runtime headers + link stubs
+[feature.cuda12.dependencies]
+cxx-compiler    = "*"
+cuda-compiler   = ">=12,<13"
+cuda-cudart-dev = "*"
+
+[feature.cuda12.tasks]
+configure   = "cmake --preset cuda12"
+build       = "cmake --build build-cuda12"
+test-cpp    = "ctest --output-on-failure --test-dir build-cuda12"
+test-python = {cmd = "pytest -v tests", env = {PYTHONPATH = "build-cuda12"}}
+test        = {depends-on = ["test-cpp", "test-python"]}
+install     = "cmake --install build-cuda12"
+
+# ── cuda13 feature ─────────────────────────────────────────────────────────
+[feature.cuda13]
+platforms = ["linux-64", "win-64"]
+
+[feature.cuda13.system-requirements]
+cuda = "13"
+
+[feature.cuda13.dependencies]
+cxx-compiler    = "*"
+cuda-compiler   = ">=13,<14"
+cuda-cudart-dev = "*"
+
+[feature.cuda13.tasks]
+configure   = "cmake --preset cuda13"
+build       = "cmake --build build-cuda13"
+test-cpp    = "ctest --output-on-failure --test-dir build-cuda13"
+test-python = {cmd = "pytest -v tests", env = {PYTHONPATH = "build-cuda13"}}
+test        = {depends-on = ["test-cpp", "test-python"]}
+install     = "cmake --install build-cuda13"
+
+# ── docs feature ───────────────────────────────────────────────────────────
+[feature.docs]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
+
+# build tool + host deps for building the library (needed for Sphinx auto-examples)
+[feature.docs.dependencies]
+cxx-compiler         = "*"
+doxygen              = "*"
+graphviz             = "*"
+sphinx               = ">=8,<9"
+breathe              = ">=4,<5"
+sphinx-gallery       = "*"
+sphinx-design        = "*"
+furo                 = "*"
+sphinxcontrib-bibtex = "*"
+matplotlib           = "*"
+
+[feature.docs.target.osx-64.dependencies]
+llvm-openmp = "*"
+
+[feature.docs.target.osx-arm64.dependencies]
+llvm-openmp = "*"
+
+[feature.docs.tasks]
+configure-docs = "cmake --preset docs"
+build-doxygen  = "cmake --build docs/_build_doxygen --target doxygen-docs"
+build-docs     = {cmd = "cd docs && make html", depends-on = ["build-doxygen"]}
+
+# ── Environments ───────────────────────────────────────────────────────────
+[environments]
+default = {features = ["cpu"]}
+cuda12  = {features = ["cuda12"]}
+cuda13  = {features = ["cuda13"]}
+docs    = {features = ["docs"]}

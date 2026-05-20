@@ -4,6 +4,7 @@ build*/*
 tests/__pycache__/*
 output/
 .vscode/
+.claude/
 
 # Prerequisites
 *.d

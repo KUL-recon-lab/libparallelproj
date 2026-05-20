@@ -41,6 +41,22 @@
         "INSTALL_DEVEL": "ON",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/install"
       }
+    },
+    {
+      "name": "cuda12",
+      "inherits": "cuda",
+      "binaryDir": "${sourceDir}/build-cuda12",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install-cuda12"
+      }
+    },
+    {
+      "name": "cuda13",
+      "inherits": "cuda",
+      "binaryDir": "${sourceDir}/build-cuda13",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install-cuda13"
+      }
     }
   ]
 }
