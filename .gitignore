@@ -5,6 +5,9 @@ tests/__pycache__/*
 output/
 .vscode/
 .claude/
+.coverage
+coverage_cpp.info
+coverage_cpp_filtered.info
 
 # Prerequisites
 *.d

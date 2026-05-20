@@ -2,8 +2,7 @@ name: Build and Test
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - 'src/*_worker.h'
       - 'src/*.cpp'
@@ -11,6 +10,8 @@ on:
       - 'tests/*.py'
       - 'python/bindings.cpp'
       - 'CMakeLists.txt'
+      - 'pixi.toml'
+      - 'pixi.lock'
       - '.github/workflows/build_and_test.yml'
   pull_request:
     paths:
@@ -20,97 +21,62 @@ on:
       - 'tests/*.py'
       - 'python/bindings.cpp'
       - 'CMakeLists.txt'
+      - 'pixi.toml'
+      - 'pixi.lock'
       - '.github/workflows/build_and_test.yml'
 
 jobs:
   build-and-test:
     runs-on: ${{ matrix.os }}
-
-    env:
-      BUILD_DIR: build
-
     strategy:
       fail-fast: true
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python:
-          - "3.12"
-          - "3.x"   # means: latest available 3.* from conda-forge
 
     steps:
-      # Step 0: Setup MSVC Developer Command Prompt for Windows
-      # without that step we don't have access no the Ninja generator
-      - name: Setup MSVC Developer Command Prompt
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      # Step 1: Checkout the repository
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
 
-      # Step 2: Set up Micromamba
-      - uses: mamba-org/setup-micromamba@v2
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0
         with:
-          environment-file: environment.yml
-          micromamba-version: latest
-          init-shell: bash
-          post-cleanup: all
-          create-args: >-
-            ${{ matrix.python == '3.x' && 'python>=3,<4' || format('python={0}', matrix.python) }}
-            pip
+          environments: default
+          cache: true
 
-      # Step 2b: Show python version for debugging purposes
-      - name: Show python version
-        shell: bash -l {0}
-        run: python -V
+      # On Linux we add --coverage flags so gcov data is generated during tests.
+      # On other platforms a plain configure is sufficient.
+      - name: Configure (Linux, with coverage flags)
+        if: runner.os == 'Linux'
+        run: pixi run -e default configure-coverage
 
-      # Step 2c: Install coverage tools (Ubuntu only)
-      - name: Install coverage tools
-        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
-        shell: bash -l {0}
-        run: |
-          micromamba install -y -c conda-forge lcov pytest-cov gcovr
+      - name: Configure (Windows / macOS)
+        if: runner.os != 'Linux'
+        run: pixi run -e default configure
 
-      # Step 3: Configure and Build with CMake and Ninja
-      - name: Configure and Build
-        shell: bash -el {0}
-        run: |
-          micromamba activate libparallelproj
-          cmake --preset non-cuda -B $BUILD_DIR ${{ matrix.os == 'ubuntu-latest' && matrix.python == '3.12' && '-DCMAKE_CXX_FLAGS="--coverage" -DCMAKE_C_FLAGS="--coverage"' || '' }}
-          cmake --build $BUILD_DIR
+      - name: Build
+        run: pixi run -e default build
 
-      # Step 4: Run Tests
-      - name: Run Tests
-        shell: bash -el {0}
-        run: |
-          micromamba activate libparallelproj
-          ctest --output-on-failure --test-dir $BUILD_DIR
+      - name: Run C++ tests
+        run: pixi run -e default test-cpp
 
-      # Step 4b: Run python tests (should be skipped if no physical GPU is available)
-      - name: Run python tests
-        shell: bash -el {0}
-        env:
-          PYTHONPATH: ${{ env.BUILD_DIR }}
-        run: |
-          micromamba activate libparallelproj
-          pytest -v ${{ matrix.os == 'ubuntu-latest' && matrix.python == '3.12' && '--cov=parallelproj_core --cov-report=xml:coverage_python.xml --cov-report=term' || '' }} tests
+      # On Linux run pytest with coverage reporting; elsewhere run it plain.
+      - name: Run Python tests with coverage (Linux)
+        if: runner.os == 'Linux'
+        run: pixi run -e default test-python-cov
 
-      # Step 4c: Generate C++ coverage report
-      - name: Generate C++ coverage report
-        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
-        shell: bash -el {0}
-        run: |
-          micromamba activate libparallelproj
-          lcov --capture --directory $BUILD_DIR --output-file coverage_cpp.info
-          lcov --remove coverage_cpp.info '/usr/*' '*/tests/*' --output-file coverage_cpp_filtered.info
-          lcov --list coverage_cpp_filtered.info
+      - name: Run Python tests (Windows / macOS)
+        if: runner.os != 'Linux'
+        run: pixi run -e default test-python
 
-      # Step 4d: Upload coverage to Codecov
-      - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+      - name: Collect C++ coverage report (Linux)
+        if: runner.os == 'Linux'
+        run: pixi run -e default collect-coverage-cpp
+
+      - name: Upload coverage to Codecov (Linux)
+        if: runner.os == 'Linux'
         uses: codecov/codecov-action@v4
         with:
           files: ./coverage_cpp_filtered.info,./coverage_python.xml
@@ -119,24 +85,16 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
-      # Step 5: Install
       - name: Install
-        shell: bash -el {0}
-        run: |
-          micromamba activate libparallelproj
-          cmake --install $BUILD_DIR
+        run: pixi run -e default install
 
-      # Step 6: Uninstall
       - name: Uninstall
-        shell: bash -el {0}
-        run: |
-          micromamba activate libparallelproj
-          cmake --build $BUILD_DIR --target uninstall
+        run: pixi run -e default uninstall
 
       - name: Upload build artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ runner.os }}-py${{ matrix.python }}
-          path: ${{ env.BUILD_DIR }}/**
+          name: build-${{ runner.os }}
+          path: build/**
           if-no-files-found: warn

@@ -19,8 +19,10 @@ array-api-compat = "*"
 # Pure test deps — not needed to build or run the library itself.
 # pytorch resolves to the CPU build in the default env; in cuda12/cuda13 envs
 # the solver picks the CUDA-enabled build automatically via system-requirements.
+# pytest-cov is used in CI to generate Python coverage reports.
 [feature.test.dependencies]
 pytest           = "*"
+pytest-cov       = "*"
 array-api-strict = "*"
 pytorch          = "*"
 
@@ -37,14 +39,22 @@ llvm-openmp = "*"
 [feature.cpu.target.osx-arm64.dependencies]
 llvm-openmp = "*"
 
+# lcov is Linux-only; used in CI to collect C++ coverage after a coverage build
+[feature.cpu.target.linux-64.dependencies]
+lcov = "*"
+
 [feature.cpu.tasks]
-configure   = "cmake --preset non-cuda"
-build       = "cmake --build build"
-test-cpp    = "ctest --output-on-failure --test-dir build"
-test-python = {cmd = "pytest -v tests", env = {PYTHONPATH = "build"}}
-test        = {depends-on = ["test-cpp", "test-python"]}
-install     = "cmake --install build"
-uninstall   = "cmake --build build --target uninstall"
+configure          = "cmake --preset non-cuda"
+# configure-coverage adds --coverage flags; used only in CI on Linux
+configure-coverage = "cmake --preset non-cuda -DCMAKE_CXX_FLAGS=--coverage -DCMAKE_C_FLAGS=--coverage"
+build              = "cmake --build build"
+test-cpp           = "ctest --output-on-failure --test-dir build"
+test-python        = {cmd = "pytest -v tests", env = {PYTHONPATH = "build"}}
+test-python-cov    = {cmd = "pytest --cov=parallelproj_core --cov-report=xml:coverage_python.xml --cov-report=term tests", env = {PYTHONPATH = "build"}}
+test               = {depends-on = ["test-cpp", "test-python"]}
+collect-coverage-cpp = "lcov --capture --directory build --output-file coverage_cpp.info && lcov --remove coverage_cpp.info '/usr/*' '*/tests/*' --output-file coverage_cpp_filtered.info && lcov --list coverage_cpp_filtered.info"
+install            = "cmake --install build"
+uninstall          = "cmake --build build --target uninstall"
 
 # ── cuda12 feature ─────────────────────────────────────────────────────────
 [feature.cuda12]

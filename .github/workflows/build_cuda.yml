@@ -11,6 +11,8 @@ on:
       - 'tests/*.py'
       - 'python/bindings.cpp'
       - 'CMakeLists.txt'
+      - 'pixi.toml'
+      - 'pixi.lock'
       - '.github/workflows/build_cuda.yml'
   pull_request:
     paths:
@@ -21,6 +23,8 @@ on:
       - 'tests/*.py'
       - 'python/bindings.cpp'
       - 'CMakeLists.txt'
+      - 'pixi.toml'
+      - 'pixi.lock'
       - '.github/workflows/build_cuda.yml'
 
 jobs:
@@ -30,118 +34,46 @@ jobs:
       fail-fast: true
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python: ["3.12"]
-        cuda:
-          - version: "12.0"
-            env_file: environment_cuda12_build_only.yml
-            env_name: libparallelproj_cuda12_build_only
-          - version: "13.x"
-            env_file: environment_cuda13_build_only.yml
-            env_name: libparallelproj_cuda13_build_only
+        pixi-env: [cuda12, cuda13]
         exclude:
+          # CUDA 12 support was dropped for Windows in conda-forge
           - os: windows-latest
-            cuda:
-              version: "12.0"
-
-    env:
-      ENV_NAME: ${{ matrix.cuda.env_name }}
-      BUILD_DIR: ${{ format('build_{0}_cuda{1}_py{2}', matrix.os, matrix.cuda.version, matrix.python) }}
+            pixi-env: cuda12
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Set up Micromamba
-        uses: mamba-org/setup-micromamba@v2
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0
         with:
-          environment-file: ${{ matrix.cuda.env_file }}
-          micromamba-version: latest
-          init-shell: bash powershell
-          post-cleanup: all
-          create-args: >-
-            ${{ format('python={0}', matrix.python) }}
-            pip
+          environments: ${{ matrix.pixi-env }}
+          cache: true
 
-      - name: Setup MSVC Developer Command Prompt
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Debug (Linux)
-        if: runner.os == 'Linux'
-        shell: bash -l {0}
+      - name: Show compiler and CUDA versions
         run: |
-          micromamba activate "$ENV_NAME"
-          python -V
-          which c++ && c++ --version
-          which nvcc && nvcc --version
-          nvcc --list-gpu-arch || true
+          pixi run -e ${{ matrix.pixi-env }} python -V
+          pixi run -e ${{ matrix.pixi-env }} nvcc --version
 
-      - name: Debug (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          micromamba activate $env:ENV_NAME
-          python -V
-          where.exe cl
-          cl /Bv
-          where.exe nvcc
-          nvcc --version
-          nvcc --list-gpu-arch
+      - name: Configure
+        run: pixi run -e ${{ matrix.pixi-env }} configure
 
-      - name: Configure & Build (Linux)
-        if: runner.os == 'Linux'
-        shell: bash -l {0}
-        run: |
-          micromamba activate "$ENV_NAME"
-          cmake --preset cuda -B "$BUILD_DIR"
-          cmake --build "$BUILD_DIR" --config Release
+      - name: Build
+        run: pixi run -e ${{ matrix.pixi-env }} build
 
-      - name: Configure & Build (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          micromamba activate $env:ENV_NAME
-
-          $cl   = (Get-Command cl.exe).Source
-          $nvcc = (Get-Command nvcc.exe).Source
-          $ninja = (Get-Command ninja.exe).Source
-
-          Write-Host "cl   = $cl"
-          Write-Host "nvcc = $nvcc"
-          Write-Host "ninja= $ninja"
-
-          cmake --preset cuda -B $env:BUILD_DIR -G Ninja `
-            -DCMAKE_MAKE_PROGRAM="$ninja" `
-            -DCMAKE_CXX_COMPILER="$cl" `
-            -DCMAKE_CUDA_COMPILER="$nvcc" `
-            -DCMAKE_CUDA_HOST_COMPILER="$cl"
-
-          cmake --build $env:BUILD_DIR --config Release
-
-      - name: Test (Linux)
-        if: runner.os == 'Linux'
-        shell: bash -l {0}
-        env:
-          PYTHONPATH: ${{ env.BUILD_DIR }}
-        run: |
-          micromamba activate "$ENV_NAME"
-          pytest -v tests
-
-      - name: Test (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          PYTHONPATH: ${{ env.BUILD_DIR }}
-        run: |
-          micromamba activate $env:ENV_NAME
-          pytest -v tests
+      # C++ CUDA tests require a physical GPU; CI runners have none so we only
+      # run the Python test suite (conftest.py skips all tests when cuda_enabled
+      # but no device is detected).
+      - name: Run Python tests
+        run: pixi run -e ${{ matrix.pixi-env }} test-python
 
       - name: Upload build artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cuda-build-${{ runner.os }}-cuda${{ matrix.cuda.version }}-py${{ matrix.python }}
-          path: ${{ env.BUILD_DIR }}/**
+          name: cuda-build-${{ runner.os }}-${{ matrix.pixi-env }}
+          path: build-${{ matrix.pixi-env }}/**
           if-no-files-found: warn
