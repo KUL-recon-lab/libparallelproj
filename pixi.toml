@@ -126,6 +126,7 @@ sphinx-design        = "*"
 furo                 = "*"
 sphinxcontrib-bibtex = "*"
 matplotlib           = "*"
+pytorch              = ">=2,<3"
 
 [feature.docs.target.osx-64.dependencies]
 llvm-openmp = "*"
