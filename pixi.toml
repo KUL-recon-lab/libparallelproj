@@ -3,10 +3,10 @@ name = "libparallelproj"
 channels = ["conda-forge"]
 platforms = ["linux-64", "win-64", "osx-64", "osx-arm64"]
 
-# ── Default feature: shared build infrastructure + test/runtime deps ───────
-# cmake/ninja are "build tools" (conda: build), but needed in every environment
-# python/nanobind are "host deps" (conda: host), linked against when compiling
-# numpy/pytest/* are test/runtime deps
+# ── Default feature: build infrastructure + true runtime deps ──────────────
+# cmake/ninja  — build tools   (conda: build)
+# python/nanobind — host deps  (conda: host), linked against when compiling
+# numpy/array-api-compat — runtime deps the installed library actually needs
 [dependencies]
 cmake            = ">=3.18"
 ninja            = "*"
@@ -14,8 +14,15 @@ python           = ">=3.12,<4"
 nanobind         = "*"
 numpy            = "*"
 array-api-compat = "*"
-array-api-strict = "*"
+
+# ── test feature ───────────────────────────────────────────────────────────
+# Pure test deps — not needed to build or run the library itself.
+# pytorch resolves to the CPU build in the default env; in cuda12/cuda13 envs
+# the solver picks the CUDA-enabled build automatically via system-requirements.
+[feature.test.dependencies]
 pytest           = "*"
+array-api-strict = "*"
+pytorch          = "*"
 
 # ── cpu feature ────────────────────────────────────────────────────────────
 # build tool (conda: build)
@@ -49,10 +56,12 @@ cuda = "12"
 
 # build tools (conda: build): cxx-compiler + nvcc
 # host dep   (conda: host):   cuda-cudart-dev — CUDA runtime headers + link stubs
+# cupy       (test/runtime):  GPU array backend for testing on real hardware
 [feature.cuda12.dependencies]
 cxx-compiler    = "*"
 cuda-compiler   = ">=12,<13"
 cuda-cudart-dev = "*"
+cupy            = "*"
 
 [feature.cuda12.tasks]
 configure   = "cmake --preset cuda12"
@@ -73,6 +82,7 @@ cuda = "13"
 cxx-compiler    = "*"
 cuda-compiler   = ">=13,<14"
 cuda-cudart-dev = "*"
+cupy            = "*"
 
 [feature.cuda13.tasks]
 configure   = "cmake --preset cuda13"
@@ -112,7 +122,7 @@ build-docs     = {cmd = "cd docs && make html", depends-on = ["build-doxygen"]}
 
 # ── Environments ───────────────────────────────────────────────────────────
 [environments]
-default = {features = ["cpu"]}
-cuda12  = {features = ["cuda12"]}
-cuda13  = {features = ["cuda13"]}
+default = {features = ["cpu", "test"]}
+cuda12  = {features = ["cuda12", "test"]}
+cuda13  = {features = ["cuda13", "test"]}
 docs    = {features = ["docs"]}
