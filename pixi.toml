@@ -81,6 +81,12 @@ cuda-compiler   = ">=12,<13"
 cuda-cudart-dev = "*"
 cupy            = "*"
 
+# On Windows the CUDA installer sets a system-wide CUDA_PATH (e.g. 12.4) that
+# takes precedence over the conda env's CUDA toolkit. Override it here so that
+# CuPy's NVRTC uses the conda-managed CUDA headers instead of the system ones.
+[feature.cuda12.target.win-64.activation.env]
+CUDA_PATH = "$CONDA_PREFIX/Library"
+
 [feature.cuda12.tasks]
 configure   = "cmake --preset cuda12"
 build       = "cmake --build build-cuda12"
@@ -101,6 +107,9 @@ cxx-compiler    = "*"
 cuda-compiler   = ">=13,<14"
 cuda-cudart-dev = "*"
 cupy            = "*"
+
+[feature.cuda13.target.win-64.activation.env]
+CUDA_PATH = "$CONDA_PREFIX/Library"
 
 [feature.cuda13.tasks]
 configure   = "cmake --preset cuda13"
