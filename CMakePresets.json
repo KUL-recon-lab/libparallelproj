@@ -6,6 +6,7 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
         "USE_CUDA": "OFF",
         "BUILD_LIBRARY": "ON",
         "BUILD_TESTS": "ON",
@@ -19,6 +20,7 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/docs/_build_doxygen",
       "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
         "USE_CUDA": "OFF",
         "BUILD_LIBRARY": "ON",
         "BUILD_TESTS": "OFF",
@@ -33,6 +35,7 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
         "USE_CUDA": "ON",
         "CMAKE_CUDA_ARCHITECTURES": "native",
         "BUILD_LIBRARY": "ON",
