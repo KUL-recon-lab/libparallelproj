@@ -44,7 +44,9 @@ print(f"VRAM: free {free_vram / GiB:.2f} / total {total_vram / GiB:.2f} GiB, "
 # 1. choose the number of LORs: max 75% of RAM for all host arrays combined,
 #    and the 12-byte-per-LOR device copy of xstart must exceed total VRAM
 # ---------------------------------------------------------------------------
-num_lors = int(RAM_FRACTION * total_ram) // HOST_BYTES_PER_LOR
+
+# factor 2 needed to trigger error on WSL
+num_lors = int(2* RAM_FRACTION * total_ram) // HOST_BYTES_PER_LOR
 dev_request = num_lors * DEV_BYTES_PER_LOR
 
 print(f"using {num_lors:,} LORs:")
@@ -100,7 +102,7 @@ del xstart, xend, img_fwd
 free_vram, _ = cp.cuda.runtime.memGetInfo()
 print(f"\nVRAM after failed call: free {free_vram / GiB:.2f} GiB")
 
-n_ok = 1000
+n_ok = int(1e6)
 xstart_ok = rng.random((n_ok, 3), dtype=np.float32) * 16.0 - 8.0
 xend_ok = rng.random((n_ok, 3), dtype=np.float32) * 16.0 - 8.0
 img_fwd_ok = np.zeros(n_ok, dtype=np.float32)
