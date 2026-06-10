@@ -3,6 +3,47 @@
 #include <cstddef>
 #include <cuda_runtime.h>
 #include <stdexcept>
+#include <string>
+
+// ---------------------------------------------------------------------------
+// RAII wrapper for CUDA device memory.
+// When owns == true the destructor calls cudaFree(ptr), so device memory is
+// released both on the normal path and during stack unwinding on exceptions.
+// ---------------------------------------------------------------------------
+template <typename T>
+struct CudaDevicePtr {
+    T*   ptr  = nullptr;
+    bool owns = false;
+
+    CudaDevicePtr() = default;
+    // Non-copyable
+    CudaDevicePtr(const CudaDevicePtr&)            = delete;
+    CudaDevicePtr& operator=(const CudaDevicePtr&) = delete;
+    // Movable
+    CudaDevicePtr(CudaDevicePtr&& other) noexcept
+        : ptr(other.ptr), owns(other.owns)
+    { other.ptr = nullptr; other.owns = false; }
+    CudaDevicePtr& operator=(CudaDevicePtr&& other) noexcept {
+        if (this != &other) {
+            if (owns && ptr) cudaFree(ptr);
+            ptr = other.ptr; owns = other.owns;
+            other.ptr = nullptr; other.owns = false;
+        }
+        return *this;
+    }
+    ~CudaDevicePtr() { if (owns && ptr) cudaFree(ptr); }
+
+    T* get() const { return ptr; }
+};
+
+// Checked device-to-host copy. Throws std::runtime_error on failure.
+inline void cuda_memcpy_d2h(void* dst, const void* src, std::size_t size)
+{
+    cudaError_t err = cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost);
+    if (err != cudaSuccess)
+        throw std::runtime_error(
+            std::string("cudaMemcpy (D2H) failed: ") + cudaGetErrorString(err));
+}
 
 // Derive nvoxels = img_dim[0]*img_dim[1]*img_dim[2] when img_dim may be a
 // host, CUDA managed or device pointer. Throws std::invalid_argument or

@@ -43,7 +43,10 @@ void joseph3d_back(const float *lor_start,
     // Set the CUDA device
     if (device_id >= 0)
     {
-        cudaSetDevice(device_id);
+        cudaError_t set_err = cudaSetDevice(device_id);
+        if (set_err != cudaSuccess)
+            throw std::runtime_error(
+                std::string("cudaSetDevice failed: ") + cudaGetErrorString(set_err));
     }
 
     /////////////////////////////////////////////////////////////////
@@ -53,39 +56,32 @@ void joseph3d_back(const float *lor_start,
     /////////////////////////////////////////////////////////////////
 
     // Handle lor_start (read mostly)
-    float *d_lor_start = nullptr;
-    bool free_lor_start = false;
-    handle_cuda_input_array(lor_start, &d_lor_start, sizeof(float) * num_lors * 3, free_lor_start, device_id, cudaMemAdviseSetReadMostly);
+    CudaDevicePtr<float> d_lor_start;
+    handle_cuda_input_array(lor_start, &d_lor_start.ptr, sizeof(float) * num_lors * 3, d_lor_start.owns, device_id, cudaMemAdviseSetReadMostly);
 
     // Handle lor_end (read mostly)
-    float *d_lor_end = nullptr;
-    bool free_lor_end = false;
-    handle_cuda_input_array(lor_end, &d_lor_end, sizeof(float) * num_lors * 3, free_lor_end, device_id, cudaMemAdviseSetReadMostly);
+    CudaDevicePtr<float> d_lor_end;
+    handle_cuda_input_array(lor_end, &d_lor_end.ptr, sizeof(float) * num_lors * 3, d_lor_end.owns, device_id, cudaMemAdviseSetReadMostly);
 
     // Handle image (write access)
-    float *d_image = nullptr;
-    bool free_image = false;
-    handle_cuda_input_array(image, &d_image, sizeof(float) * nvoxels, free_image, device_id, cudaMemAdviseSetAccessedBy);
+    CudaDevicePtr<float> d_image;
+    handle_cuda_input_array(image, &d_image.ptr, sizeof(float) * nvoxels, d_image.owns, device_id, cudaMemAdviseSetAccessedBy);
 
     // Handle image_origin (read mostly)
-    float *d_image_origin = nullptr;
-    bool free_image_origin = false;
-    handle_cuda_input_array(image_origin, &d_image_origin, sizeof(float) * 3, free_image_origin, device_id, cudaMemAdviseSetReadMostly);
+    CudaDevicePtr<float> d_image_origin;
+    handle_cuda_input_array(image_origin, &d_image_origin.ptr, sizeof(float) * 3, d_image_origin.owns, device_id, cudaMemAdviseSetReadMostly);
 
     // Handle voxel_size (read mostly)
-    float *d_voxel_size = nullptr;
-    bool free_voxel_size = false;
-    handle_cuda_input_array(voxel_size, &d_voxel_size, sizeof(float) * 3, free_voxel_size, device_id, cudaMemAdviseSetReadMostly);
+    CudaDevicePtr<float> d_voxel_size;
+    handle_cuda_input_array(voxel_size, &d_voxel_size.ptr, sizeof(float) * 3, d_voxel_size.owns, device_id, cudaMemAdviseSetReadMostly);
 
     // Handle projection_values (read mostly)
-    float *d_projection_values = nullptr;
-    bool free_projection_values = false;
-    handle_cuda_input_array(projection_values, &d_projection_values, sizeof(float) * num_lors, free_projection_values, device_id, cudaMemAdviseSetReadMostly);
+    CudaDevicePtr<float> d_projection_values;
+    handle_cuda_input_array(projection_values, &d_projection_values.ptr, sizeof(float) * num_lors, d_projection_values.owns, device_id, cudaMemAdviseSetReadMostly);
 
     // Handle image_dim (read mostly)
-    int *d_image_dim = nullptr;
-    bool free_image_dim = false;
-    handle_cuda_input_array(image_dim, &d_image_dim, sizeof(int) * 3, free_image_dim, device_id, cudaMemAdviseSetReadMostly);
+    CudaDevicePtr<int> d_image_dim;
+    handle_cuda_input_array(image_dim, &d_image_dim.ptr, sizeof(int) * 3, d_image_dim.owns, device_id, cudaMemAdviseSetReadMostly);
 
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
@@ -101,34 +97,24 @@ void joseph3d_back(const float *lor_start,
 #endif
 
     int num_blocks = (int)((num_lors + threads_per_block - 1) / threads_per_block);
-    joseph3d_back_kernel<<<num_blocks, threads_per_block>>>(d_lor_start, d_lor_end, d_image,
-                                                            d_image_origin, d_voxel_size,
-                                                            d_projection_values, num_lors, d_image_dim);
-    cudaDeviceSynchronize();
+    joseph3d_back_kernel<<<num_blocks, threads_per_block>>>(d_lor_start.ptr, d_lor_end.ptr, d_image.ptr,
+                                                            d_image_origin.ptr, d_voxel_size.ptr,
+                                                            d_projection_values.ptr, num_lors, d_image_dim.ptr);
+    cudaError_t launch_err = cudaGetLastError();
+    if (launch_err != cudaSuccess)
+        throw std::runtime_error(
+            std::string("CUDA kernel launch failed: ") + cudaGetErrorString(launch_err));
+    cudaError_t sync_err = cudaDeviceSynchronize();
+    if (sync_err != cudaSuccess)
+        throw std::runtime_error(
+            std::string("CUDA kernel error: ") + cudaGetErrorString(sync_err));
 
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
-    // free device memory if needed
+    // copy result back to host if needed; device memory freed by destructors
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
 
-    // Free device memory if it was allocated
-    if (free_lor_start)
-        cudaFree(d_lor_start);
-    if (free_lor_end)
-        cudaFree(d_lor_end);
-    if (free_image)
-    {
-        // Copy the result back to the host
-        cudaMemcpy(image, d_image, sizeof(float) * nvoxels, cudaMemcpyDeviceToHost);
-        cudaFree(d_image);
-    }
-    if (free_image_origin)
-        cudaFree(d_image_origin);
-    if (free_voxel_size)
-        cudaFree(d_voxel_size);
-    if (free_projection_values)
-        cudaFree(d_projection_values);
-    if (free_image_dim)
-        cudaFree(d_image_dim);
+    if (d_image.owns)
+        cuda_memcpy_d2h(image, d_image.ptr, sizeof(float) * nvoxels);
 }

@@ -1,5 +1,6 @@
 #include "cuda_utils.h"
 #include <iostream>
+#include <stdexcept>
 
 #if CUDART_VERSION >= 13000
 static inline cudaMemLocation make_mem_location(int device_id) {
@@ -42,8 +43,18 @@ void handle_cuda_input_array(const T *input_ptr, T **device_ptr,
       (attr.type == cudaMemoryTypeManaged || attr.type == cudaMemoryTypeDevice)) {
     *device_ptr = const_cast<T *>(input_ptr);
   } else {
-    cudaMalloc(device_ptr, size);
-    cudaMemcpy(*device_ptr, input_ptr, size, cudaMemcpyHostToDevice);
+    cudaError_t malloc_err = cudaMalloc(device_ptr, size);
+    if (malloc_err != cudaSuccess) {
+      throw std::runtime_error(
+          std::string("cudaMalloc failed: ") + cudaGetErrorString(malloc_err));
+    }
+    cudaError_t memcpy_err = cudaMemcpy(*device_ptr, input_ptr, size, cudaMemcpyHostToDevice);
+    if (memcpy_err != cudaSuccess) {
+      cudaFree(*device_ptr);
+      *device_ptr = nullptr;
+      throw std::runtime_error(
+          std::string("cudaMemcpy (H2D) failed: ") + cudaGetErrorString(memcpy_err));
+    }
     free_flag = true;
   }
 }
@@ -72,8 +83,18 @@ void handle_cuda_input_array(T *input_ptr, T **device_ptr,
       (attr.type == cudaMemoryTypeManaged || attr.type == cudaMemoryTypeDevice)) {
     *device_ptr = input_ptr;
   } else {
-    cudaMalloc(device_ptr, size);
-    cudaMemcpy(*device_ptr, input_ptr, size, cudaMemcpyHostToDevice);
+    cudaError_t malloc_err = cudaMalloc(device_ptr, size);
+    if (malloc_err != cudaSuccess) {
+      throw std::runtime_error(
+          std::string("cudaMalloc failed: ") + cudaGetErrorString(malloc_err));
+    }
+    cudaError_t memcpy_err = cudaMemcpy(*device_ptr, input_ptr, size, cudaMemcpyHostToDevice);
+    if (memcpy_err != cudaSuccess) {
+      cudaFree(*device_ptr);
+      *device_ptr = nullptr;
+      throw std::runtime_error(
+          std::string("cudaMemcpy (H2D) failed: ") + cudaGetErrorString(memcpy_err));
+    }
     free_flag = true;
   }
 }
