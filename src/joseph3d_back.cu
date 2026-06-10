@@ -45,8 +45,11 @@ void joseph3d_back(const float *lor_start,
     {
         cudaError_t set_err = cudaSetDevice(device_id);
         if (set_err != cudaSuccess)
+        {
+            cudaGetLastError(); // clear last-error state before throwing
             throw std::runtime_error(
                 std::string("cudaSetDevice failed: ") + cudaGetErrorString(set_err));
+        }
     }
 
     /////////////////////////////////////////////////////////////////
@@ -97,6 +100,12 @@ void joseph3d_back(const float *lor_start,
 #endif
 
     int num_blocks = (int)((num_lors + threads_per_block - 1) / threads_per_block);
+    // Flush any stale (non-sticky) last-error state - e.g. left behind by a
+    // previously failed CUDA call of the CALLER (other libraries, earlier
+    // failed calls into this library, ...). CUDA only resets the last error
+    // when it is read, so without this flush the launch check below would
+    // misattribute such a stale error to this kernel launch.
+    cudaGetLastError();
     joseph3d_back_kernel<<<num_blocks, threads_per_block>>>(d_lor_start.ptr, d_lor_end.ptr, d_image.ptr,
                                                             d_image_origin.ptr, d_voxel_size.ptr,
                                                             d_projection_values.ptr, num_lors, d_image_dim.ptr);
@@ -106,8 +115,11 @@ void joseph3d_back(const float *lor_start,
             std::string("CUDA kernel launch failed: ") + cudaGetErrorString(launch_err));
     cudaError_t sync_err = cudaDeviceSynchronize();
     if (sync_err != cudaSuccess)
+    {
+        cudaGetLastError(); // clear last-error state before throwing
         throw std::runtime_error(
             std::string("CUDA kernel error: ") + cudaGetErrorString(sync_err));
+    }
 
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////

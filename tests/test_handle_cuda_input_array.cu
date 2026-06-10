@@ -92,6 +92,19 @@ bool test_oversized_alloc_throws(int device_id)
         return false;
     }
 
+    // The library must clear the CUDA runtime's last-error state before
+    // throwing. CUDA only resets this state when it is read, so a stale
+    // error would be misattributed to the kernel launch check of a later,
+    // successful call (observed in practice: a tiny projection right after
+    // a failed one raised "CUDA kernel launch failed: out of memory").
+    cudaError_t stale = cudaGetLastError();
+    if (stale != cudaSuccess)
+    {
+        std::cerr << "  FAIL: last-error state not cleared before throwing: "
+                  << cudaGetErrorString(stale) << std::endl;
+        return false;
+    }
+
     std::cout << "  PASS: oversized allocation throws and leaves clean state" << std::endl;
     return true;
 }
@@ -101,11 +114,10 @@ bool test_oversized_alloc_throws(int device_id)
 // ---------------------------------------------------------------------------
 bool test_context_recovers(int /*device_id*/)
 {
-    // A failed cudaMalloc sets the runtime's last-error state but does not
-    // corrupt the context. Clear the error state and verify that a small,
-    // real allocation succeeds afterwards.
-    cudaGetLastError(); // clear last-error state left by the failed cudaMalloc
-
+    // A failed cudaMalloc does not corrupt the context, and the library is
+    // responsible for clearing the last-error state itself (checked in
+    // test 1) - so WITHOUT any cleanup here, a small real allocation must
+    // succeed afterwards.
     float *small_ptr = nullptr;
     cudaError_t err = cudaMalloc(&small_ptr, 16 * sizeof(float));
     if (err != cudaSuccess)

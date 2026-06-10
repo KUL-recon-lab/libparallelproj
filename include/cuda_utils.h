@@ -77,8 +77,11 @@ inline void cuda_memcpy_d2h(void* dst, const void* src, std::size_t size)
 {
     cudaError_t err = cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost);
     if (err != cudaSuccess)
+    {
+        cudaGetLastError(); // clear last-error state before throwing
         throw std::runtime_error(
             std::string("cudaMemcpy (D2H) failed: ") + cudaGetErrorString(err));
+    }
 }
 
 // Derive nvoxels = img_dim[0]*img_dim[1]*img_dim[2] when img_dim may be a
@@ -104,7 +107,10 @@ inline std::size_t cuda_nvoxels_from_img_dim(const int *img_dim_ptr)
     {
         err = cudaMemcpy(h_img_dim, img_dim_ptr, 3 * sizeof(int), cudaMemcpyDeviceToHost);
         if (err != cudaSuccess)
+        {
+            cudaGetLastError(); // clear last-error state before throwing
             throw std::runtime_error(std::string("nvoxels_from_img_dim: cudaMemcpy failed: ") + cudaGetErrorString(err));
+        }
     }
     else
     {

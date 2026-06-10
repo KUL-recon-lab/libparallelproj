@@ -71,6 +71,10 @@ void handle_cuda_input_array(const T *input_ptr, T **device_ptr,
   } else {
     cudaError_t malloc_err = cudaMalloc(device_ptr, size);
     if (malloc_err != cudaSuccess) {
+      // Clear the runtime's last-error state before throwing: CUDA only
+      // resets it via cudaGetLastError(), so a stale error would otherwise
+      // be misreported by the kernel launch check of a LATER, successful call.
+      cudaGetLastError();
       throw std::runtime_error(
           std::string("cudaMalloc failed: ") + cudaGetErrorString(malloc_err));
     }
@@ -78,6 +82,7 @@ void handle_cuda_input_array(const T *input_ptr, T **device_ptr,
     if (memcpy_err != cudaSuccess) {
       cudaFree(*device_ptr);
       *device_ptr = nullptr;
+      cudaGetLastError(); // clear last-error state before throwing (see above)
       throw std::runtime_error(
           std::string("cudaMemcpy (H2D) failed: ") + cudaGetErrorString(memcpy_err));
     }
@@ -111,6 +116,10 @@ void handle_cuda_input_array(T *input_ptr, T **device_ptr,
   } else {
     cudaError_t malloc_err = cudaMalloc(device_ptr, size);
     if (malloc_err != cudaSuccess) {
+      // Clear the runtime's last-error state before throwing: CUDA only
+      // resets it via cudaGetLastError(), so a stale error would otherwise
+      // be misreported by the kernel launch check of a LATER, successful call.
+      cudaGetLastError();
       throw std::runtime_error(
           std::string("cudaMalloc failed: ") + cudaGetErrorString(malloc_err));
     }
@@ -118,6 +127,7 @@ void handle_cuda_input_array(T *input_ptr, T **device_ptr,
     if (memcpy_err != cudaSuccess) {
       cudaFree(*device_ptr);
       *device_ptr = nullptr;
+      cudaGetLastError(); // clear last-error state before throwing (see above)
       throw std::runtime_error(
           std::string("cudaMemcpy (H2D) failed: ") + cudaGetErrorString(memcpy_err));
     }
