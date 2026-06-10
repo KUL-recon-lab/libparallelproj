@@ -126,7 +126,14 @@ void joseph3d_tof_sino_back(const float *lor_start,
             std::string("CUDA kernel error: ") + cudaGetErrorString(sync_err));
 
     ////////////////////////////////////////////////////////////////////////////
-    // copy result back to host if needed; device memory freed by destructors
+    // Copy the result back to the host if (and only if) the device buffer is a
+    // temporary copy we allocated ourselves (owns == true). If the caller
+    // passed device/managed memory, the kernel wrote to it directly.
+    //
+    // No explicit cudaFree calls are needed here: every device buffer is held
+    // by a CudaDevicePtr (RAII, see cuda_utils.h), whose destructor frees the
+    // memory automatically when this function returns OR when an exception is
+    // thrown anywhere above — so no leaks on error paths.
     ////////////////////////////////////////////////////////////////////////////
 
     if (d_image.owns)
