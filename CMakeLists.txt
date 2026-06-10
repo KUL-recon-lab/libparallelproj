@@ -334,6 +334,44 @@ if(BUILD_TESTS)
 
     add_test(NAME "${TEST_NAME}" COMMAND "${TEST_NAME}")
   endforeach()
+
+  # ----------------------------------------------------------------------------
+  # CUDA-only tests
+  # ----------------------------------------------------------------------------
+  if(USE_CUDA)
+    # White-box unit test for the internal handle_cuda_input_array() utility.
+    # The function is deliberately NOT exported from the shared library (no
+    # PARALLELPROJ_API), so src/cuda_utils.cu is compiled directly into the
+    # test executable. This works identically on Linux, Windows and WSL and
+    # avoids throwing C++ exceptions across a DLL boundary on Windows.
+    add_executable(test_handle_cuda_input_array
+      tests/test_handle_cuda_input_array.cu
+      src/cuda_utils.cu
+    )
+    target_include_directories(test_handle_cuda_input_array PRIVATE
+      "${CMAKE_SOURCE_DIR}/include"
+      "${CMAKE_SOURCE_DIR}/tests"
+    )
+    target_link_libraries(test_handle_cuda_input_array PRIVATE CUDA::cudart)
+    add_test(NAME test_handle_cuda_input_array COMMAND test_handle_cuda_input_array)
+
+    # Building with the CUDA toolkit does not imply a physical GPU is present
+    # at runtime (e.g. CI runners, build-only machines). Every test that needs
+    # a GPU self-detects this at startup (see tests/cuda_test_utils.h) and
+    # exits with code 77; SKIP_RETURN_CODE makes CTest report such runs as
+    # "Skipped" instead of "Failed".
+    # test_nontof_fwd_back is included because in a CUDA build its
+    # joseph3d_fwd/back calls launch CUDA kernels, even though it is a .cpp.
+    set_tests_properties(
+      test_ray_cube_intersection_cuda
+      test_bilinear_interp_cuda
+      test_bilinear_interp_adj_cuda
+      test_nontof_fwd_back_cuda
+      test_nontof_fwd_back
+      test_handle_cuda_input_array
+      PROPERTIES SKIP_RETURN_CODE 77
+    )
+  endif()
 endif()
 
 # ------------------------------------------------------------------------------

@@ -6,6 +6,7 @@
 #include <vector>
 #include <numeric>
 #include <cuda_runtime.h>
+#include "cuda_test_utils.h"
 
 int test_cuda_managed_arrays(int device_id, int threadsperblock)
 {
@@ -422,6 +423,9 @@ int test_box_projection_cuda_device_arrays(int device_id, int threadsperblock)
 
 int main()
 {
+  if (!cuda_device_available())
+    return CUDA_TEST_SKIP_RETURN_CODE;
+
   bool all_tests_passed = true;
 
   int device_count;
