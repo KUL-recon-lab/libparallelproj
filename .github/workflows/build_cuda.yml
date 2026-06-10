@@ -74,9 +74,16 @@ jobs:
       - name: Build
         run: pixi run -e ${{ matrix.pixi-env }} build
 
-      # C++ CUDA tests require a physical GPU; CI runners have none so we only
-      # run the Python test suite (conftest.py skips all tests when cuda_enabled
-      # but no device is detected).
+      # CI runners have no physical GPU, but all tests self-skip at runtime
+      # when no CUDA device is detected:
+      #   - C++ tests exit with code 77 (see tests/cuda_test_utils.h), which
+      #     CTest reports as "Skipped" via the SKIP_RETURN_CODE property.
+      #   - Python tests are skipped by conftest.py.
+      # Running ctest here still verifies that the test executables link and
+      # that the shared library loads (DLL/symbol resolution on Windows).
+      - name: Run C++ tests
+        run: pixi run -e ${{ matrix.pixi-env }} test-cpp
+
       - name: Run Python tests
         run: pixi run -e ${{ matrix.pixi-env }} test-python
 

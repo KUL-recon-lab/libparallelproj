@@ -6,6 +6,13 @@
 #include <vector>
 #include <numeric>
 
+// In a CUDA build, joseph3d_fwd/back launch CUDA kernels, so this test needs
+// a physical GPU even though it is a plain .cpp file. PARALLELPROJ_CUDA is a
+// PUBLIC compile definition of the parallelproj library target.
+#if defined(PARALLELPROJ_CUDA) && (PARALLELPROJ_CUDA == 1)
+#include "cuda_test_utils.h"
+#endif
+
 int test_box_projection_cpp()
 {
   bool all_passed = true;
@@ -213,6 +220,11 @@ int test_forward_and_back_projection_cpp()
 
 int main()
 {
+#if defined(PARALLELPROJ_CUDA) && (PARALLELPROJ_CUDA == 1)
+  if (!cuda_device_available())
+    return CUDA_TEST_SKIP_RETURN_CODE;
+#endif
+
   int result = 0;
   result |= test_box_projection_cpp();
   result |= test_forward_and_back_projection_cpp();

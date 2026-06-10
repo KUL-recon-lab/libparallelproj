@@ -4,6 +4,7 @@
 #include <vector>
 #include <cuda_runtime.h>
 #include "utils.h" // Include the header with ray_cube_intersection_joseph()
+#include "cuda_test_utils.h"
 
 // CUDA kernel to test ray_cube_intersection_joseph on the device
 __global__ void test_ray_cube_intersection_kernel(const float *xstart, const float *xend,
@@ -247,6 +248,9 @@ void test_ray_cube_intersection_managed()
 
 int main()
 {
+  if (!cuda_device_available())
+    return CUDA_TEST_SKIP_RETURN_CODE;
+
   test_ray_cube_intersection_device();
   test_ray_cube_intersection_managed();
   return 0;

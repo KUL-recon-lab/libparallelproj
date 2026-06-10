@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cuda_runtime.h>
 #include "utils.h"
+#include "cuda_test_utils.h"
 
 // ----------------------------------------------------------------------------
 // Minimal kernels: each one computes fwd = A(x) and then scatters A^T(y) into grad.
@@ -63,6 +64,9 @@ static float host_dot(const std::vector<float> &a,
 
 int main()
 {
+    if (!cuda_device_available())
+        return CUDA_TEST_SKIP_RETURN_CODE;
+
     constexpr int n0 = 2, n1 = 3, n2 = 4;
     constexpr int N = n0 * n1 * n2;
     // maybe_unused to silence unused‐variable warnings of unused eps

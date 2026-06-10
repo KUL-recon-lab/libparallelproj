@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 #include <cuda_runtime.h>
+#include "cuda_test_utils.h"
 
 // Kernel to test bilinear_interp_fixed0
 __global__ void test_bilinear_interp_fixed0_kernel(const float *img, int n0, int n1, int n2, int i0, float i_f1, float i_f2, float *result)
@@ -106,6 +107,9 @@ void run_test_fixed2(const char *test_name, const float *img, int n0, int n1, in
 
 int main()
 {
+    if (!cuda_device_available())
+        return CUDA_TEST_SKIP_RETURN_CODE;
+
     // Dimensions matching np.arange(24).reshape(2,3,4)
     const int n0 = 2, n1 = 3, n2 = 4;
     const int num_elements = n0 * n1 * n2;
