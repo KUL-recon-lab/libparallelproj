@@ -1,0 +1,63 @@
+name: Check version
+
+# The VERSION file at the repo root is the single source of truth for the
+# project version (see also scripts/tag_release.py).
+#
+# This workflow enforces:
+#   - on every push / PR: VERSION contains a valid version (X.Y.Z or X.Y.Z.devN)
+#   - on release tag pushes (v*): the tag matches the VERSION file exactly and
+#     VERSION is a non-dev release version. A mismatch fails here, BEFORE any
+#     release artifacts are built. GitHub cannot reject the tag push itself, so
+#     on failure the bad tag must be deleted manually:
+#       git push origin :refs/tags/<tag>
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Validate VERSION file format
+        run: |
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          echo "VERSION file: '$VERSION'"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(\.dev[0-9]+)?$'; then
+            echo "::error file=VERSION::'$VERSION' is not a valid version (expected X.Y.Z or X.Y.Z.devN)"
+            exit 1
+          fi
+
+      - name: Verify release tag matches VERSION file
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          TAG="${GITHUB_REF_NAME}"
+          echo "tag: '$TAG', VERSION file: '$VERSION'"
+
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error file=VERSION::release tag '$TAG' pushed, but VERSION file contains dev version '$VERSION'. Bump VERSION to a release version first. Delete the tag with: git push origin :refs/tags/$TAG"
+            exit 1
+          fi
+
+          if [ "$TAG" != "v$VERSION" ]; then
+            echo "::error file=VERSION::tag '$TAG' does not match VERSION file ('v$VERSION'). Use 'pixi run tag-release' to create consistent tags. Delete the tag with: git push origin :refs/tags/$TAG"
+            exit 1
+          fi
+
+          echo "OK: tag '$TAG' matches VERSION file"
+
+      - name: Verify changelog entry for release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if ! grep -q "$TAG" docs/changelog.rst; then
+            echo "::error file=docs/changelog.rst::no changelog entry found for $TAG"
+            exit 1
+          fi
+          echo "OK: changelog entry for $TAG found"

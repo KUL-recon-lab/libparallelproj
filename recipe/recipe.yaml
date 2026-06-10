@@ -1,5 +1,12 @@
+# The version comes from the VERSION file at the repo root (single source of
+# truth). rattler-build cannot read files in jinja, so it is passed via an
+# environment variable and the build must be invoked as:
+#
+#   PARALLELPROJ_VERSION=$(cat VERSION) rattler-build build -r recipe/recipe.yaml
+#
+# env.get() without a default makes rattler-build fail loudly if it is not set.
 context:
-  version: "2.0.0"
+  version: ${{ env.get("PARALLELPROJ_VERSION") }}
 
   # conda-forge uses this to select the CUDA variant
   cuda_version: ${{ env.get("CONDA_OVERRIDE_CUDA", default="None") }}

@@ -23,6 +23,12 @@ array-api-compat = "*"
 CMAKE_GENERATOR_PLATFORM = ""
 CMAKE_GENERATOR_TOOLSET  = ""
 
+# ── workspace-level tasks (available in every environment) ─────────────────
+[tasks]
+# create a validated release tag (v<VERSION>) from the VERSION file;
+# refuses on dev versions, dirty tree, missing changelog entry, existing tag
+tag-release = "python scripts/tag_release.py"
+
 # ── test feature ───────────────────────────────────────────────────────────
 # Pure test deps — not needed to build or run the library itself.
 # pytorch resolves to the CPU build in the default env; in cuda12/cuda13 envs

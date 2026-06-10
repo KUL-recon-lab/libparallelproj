@@ -20,110 +20,27 @@ if(DEBUG)
 endif()
 
 # ------------------------------------------------------------------------------
-# Determine version before project()
+# Determine version: the single source of truth is the VERSION file at the
+# repo root (PEP 440 style, e.g. "2.1.0" or "2.0.6.dev0").
+# - CMake's project() only accepts numeric X.Y.Z, so the numeric prefix goes
+#   there; the full string is exported as PARALLELPROJ_VERSION_STRING.
+# - Release tags must match the VERSION file exactly; this is enforced by
+#   the tag-release pixi task and .github/workflows/check_version.yml.
 # ------------------------------------------------------------------------------
 
-set(PARALLELPROJ_VERSION "")
-set(PARALLELPROJ_VERSION_STRING "")
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" PARALLELPROJ_VERSION_STRING LIMIT_COUNT 1)
+string(STRIP "${PARALLELPROJ_VERSION_STRING}" PARALLELPROJ_VERSION_STRING)
+# re-run the configure step automatically when the VERSION file changes
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
 
-# Accept only numeric CMake project versions: X.Y.Z or X.Y.Z.T
-set(_PP_NUMERIC_VERSION_REGEX "^v?([0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?)$")
-
-# 1) Explicit override from packager
-if(DEFINED PROJECT_VERSION_OVERRIDE AND NOT PROJECT_VERSION_OVERRIDE STREQUAL "")
-  if(PROJECT_VERSION_OVERRIDE MATCHES "${_PP_NUMERIC_VERSION_REGEX}")
-    string(REGEX REPLACE "^v" "" PARALLELPROJ_VERSION "${PROJECT_VERSION_OVERRIDE}")
-    set(PARALLELPROJ_VERSION_STRING "${PROJECT_VERSION_OVERRIDE}")
-    message(STATUS "Using version from PROJECT_VERSION_OVERRIDE: ${PROJECT_VERSION_OVERRIDE}")
-  else()
-    message(FATAL_ERROR
-      "PROJECT_VERSION_OVERRIDE='${PROJECT_VERSION_OVERRIDE}' is not a valid numeric "
-      "CMake project version. Expected X.Y.Z or X.Y.Z.T"
-    )
-  endif()
-
-# 2) Read the Docs
-elseif(DEFINED ENV{READTHEDOCS_VERSION} AND NOT "$ENV{READTHEDOCS_VERSION}" STREQUAL "")
-  set(_rtd_version "$ENV{READTHEDOCS_VERSION}")
-
-  if(_rtd_version MATCHES "${_PP_NUMERIC_VERSION_REGEX}")
-    string(REGEX REPLACE "^v" "" PARALLELPROJ_VERSION "${_rtd_version}")
-    set(PARALLELPROJ_VERSION_STRING "${_rtd_version}")
-    message(STATUS "Using version from READTHEDOCS_VERSION: ${_rtd_version}")
-  endif()
+if(NOT PARALLELPROJ_VERSION_STRING MATCHES "^([0-9]+\\.[0-9]+\\.[0-9]+)(\\.dev[0-9]+)?$")
+  message(FATAL_ERROR
+    "Invalid version '${PARALLELPROJ_VERSION_STRING}' in the VERSION file. "
+    "Expected X.Y.Z or X.Y.Z.devN (e.g. 2.1.0 or 2.0.6.dev0)."
+  )
 endif()
-
-# 3) Git checkout
-if(PARALLELPROJ_VERSION STREQUAL "")
-  find_package(Git QUIET)
-
-  set(_git_ok FALSE)
-  if(Git_FOUND)
-    execute_process(
-      COMMAND "${GIT_EXECUTABLE}" rev-parse --is-inside-work-tree
-      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-      RESULT_VARIABLE _git_revparse_result
-      OUTPUT_VARIABLE _git_revparse_output
-      ERROR_QUIET
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if(_git_revparse_result EQUAL 0 AND _git_revparse_output STREQUAL "true")
-      set(_git_ok TRUE)
-    endif()
-  endif()
-
-  if(_git_ok)
-    execute_process(
-      COMMAND "${GIT_EXECUTABLE}" describe --tags --long --dirty
-      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-      RESULT_VARIABLE _git_describe_result
-      OUTPUT_VARIABLE _git_describe
-      ERROR_QUIET
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-
-    execute_process(
-      COMMAND "${GIT_EXECUTABLE}" describe --tags --abbrev=0
-      WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-      RESULT_VARIABLE _git_tag_result
-      OUTPUT_VARIABLE _git_tag
-      ERROR_QUIET
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-
-    if(_git_tag_result EQUAL 0 AND _git_tag MATCHES "${_PP_NUMERIC_VERSION_REGEX}")
-      string(REGEX REPLACE "^v" "" PARALLELPROJ_VERSION "${_git_tag}")
-      if(_git_describe_result EQUAL 0 AND NOT _git_describe STREQUAL "")
-        set(PARALLELPROJ_VERSION_STRING "${_git_describe}")
-      else()
-        set(PARALLELPROJ_VERSION_STRING "${_git_tag}")
-      endif()
-    endif()
-  endif()
-endif()
-
-# 4) Tarball / source directory fallback
-if(PARALLELPROJ_VERSION STREQUAL "")
-  get_filename_component(_folder_name "${CMAKE_SOURCE_DIR}" NAME)
-  if(_folder_name MATCHES "${_PP_NUMERIC_VERSION_REGEX}")
-    set(PARALLELPROJ_VERSION "${CMAKE_MATCH_1}")
-    set(PARALLELPROJ_VERSION_STRING "${CMAKE_MATCH_1}")
-  else()
-    string(REGEX MATCH "v?([0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?)" _m "${_folder_name}")
-    if(_m)
-      set(PARALLELPROJ_VERSION "${CMAKE_MATCH_1}")
-      set(PARALLELPROJ_VERSION_STRING "${CMAKE_MATCH_1}")
-    endif()
-  endif()
-endif()
-
-if(PARALLELPROJ_VERSION STREQUAL "")
-  set(PARALLELPROJ_VERSION "0.0.0")
-endif()
-
-if(PARALLELPROJ_VERSION_STRING STREQUAL "")
-  set(PARALLELPROJ_VERSION_STRING "${PARALLELPROJ_VERSION}")
-endif()
+set(PARALLELPROJ_VERSION "${CMAKE_MATCH_1}")
 
 project(PARALLELPROJ VERSION ${PARALLELPROJ_VERSION} LANGUAGES CXX)
 
