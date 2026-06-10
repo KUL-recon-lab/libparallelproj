@@ -1,6 +1,25 @@
 Changelog
 =========
 
+v2.0.6 (2026-06-10)
+-------------------
+
+Changed
+^^^^^^^
+
+* The project version is now defined in a single ``VERSION`` file at the repo
+  root (instead of being derived from ``git describe``); release tags must
+  match it, enforced via the ``tag-release`` pixi task and a CI check.
+
+Fixed
+^^^^^
+
+* Better checking of CUDA errors: failures of ``cudaMalloc``, ``cudaMemcpy``,
+  kernel launches and ``cudaDeviceSynchronize`` now raise exceptions (visible
+  as ``RuntimeError`` in Python), device memory is freed via RAII on all error
+  paths, and stale CUDA error states can no longer be misattributed to later
+  calls.
+
 v2.0.5 (2026-03-25)
 -------------------
 
