@@ -261,14 +261,38 @@ if (parallelproj_cuda_enabled()) {
     /* built without CUDA support */
 }
 
-// full version string, with potential "dirty" suffix
+// full version string (the content of the VERSION file, e.g. "2.1.0" or "2.0.6.dev0")
 const char* version = parallelproj_version();
 
-// assuming you are building a clean version, the numeric version can be checked via
+// the numeric version components can be checked via
 int pp_major_version = parallelproj_version_major();
 int pp_minor_version = parallelproj_version_minor();
 int pp_patch_version = parallelproj_version_patch();
 ```
 
 **Note**:
-- `parallelproj_version()` returns the full library version string potentially including "dirty" suffixes.
+- `parallelproj_version()` returns the full version string, which for dev builds
+  includes a `.devN` suffix (e.g. `2.0.6.dev0`).
+
+## Versioning and release procedure
+
+The **`VERSION` file at the repo root is the single source of truth** for the
+project version (PEP 440 style: `X.Y.Z` for releases, `X.Y.Z.devN` between
+releases). CMake, the Python extension, the docs, and the conda recipes all
+derive their version from it.
+
+To make a release:
+
+1. open a release PR that bumps `VERSION` to the release version (e.g.
+   `2.1.0`) and adds a `v2.1.0` entry to `docs/changelog.rst`, then merge it
+2. on the up-to-date `main` branch run `pixi run tag-release` — this creates
+   the annotated tag `v2.1.0` after validating that the working tree is
+   clean, `VERSION` is a non-dev version, and the changelog entry exists
+3. publish the tag with `git push origin v2.1.0` — the
+   `check_version` workflow re-verifies that the tag matches `VERSION`
+   (mismatched tags fail CI before any release artifacts exist)
+4. open a follow-up PR bumping `VERSION` to the next dev version
+   (e.g. `2.1.1.dev0`)
+
+The conda-forge feedstock derives its version from the release tag, which the
+guards above guarantee to be identical to the `VERSION` file.

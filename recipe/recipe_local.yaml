@@ -13,15 +13,21 @@
 # - SP_DIR is NOT available for Jinja; use globs instead
 # - keep forcing CMake to use $PYTHON to avoid ABI mismatches
 
+# The version comes from the VERSION file at the repo root (single source of
+# truth), passed via an environment variable (rattler-build cannot read files
+# in jinja). env.get() without a default fails loudly if it is not set.
+
+#export PARALLELPROJ_VERSION=$(cat VERSION)
+
 #export RATTLER_CUDA_VERSION=12.4
-#rattler-build build -r recipe/recipe.yaml
+#rattler-build build -r recipe/recipe_local.yaml
 
 #export RATTLER_USE_CUDA=1
 ## optionally also set RATTLER_CUDA_VERSION if your recipe pins cuda-version
-#rattler-build build -r recipe/recipe.yaml
+#rattler-build build -r recipe/recipe_local.yaml
 
 context:
-  version: "2.0.0"
+  version: ${{ env.get("PARALLELPROJ_VERSION") }}
   # Prefer conda-forge's standard override when present,
   # otherwise allow a local override.
   cuda_version: >-

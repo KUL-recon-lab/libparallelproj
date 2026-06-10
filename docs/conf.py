@@ -4,10 +4,8 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 import os
-import re
 import sys
 from sphinx_gallery.sorting import FileNameSortKey
-from typing import Optional
 
 # Anchor all build-directory paths to conf.py's own location so sphinx-build
 # can be invoked from any working directory (e.g. the project root on RTD).
@@ -24,29 +22,16 @@ project = "libparallelproj"
 # author = "parallelproj team"
 
 
-def _read_version_from_cmake_config(config_path: str) -> Optional[str]:
-    if not os.path.exists(config_path):
-        return None
-
-    with open(config_path, encoding="utf-8") as handle:
-        content = handle.read()
-
-    match = re.search(r"set\(PACKAGE_VERSION\s+\"([^\"]+)\"\)", content)
-    if match:
-        return match.group(1)
-
-    return None
-
-
 def _resolve_release() -> str:
-    env_release = os.environ.get("PARALLELPROJ_RELEASE")
-    if env_release:
-        return env_release
-
-    cmake_config_version = os.path.join(_BUILD_DOXYGEN, "parallelprojConfigVersion.cmake")
-    cmake_release = _read_version_from_cmake_config(cmake_config_version)
-    if cmake_release:
-        return cmake_release
+    # single source of truth: the VERSION file at the repo root
+    version_file = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "VERSION"
+    )
+    if os.path.exists(version_file):
+        with open(version_file, encoding="utf-8") as handle:
+            version = handle.read().strip()
+        if version:
+            return version
 
     return "0.0.0-unknown"
 
