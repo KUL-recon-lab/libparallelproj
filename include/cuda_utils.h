@@ -56,6 +56,12 @@ inline std::size_t cuda_nvoxels_from_img_dim(const int *img_dim_ptr)
     int h_img_dim[3] = {0, 0, 0};
     cudaPointerAttributes attr;
     cudaError_t err = cudaPointerGetAttributes(&attr, static_cast<const void *>(img_dim_ptr));
+    if (err != cudaSuccess)
+    {
+        // Expected for plain host pointers on older CUDA versions. Clear the
+        // last-error state so it cannot surface in a later kernel launch check.
+        cudaGetLastError();
+    }
 
     // If pointer known to CUDA and points to device/managed memory, copy to host.
     if (err == cudaSuccess && (attr.type == cudaMemoryTypeDevice || attr.type == cudaMemoryTypeManaged))
