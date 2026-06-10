@@ -327,7 +327,9 @@ if(BUILD_TESTS)
     add_dependencies("${TEST_NAME}" copy_test_data)
 
     if(USE_CUDA)
-      target_link_libraries("${TEST_NAME}" PRIVATE parallelproj CUDA::cudart)
+      # CMAKE_DL_LIBS is needed because tests/cuda_test_utils.h uses dlopen
+      # to probe for the CUDA driver library (empty on Windows).
+      target_link_libraries("${TEST_NAME}" PRIVATE parallelproj CUDA::cudart ${CMAKE_DL_LIBS})
     else()
       target_link_libraries("${TEST_NAME}" PRIVATE parallelproj OpenMP::OpenMP_CXX)
     endif()
@@ -352,7 +354,7 @@ if(BUILD_TESTS)
       "${CMAKE_SOURCE_DIR}/include"
       "${CMAKE_SOURCE_DIR}/tests"
     )
-    target_link_libraries(test_handle_cuda_input_array PRIVATE CUDA::cudart)
+    target_link_libraries(test_handle_cuda_input_array PRIVATE CUDA::cudart ${CMAKE_DL_LIBS})
     add_test(NAME test_handle_cuda_input_array COMMAND test_handle_cuda_input_array)
 
     # Building with the CUDA toolkit does not imply a physical GPU is present
