@@ -2,58 +2,71 @@
 """Manually verify that a failed device allocation inside the CUDA lib
 surfaces as a Python RuntimeError (and not as a silent wrong result).
 
-Strategy (WSL / Linux, GPU with enough VRAM):
-  1. Use cupy to hog almost all free VRAM (allocated in chunks to avoid
-     fragmentation issues), leaving only a small amount free.
-  2. Call pp.joseph3d_fwd() with HOST (numpy) xstart/xend arrays that are
-     bigger than the remaining free VRAM. handle_cuda_input_array() then
-     fails at cudaMalloc when trying to create the device copy of lor_start
-     -> std::runtime_error -> nanobind -> Python RuntimeError.
-  3. Verify the GPU is still usable afterwards.
+Strategy:
+  Call pp.joseph3d_fwd() with HOST (numpy) xstart/xend arrays sized such
+  that the device copy of xstart (made first inside the lib) is bigger than
+  the total VRAM, while all host arrays combined stay below 75% of host RAM.
+  handle_cuda_input_array() then fails at cudaMalloc
+  -> std::runtime_error -> nanobind -> Python RuntimeError.
 
-Host RAM usage stays small (~2-3 GB) because the host arrays only need to be
-slightly larger than the VRAM we left free - not larger than total VRAM.
+Host memory per LOR: xstart 12 B + xend 12 B + img_fwd 4 B = 28 B.
+The device copy of xstart needs 12 B per LOR, so the test is feasible when
+0.75 * RAM / 28 * 12 > VRAM (e.g. 64 GB RAM / 20 GB VRAM: ~20.6 GB > 20 GB).
+
+NOTE: on Windows / WSL2 the WDDM driver can page CUDA allocations into
+system RAM ("CUDA - Sysmem Fallback Policy"), so a marginally oversized
+allocation may still succeed there. Run on native Linux for a guaranteed
+failure, or set the NVIDIA Control Panel policy to "Prefer No Sysmem
+Fallback".
 
 Run manually with:  python wip/trigger_cuda_malloc_error.py
 """
 
+import os
 import numpy as np
 import cupy as cp
 import parallelproj_core as pp
 
 GiB = 1024**3
-LEAVE_FREE = 512 * 1024**2  # VRAM to leave unallocated (512 MiB)
-HOG_CHUNK = 1 * GiB         # hog VRAM in 1 GiB chunks
+RAM_FRACTION = 0.75
+HOST_BYTES_PER_LOR = 28  # xstart (12) + xend (12) + img_fwd (4)
+DEV_BYTES_PER_LOR = 12   # device copy of xstart, allocated first in the lib
 
 print(f"parallelproj_core {pp.__version__}, cuda_enabled={pp.cuda_enabled}")
 assert pp.cuda_enabled, "this script needs a CUDA build of parallelproj_core"
 
-# ---------------------------------------------------------------------------
-# 1. hog almost all free VRAM with cupy
-# ---------------------------------------------------------------------------
-free0, total = cp.cuda.runtime.memGetInfo()
-print(f"VRAM before hogging: free {free0 / GiB:.2f} GiB / total {total / GiB:.2f} GiB")
-
-hogs = []  # keep references so the allocations stay alive
-while True:
-    free, _ = cp.cuda.runtime.memGetInfo()
-    chunk = min(HOG_CHUNK, free - LEAVE_FREE)
-    if chunk <= 0:
-        break
-    try:
-        # raw allocation, bypasses the cupy memory pool
-        hogs.append(cp.cuda.alloc(chunk))
-    except cp.cuda.memory.OutOfMemoryError:
-        break
-
-free, _ = cp.cuda.runtime.memGetInfo()
-print(f"VRAM after hogging:  free {free / GiB:.2f} GiB ({len(hogs)} chunks held)")
+free_vram, total_vram = cp.cuda.runtime.memGetInfo()
+total_ram = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+print(f"VRAM: free {free_vram / GiB:.2f} / total {total_vram / GiB:.2f} GiB, "
+      f"host RAM: {total_ram / GiB:.2f} GiB")
 
 # ---------------------------------------------------------------------------
-# 2. host arrays: mini random image, but more LOR endpoints than fit in the
-#    remaining VRAM. joseph3d_fwd device-copies lor_start first -> cudaMalloc
-#    must fail there. Coordinate values are irrelevant (the kernel never
-#    runs), so use np.empty to keep this fast.
+# 1. choose the number of LORs: max 75% of RAM for all host arrays combined,
+#    and the 12-byte-per-LOR device copy of xstart must exceed total VRAM
+# ---------------------------------------------------------------------------
+num_lors = int(RAM_FRACTION * total_ram) // HOST_BYTES_PER_LOR
+dev_request = num_lors * DEV_BYTES_PER_LOR
+
+print(f"using {num_lors:,} LORs:")
+print(f"  host arrays combined: {num_lors * HOST_BYTES_PER_LOR / GiB:.2f} GiB "
+      f"(<= {RAM_FRACTION:.0%} of RAM)")
+print(f"  device request for xstart: {dev_request / GiB:.2f} GiB "
+      f"(total VRAM: {total_vram / GiB:.2f} GiB)")
+
+if dev_request <= total_vram:
+    raise SystemExit(
+        "FAIL: cannot trigger the error on this machine: "
+        f"{RAM_FRACTION:.0%} of RAM does not allow a device request larger "
+        "than total VRAM. Needs RAM > VRAM * 28/12 / "
+        f"{RAM_FRACTION} = {total_vram * 28 / 12 / RAM_FRACTION / GiB:.1f} GiB."
+    )
+if dev_request < 1.2 * total_vram:
+    print("  WARNING: device request is less than 1.2x total VRAM - "
+          "on WSL/Windows, sysmem fallback may let it succeed")
+
+# ---------------------------------------------------------------------------
+# 2. mini random image + oversized host LOR arrays (values irrelevant: the
+#    cudaMalloc fails before the kernel ever runs)
 # ---------------------------------------------------------------------------
 img_dim = (8, 8, 8)
 rng = np.random.default_rng(0)
@@ -61,12 +74,7 @@ img = rng.random(img_dim, dtype=np.float32)
 voxsize = np.asarray([2.0, 2.0, 2.0], dtype=np.float32)
 img_origin = (-0.5 * np.asarray(img_dim, dtype=np.float32) + 0.5) * voxsize
 
-# one endpoint array should need ~2x the remaining free VRAM
-target_bytes = 2 * free
-num_lors = int(target_bytes) // (3 * 4)  # 3 float32 per endpoint
-print(f"using {num_lors:,} LORs -> xstart/xend each "
-      f"{num_lors * 12 / GiB:.2f} GiB (host RAM)")
-
+print("allocating host arrays ...")
 xstart = np.empty((num_lors, 3), dtype=np.float32)
 xend = np.empty((num_lors, 3), dtype=np.float32)
 img_fwd = np.zeros(num_lors, dtype=np.float32)
@@ -80,18 +88,17 @@ except RuntimeError as e:
     print(f"\nOK: got expected RuntimeError:\n    {e}")
     assert "cudaMalloc" in str(e), "exception raised, but not from cudaMalloc?"
 else:
-    raise SystemExit("FAIL: joseph3d_fwd did not raise - error not propagated!")
+    raise SystemExit("FAIL: joseph3d_fwd did not raise - error not propagated! "
+                     "(on WSL/Windows this can be due to sysmem fallback)")
+
+del xstart, xend, img_fwd
 
 # ---------------------------------------------------------------------------
 # 4. GPU must still be usable afterwards (no leaked allocation, no corrupted
-#    context): release the hog and do a real projection
+#    context): run a real projection
 # ---------------------------------------------------------------------------
-hogs.clear()
-# cp.cuda.alloc goes through cupy's memory pool, which keeps freed blocks
-# cached - explicitly return them to the driver so memGetInfo shows reality
-cp.get_default_memory_pool().free_all_blocks()
-free, _ = cp.cuda.runtime.memGetInfo()
-print(f"\nVRAM after releasing hog: free {free / GiB:.2f} GiB")
+free_vram, _ = cp.cuda.runtime.memGetInfo()
+print(f"\nVRAM after failed call: free {free_vram / GiB:.2f} GiB")
 
 n_ok = 1000
 xstart_ok = rng.random((n_ok, 3), dtype=np.float32) * 16.0 - 8.0
