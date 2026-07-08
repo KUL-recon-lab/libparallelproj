@@ -127,8 +127,11 @@ WORKER_QUALIFIER inline void ray_cube_intersection_joseph(
   float f1 = (xi1 - img_origin[direction]) / voxsize[direction];
   float f2 = (xi2 - img_origin[direction]) / voxsize[direction];
 
-  // if the integer part of f1 and f2 are the same, we are inside one voxel plane
-  if ((int)f1 != (int)f2)
+  // Use floor (not truncation toward zero) so the entry-face case f1 in
+  // [-0.5, 0) is handled consistently with the floorf-based start/end below.
+  // If floor(f1) == floor(f2) the ray stays within a single voxel-plane
+  // interval and no integer plane is crossed.
+  if ((int)floorf(f1) != (int)floorf(f2))
   {
     if (f1 > f2)
     {
