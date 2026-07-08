@@ -15,7 +15,8 @@
 #define MAX_NUM_TOF_WEIGHTS 64
 #endif
 
-WORKER_QUALIFIER inline void atomic_sum(float *target, float value)
+template <typename T>
+WORKER_QUALIFIER inline void atomic_sum(T *target, T value)
 {
 #ifdef __CUDACC__
   atomicAdd(target, value);
@@ -311,7 +312,7 @@ WORKER_QUALIFIER inline void bilinear_interp_adj_fixed0(
   {
     if (i1 < 0 || i1 >= n1 || i2 < 0 || i2 >= n2)
       return;
-    atomic_sum(reinterpret_cast<float *>(&plane[std::size_t(i1) * n2 + i2]), val * w);
+    atomic_sum(&plane[std::size_t(i1) * n2 + i2], val * w);
   };
 
   inject(i1_0, i2_0, w00);
@@ -346,7 +347,7 @@ WORKER_QUALIFIER inline void bilinear_interp_adj_fixed1(
     if (i0 < 0 || i0 >= n0 || i2 < 0 || i2 >= n2)
       return;
     std::size_t idx = std::size_t(i0) * n1 * n2 + std::size_t(i1) * n2 + i2;
-    atomic_sum(reinterpret_cast<float *>(&img[idx]), val * w);
+    atomic_sum(&img[idx], val * w);
   };
 
   inject(i0_0, i2_0, w00);
@@ -381,7 +382,7 @@ WORKER_QUALIFIER inline void bilinear_interp_adj_fixed2(
     if (i0 < 0 || i0 >= n0 || i1 < 0 || i1 >= n1)
       return;
     std::size_t idx = std::size_t(i0) * n1 * n2 + std::size_t(i1) * n2 + i2;
-    atomic_sum(reinterpret_cast<float *>(&img[idx]), val * w);
+    atomic_sum(&img[idx], val * w);
   };
 
   inject(i0_0, i1_0, w00);
