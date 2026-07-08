@@ -1,6 +1,57 @@
 Changelog
 =========
 
+v2.0.7 (unreleased)
+-------------------
+
+Fixed
+^^^^^
+
+* **Joseph projectors: eliminate single-precision drift along the ray.** The
+  forward/back workers now recompute the ray/voxel-plane intersection
+  coordinates directly per plane (``i_f = i*a + b``) instead of accumulating
+  them incrementally (``i_f += a``). The incremental update accumulated float32
+  round-off that grew from the entry toward the exit of the image (up to
+  ~1e-2 voxel on a large field of view). Projected values can therefore shift
+  very slightly (~1e-3 relative) versus previous versions. Applied to all six
+  workers (non-TOF and TOF, sinogram and listmode, forward and back), preserving
+  the forward/back adjoint relationship.
+
+* **TOF sinogram projectors: fixed a possible buffer overflow.** The per-plane
+  TOF-weight loop could write past the fixed ``tof_weights[MAX_NUM_TOF_WEIGHTS]``
+  buffer when the requested TOF window exceeded ``MAX_NUM_TOF_WEIGHTS`` bins
+  (e.g. very fine TOF binning) -- undefined behavior. The window is now clamped
+  to at most ``MAX_NUM_TOF_WEIGHTS`` bins centered on the ray's TOF position.
+
+* **Forward projectors now always initialize their output.** For LORs/events
+  that miss the image volume the output element is now set to 0 (non-TOF, TOF
+  sinogram and TOF listmode). Previously a missed LOR left the output element
+  unwritten, so it retained whatever was in the (possibly uninitialized) output
+  buffer unless the caller pre-zeroed it.
+
+* ``ray_cube_intersection_joseph`` hardening:
+
+  - the single-plane guard uses ``floorf`` consistently (was ``(int)``
+    truncation), so grazing rays entering at the image boundary face are no
+    longer dropped;
+
+  - rays parallel to an axis (``dr[k] == 0``, e.g. in-plane / direct-plane LORs)
+    are handled explicitly instead of via ``1/0`` -> inf/NaN arithmetic, making
+    the test well-defined also under ``-ffast-math`` / ``-ffinite-math-only``;
+
+  - zero-length LORs (``xstart == xend``) are detected and treated as
+    "no intersection" instead of producing ``0/0 = NaN``.
+
+* **TOF listmode projectors: guard against degenerate TOF parameters.**
+  Non-positive or non-finite ``tof_bin_width`` / ``sigma`` / ``num_sigmas`` are
+  now rejected per event (they previously could divide by zero and yield
+  out-of-range plane indices).
+
+* The adjoint bilinear interpolation helpers no longer ``reinterpret_cast`` the
+  image pointer to ``float *`` (which silently assumed ``T == float``);
+  ``atomic_sum`` is now a template, so the helpers are correct for any
+  floating-point element type.
+
 v2.0.6 (2026-06-10)
 -------------------
 
