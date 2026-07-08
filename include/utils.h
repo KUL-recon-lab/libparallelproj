@@ -79,6 +79,13 @@ WORKER_QUALIFIER inline void ray_cube_intersection_joseph(
   for (int k = 0; k < 3; ++k)
     dr[k] = xend[k] - xstart[k];
 
+  // degenerate zero-length LOR (xstart == xend): no ray direction is defined,
+  // so treat it as "no intersection". Without this guard sum_sq below is 0 and
+  // cos_sq = dr_sq / sum_sq = 0/0 = NaN. direction / correction / start_plane /
+  // end_plane already hold their no-hit defaults set above.
+  if (dr[0] == 0.0f && dr[1] == 0.0f && dr[2] == 0.0f)
+    return;
+
   // slab intersection, parameter t in [0,1].
   // Rays parallel to an axis (dr[k] == 0, e.g. dr_z for in-plane / direct-plane
   // LORs) are handled explicitly rather than through 1/dr[k]: this keeps the
