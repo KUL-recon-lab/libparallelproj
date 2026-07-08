@@ -72,6 +72,18 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
   float local_tof_sigma = is_lor_dependent_tof_sigma ? tof_sigma[i] : tof_sigma[0];
   float local_tof_center_offset = is_lor_dependent_tof_center_offset ? tof_center_offset[i] : tof_center_offset[0];
 
+  // Guard against degenerate TOF parameters that would make the plane-range
+  // computation below divide by zero or yield non-finite istart/iend (whose cast
+  // to int is undefined). Python-level validation normally prevents this; this
+  // protects direct C-API callers. Such an event contributes nothing.
+  if (!(tof_bin_width > 0.0f) || !isfinite(tof_bin_width) ||
+      !(local_tof_sigma > 0.0f) || !isfinite(local_tof_sigma) ||
+      !(num_sigmas > 0.0f) || !isfinite(num_sigmas))
+  {
+    projection_values[i] = 0.0f;
+    return;
+  }
+
   // sign variable that indicated whether TOF bin numbers increase or decrease when
   // through the image along the principal axis direction
   float sign = (lor_end[3 * i + direction] >= lor_start[3 * i + direction]) ? 1.0 : -1.0;
