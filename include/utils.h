@@ -74,24 +74,36 @@ WORKER_QUALIFIER inline void ray_cube_intersection_joseph(
     box_max[k] = box_min[k] + img_dim[k] * voxsize[k];
   }
 
-  // ray vector and its inverse
-  float dr[3], inv_dr[3];
+  // ray vector
+  float dr[3];
   for (int k = 0; k < 3; ++k)
-  {
     dr[k] = xend[k] - xstart[k];
-    inv_dr[k] = 1.0f / dr[k];
-  }
 
-  // slab intersection, parameter t in [0,1]
+  // slab intersection, parameter t in [0,1].
+  // Rays parallel to an axis (dr[k] == 0, e.g. dr_z for in-plane / direct-plane
+  // LORs) are handled explicitly rather than through 1/dr[k]: this keeps the
+  // test well-defined and correct even under -ffast-math / -ffinite-math-only,
+  // where the inf/NaN arithmetic the branchless slab method relied on is UB.
   float tmin = 0.0f;
   float tmax = 1.0f;
   for (int k = 0; k < 3; ++k)
   {
-    float t1 = (box_min[k] - xstart[k]) * inv_dr[k];
-    float t2 = (box_max[k] - xstart[k]) * inv_dr[k];
-    // use fminf/fmaxf for IEEE-754 compliance
-    tmin = fmaxf(tmin, fminf(t1, t2));
-    tmax = fminf(tmax, fmaxf(t1, t2));
+    if (dr[k] != 0.0f)
+    {
+      float inv = 1.0f / dr[k];
+      float t1 = (box_min[k] - xstart[k]) * inv;
+      float t2 = (box_max[k] - xstart[k]) * inv;
+      tmin = fmaxf(tmin, fminf(t1, t2));
+      tmax = fminf(tmax, fmaxf(t1, t2));
+    }
+    else if (xstart[k] < box_min[k] || xstart[k] > box_max[k])
+    {
+      // parallel to axis k and outside the slab -> no intersection.
+      // direction / correction / start_plane / end_plane already hold their
+      // no-hit defaults set above.
+      return;
+    }
+    // else: parallel to axis k but inside the slab -> does not constrain t.
   }
 
   if (tmax < tmin)
