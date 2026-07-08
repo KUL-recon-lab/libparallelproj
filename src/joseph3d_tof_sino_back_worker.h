@@ -3,7 +3,8 @@
 #include "utils.h"
 
 // Helper: compute TOF weights into caller buffer and scatter normalized contribution.
-// No bounds check for MAX_NUM_TOF_WEIGHTS (caller must provide a large enough buffer).
+// The TOF window is clamped to at most MAX_NUM_TOF_WEIGHTS bins (see below),
+// so a caller buffer of that size is never overrun.
 WORKER_QUALIFIER static inline float _gather_back_tof_weights(
     float it_f,
     float max_tof_bin_diff,
@@ -18,6 +19,17 @@ WORKER_QUALIFIER static inline float _gather_back_tof_weights(
   int it_min = static_cast<int>(floorf(it_f - max_tof_bin_diff));
   int it_max = static_cast<int>(ceilf(it_f + max_tof_bin_diff));
   int n_tof_weights = it_max + 1 - it_min;
+
+  // Guard the fixed-size tof_weights[MAX_NUM_TOF_WEIGHTS] buffer. If the
+  // requested TOF window is wider than the buffer (e.g. very fine TOF binning),
+  // keep only the MAX_NUM_TOF_WEIGHTS bins centered on the ray's TOF position
+  // it_f; the far Gaussian tails are dropped and the kept weights are
+  // renormalized below (toAdd /= sum_weights).
+  if (n_tof_weights > MAX_NUM_TOF_WEIGHTS)
+  {
+    it_min = static_cast<int>(lroundf(it_f)) - MAX_NUM_TOF_WEIGHTS / 2;
+    n_tof_weights = MAX_NUM_TOF_WEIGHTS;
+  }
 
   float sum_weights = 0.0f;
   for (int k = 0; k < n_tof_weights; ++k)
@@ -35,7 +47,7 @@ WORKER_QUALIFIER static inline float _gather_back_tof_weights(
     toAdd += projection_values[lor_offset + it_min + k] * tof_weights[k];
   }
 
-  toAdd /= sum_weights;
+  toAdd /= (sum_weights > 0.0f ? sum_weights : 1.0f);
 
   return toAdd;
 }
