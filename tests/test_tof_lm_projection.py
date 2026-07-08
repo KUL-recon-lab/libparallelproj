@@ -417,3 +417,76 @@ def test_tof_lm_vs_sino_fwd(xp: ModuleType, dev: str, direction: int):
     assert math.isclose(
         float(x_fwd_sino[0]), float(xp.sum(x_fwd_sino_tof)), abs_tol=1e-3
     )
+
+
+def test_tof_lm_degenerate_params(
+    xp: ModuleType,
+    dev: str,
+    voxsize: tuple[float, float, float] = (2.0, 2.0, 2.0),
+    nvox: int = 19,
+    num_tofbins: int = 27,
+    nlors: int = 5,
+):
+    """Degenerate TOF parameters (non-positive tof_bin_width) must be rejected
+    per event: the LM forward writes a defined 0 and the back deposits nothing,
+    instead of dividing by zero. Exercises the parameter guard in the LM workers.
+    """
+    direc = 0
+    img_dim = tuple(nvox if i == direc else 1 for i in range(3))
+    n0, n1, n2 = img_dim
+    img_origin = (
+        (-(n0 / 2) + 0.5) * voxsize[0],
+        (-(n1 / 2) + 0.5) * voxsize[1],
+        (-(n2 / 2) + 0.5) * voxsize[2],
+    )
+
+    # LORs crossing the image volume, so the geometry check passes and we reach
+    # the TOF-parameter guard
+    one_start = [60.0 if i == direc else 0.0 for i in range(3)]
+    one_end = [-60.0 if i == direc else 0.0 for i in range(3)]
+    xstart = xp.asarray([one_start] * nlors, dtype=xp.float32, device=dev)
+    xend = xp.asarray([one_end] * nlors, dtype=xp.float32, device=dev)
+
+    img = xp.ones(img_dim, dtype=xp.float32, device=dev)
+    sigma = xp.asarray([5.0], dtype=xp.float32, device=dev)
+    offset = xp.asarray([0.0], dtype=xp.float32, device=dev)
+    tofbin = xp.zeros(nlors, dtype=xp.int16, device=dev)
+
+    bad_tofbin_width = 0.0  # degenerate -> guard must fire (no divide-by-zero)
+
+    # forward: the -1 sentinel must be overwritten with a defined 0
+    img_fwd = xp.asarray([-1.0] * nlors, dtype=xp.float32, device=dev)
+    ppb.joseph3d_tof_lm_fwd(
+        xstart,
+        xend,
+        img,
+        xp.asarray(img_origin, dtype=xp.float32, device=dev),
+        xp.asarray(voxsize, dtype=xp.float32, device=dev),
+        img_fwd,
+        bad_tofbin_width,
+        sigma,
+        offset,
+        tofbin,
+        num_tofbins,
+        num_sigmas=3.0,
+    )
+    assert bool(xp.all(img_fwd == 0.0))
+
+    # back: no deposit, no NaN
+    y = xp.ones((nlors,), dtype=xp.float32, device=dev)
+    y_back = xp.zeros(img_dim, dtype=xp.float32, device=dev)
+    ppb.joseph3d_tof_lm_back(
+        xstart,
+        xend,
+        y_back,
+        xp.asarray(img_origin, dtype=xp.float32, device=dev),
+        xp.asarray(voxsize, dtype=xp.float32, device=dev),
+        y,
+        bad_tofbin_width,
+        sigma,
+        offset,
+        tofbin,
+        num_tofbins,
+        num_sigmas=3.0,
+    )
+    assert bool(xp.all(y_back == 0.0))

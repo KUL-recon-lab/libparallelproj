@@ -306,3 +306,77 @@ def test_tof_sino_adjointness(
         assert math.isclose(
             float(img_fwd_sum_tof[i]), float(img_fwd_nontof[i]), abs_tol=2e-3
         )
+
+
+def test_tof_sino_weight_buffer_clamp(
+    xp: ModuleType,
+    dev: str,
+    voxsize: tuple[float, float, float] = (2.0, 2.0, 2.0),
+    nvox: int = 19,
+    num_tofbins: int = 81,
+):
+    """Fine TOF binning so the TOF window exceeds MAX_NUM_TOF_WEIGHTS (64) bins,
+    exercising the buffer-clamp branch in the sinogram TOF fwd/back workers. The
+    clamp keeps the central bins and renormalizes, so the sum over TOF of a
+    single-voxel forward projection is still conserved and fwd/back stay adjoint.
+    """
+    direc = 0
+    sigma_tof = 40.0
+    tofbin_width = 1.0
+    num_sigmas = 3.0
+    # n_tof_weights ~= 2*num_sigmas*sigma_tof/tofbin_width + 2 ~= 242 >> 64 -> clamp
+    vox_num = nvox // 2
+
+    img_dim = tuple(nvox if i == direc else 1 for i in range(3))
+    xstart = tuple(60.0 if i == direc else 0.0 for i in range(3))
+    xend = tuple(-60.0 if i == direc else 0.0 for i in range(3))
+    n0, n1, n2 = img_dim
+    img_origin = (
+        (-(n0 / 2) + 0.5) * voxsize[0],
+        (-(n1 / 2) + 0.5) * voxsize[1],
+        (-(n2 / 2) + 0.5) * voxsize[2],
+    )
+
+    img = xp.zeros(img_dim, dtype=xp.float32, device=dev)
+    img[vox_num, 0, 0] = 1.0
+
+    p_tof = xp.zeros((1, num_tofbins), dtype=xp.float32, device=dev)
+    ppb.joseph3d_tof_sino_fwd(
+        xp.asarray([xstart], dtype=xp.float32, device=dev),
+        xp.asarray([xend], dtype=xp.float32, device=dev),
+        img,
+        xp.asarray(img_origin, dtype=xp.float32, device=dev),
+        xp.asarray(voxsize, dtype=xp.float32, device=dev),
+        p_tof,
+        tofbin_width,
+        xp.asarray([sigma_tof], dtype=xp.float32, device=dev),
+        xp.asarray([0.0], dtype=xp.float32, device=dev),
+        num_tofbins,
+        num_sigmas=num_sigmas,
+    )
+
+    # clamp + renormalization keeps the result finite and conserves the total
+    assert bool(xp.all(xp.isfinite(p_tof)))
+    assert math.isclose(float(xp.sum(p_tof)), voxsize[direc], abs_tol=1e-4)
+
+    # the back projector goes through the same clamp branch; check adjointness
+    y = xp.ones((1, num_tofbins), dtype=xp.float32, device=dev)
+    y_back = xp.zeros(img_dim, dtype=xp.float32, device=dev)
+    ppb.joseph3d_tof_sino_back(
+        xp.asarray([xstart], dtype=xp.float32, device=dev),
+        xp.asarray([xend], dtype=xp.float32, device=dev),
+        y_back,
+        xp.asarray(img_origin, dtype=xp.float32, device=dev),
+        xp.asarray(voxsize, dtype=xp.float32, device=dev),
+        y,
+        tofbin_width,
+        xp.asarray([sigma_tof], dtype=xp.float32, device=dev),
+        xp.asarray([0.0], dtype=xp.float32, device=dev),
+        num_tofbins,
+        num_sigmas=num_sigmas,
+    )
+
+    assert bool(xp.all(xp.isfinite(y_back)))
+    innerprod1 = float(xp.sum(p_tof * y))
+    innerprod2 = float(xp.sum(img * y_back))
+    assert math.isclose(innerprod1, innerprod2, abs_tol=1e-4)

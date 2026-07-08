@@ -15,7 +15,8 @@
 #define MAX_NUM_TOF_WEIGHTS 64
 #endif
 
-WORKER_QUALIFIER inline void atomic_sum(float *target, float value)
+template <typename T>
+WORKER_QUALIFIER inline void atomic_sum(T *target, T value)
 {
 #ifdef __CUDACC__
   atomicAdd(target, value);
@@ -74,24 +75,43 @@ WORKER_QUALIFIER inline void ray_cube_intersection_joseph(
     box_max[k] = box_min[k] + img_dim[k] * voxsize[k];
   }
 
-  // ray vector and its inverse
-  float dr[3], inv_dr[3];
+  // ray vector
+  float dr[3];
   for (int k = 0; k < 3; ++k)
-  {
     dr[k] = xend[k] - xstart[k];
-    inv_dr[k] = 1.0f / dr[k];
-  }
 
-  // slab intersection, parameter t in [0,1]
+  // degenerate zero-length LOR (xstart == xend): no ray direction is defined,
+  // so treat it as "no intersection". Without this guard sum_sq below is 0 and
+  // cos_sq = dr_sq / sum_sq = 0/0 = NaN. direction / correction / start_plane /
+  // end_plane already hold their no-hit defaults set above.
+  if (dr[0] == 0.0f && dr[1] == 0.0f && dr[2] == 0.0f)
+    return;
+
+  // slab intersection, parameter t in [0,1].
+  // Rays parallel to an axis (dr[k] == 0, e.g. dr_z for in-plane / direct-plane
+  // LORs) are handled explicitly rather than through 1/dr[k]: this keeps the
+  // test well-defined and correct even under -ffast-math / -ffinite-math-only,
+  // where the inf/NaN arithmetic the branchless slab method relied on is UB.
   float tmin = 0.0f;
   float tmax = 1.0f;
   for (int k = 0; k < 3; ++k)
   {
-    float t1 = (box_min[k] - xstart[k]) * inv_dr[k];
-    float t2 = (box_max[k] - xstart[k]) * inv_dr[k];
-    // use fminf/fmaxf for IEEE-754 compliance
-    tmin = fmaxf(tmin, fminf(t1, t2));
-    tmax = fminf(tmax, fmaxf(t1, t2));
+    if (dr[k] != 0.0f)
+    {
+      float inv = 1.0f / dr[k];
+      float t1 = (box_min[k] - xstart[k]) * inv;
+      float t2 = (box_max[k] - xstart[k]) * inv;
+      tmin = fmaxf(tmin, fminf(t1, t2));
+      tmax = fminf(tmax, fmaxf(t1, t2));
+    }
+    else if (xstart[k] < box_min[k] || xstart[k] > box_max[k])
+    {
+      // parallel to axis k and outside the slab -> no intersection.
+      // direction / correction / start_plane / end_plane already hold their
+      // no-hit defaults set above.
+      return;
+    }
+    // else: parallel to axis k but inside the slab -> does not constrain t.
   }
 
   if (tmax < tmin)
@@ -127,8 +147,11 @@ WORKER_QUALIFIER inline void ray_cube_intersection_joseph(
   float f1 = (xi1 - img_origin[direction]) / voxsize[direction];
   float f2 = (xi2 - img_origin[direction]) / voxsize[direction];
 
-  // if the integer part of f1 and f2 are the same, we are inside one voxel plane
-  if ((int)f1 != (int)f2)
+  // Use floor (not truncation toward zero) so the entry-face case f1 in
+  // [-0.5, 0) is handled consistently with the floorf-based start/end below.
+  // If floor(f1) == floor(f2) the ray stays within a single voxel-plane
+  // interval and no integer plane is crossed.
+  if ((int)floorf(f1) != (int)floorf(f2))
   {
     if (f1 > f2)
     {
@@ -289,7 +312,7 @@ WORKER_QUALIFIER inline void bilinear_interp_adj_fixed0(
   {
     if (i1 < 0 || i1 >= n1 || i2 < 0 || i2 >= n2)
       return;
-    atomic_sum(reinterpret_cast<float *>(&plane[std::size_t(i1) * n2 + i2]), val * w);
+    atomic_sum(&plane[std::size_t(i1) * n2 + i2], val * w);
   };
 
   inject(i1_0, i2_0, w00);
@@ -324,7 +347,7 @@ WORKER_QUALIFIER inline void bilinear_interp_adj_fixed1(
     if (i0 < 0 || i0 >= n0 || i2 < 0 || i2 >= n2)
       return;
     std::size_t idx = std::size_t(i0) * n1 * n2 + std::size_t(i1) * n2 + i2;
-    atomic_sum(reinterpret_cast<float *>(&img[idx]), val * w);
+    atomic_sum(&img[idx], val * w);
   };
 
   inject(i0_0, i2_0, w00);
@@ -359,7 +382,7 @@ WORKER_QUALIFIER inline void bilinear_interp_adj_fixed2(
     if (i0 < 0 || i0 >= n0 || i1 < 0 || i1 >= n1)
       return;
     std::size_t idx = std::size_t(i0) * n1 * n2 + std::size_t(i1) * n2 + i2;
-    atomic_sum(reinterpret_cast<float *>(&img[idx]), val * w);
+    atomic_sum(&img[idx], val * w);
   };
 
   inject(i0_0, i1_0, w00);

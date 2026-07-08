@@ -3,7 +3,8 @@
 #include "utils.h"
 
 // Helper: compute TOF weights into caller buffer and scatter normalized contribution.
-// No bounds check for MAX_NUM_TOF_WEIGHTS (caller must provide a large enough buffer).
+// The TOF window is clamped to at most MAX_NUM_TOF_WEIGHTS bins (see below),
+// so a caller buffer of that size is never overrun.
 WORKER_QUALIFIER static inline void _apply_fwd_tof_weights(
     float it_f,
     float max_tof_bin_diff,
@@ -19,6 +20,17 @@ WORKER_QUALIFIER static inline void _apply_fwd_tof_weights(
   int it_max = static_cast<int>(ceilf(it_f + max_tof_bin_diff));
   int n_tof_weights = it_max + 1 - it_min;
 
+  // Guard the fixed-size tof_weights[MAX_NUM_TOF_WEIGHTS] buffer. If the
+  // requested TOF window is wider than the buffer (e.g. very fine TOF binning),
+  // keep only the MAX_NUM_TOF_WEIGHTS bins centered on the ray's TOF position
+  // it_f; the far Gaussian tails are dropped and the kept weights are
+  // renormalized below (toAdd /= sum_weights).
+  if (n_tof_weights > MAX_NUM_TOF_WEIGHTS)
+  {
+    it_min = static_cast<int>(lroundf(it_f)) - MAX_NUM_TOF_WEIGHTS / 2;
+    n_tof_weights = MAX_NUM_TOF_WEIGHTS;
+  }
+
   float sum_weights = 0.0f;
   for (int k = 0; k < n_tof_weights; ++k)
   {
@@ -28,7 +40,7 @@ WORKER_QUALIFIER static inline void _apply_fwd_tof_weights(
   }
 
   // normalize and scatter only into valid TOF bins
-  toAdd /= sum_weights;
+  toAdd /= (sum_weights > 0.0f ? sum_weights : 1.0f);
   int k_start = (it_min < 0) ? -it_min : 0;
   int k_end = ((it_min + n_tof_weights) > num_tof_bins) ? (num_tof_bins - it_min) : n_tof_weights;
   for (int k = k_start; k < k_end; ++k)
@@ -82,16 +94,17 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
   // cf is the correction factor voxel_size[dir]/cos[dir]
   ray_cube_intersection_joseph(lor_start + 3 * i, lor_end + 3 * i, image_origin, voxel_size, image_dim, direction, cf, istart, iend);
 
+  // always initialise the output; this also covers LORs that miss the cube
+  for (short it = 0; it < num_tof_bins; ++it)
+  {
+    projection_values[i * num_tof_bins + it] = 0.0f;
+  }
+
   // if the ray does not intersect the image cube, return
   // istart and iend are set to -1
   if (istart == -1)
   {
     return;
-  }
-
-  for (short it = 0; it < num_tof_bins; ++it)
-  {
-    projection_values[i * num_tof_bins + it] = 0.0f;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -123,7 +136,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
   // the TOF bin number of intersection point of the ray with a given image plane along the principal axis is it_f = i*at + bt
   float at = sign * cf / tof_bin_width;
   float bt = (image_origin[direction] - tof_origin) / tof_slope;
-  float it_f = istart * at + bt;
+  float it_f;
 
   //////
   //////////////////////////////////////////////////////////////////////////////
@@ -140,20 +153,16 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
     a2 = (d2 * voxel_size[direction]) / (voxel_size[2] * dr);
     b2 = (lor_start[3 * i + 2] - image_origin[2] + d2 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[2];
 
-    // get the intersection points of the ray and the start image plane in voxel coordinates
-    i1_f = istart * a1 + b1;
-    i2_f = istart * a2 + b2;
-
     for (i0 = istart; i0 <= iend; ++i0)
     {
+      i1_f = i0 * a1 + b1;
+      i2_f = i0 * a2 + b2;
+      it_f = i0 * at + bt;
       // non-TOF contribution
       toAdd = cf * bilinear_interp_fixed0(image, n0, n1, n2, i0, i1_f, i2_f);
       _apply_fwd_tof_weights(it_f, max_tof_bin_diff, tof_bin_width, local_tof_sigma,
                              tof_weights, toAdd, projection_values, i, num_tof_bins);
 
-      i1_f += a1;
-      i2_f += a2;
-      it_f += at;
     }
   }
   else if (direction == 1)
@@ -166,21 +175,17 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
     a2 = (d2 * voxel_size[direction]) / (voxel_size[2] * dr);
     b2 = (lor_start[3 * i + 2] - image_origin[2] + d2 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[2];
 
-    // get the intersection points of the ray and the start image plane in voxel coordinates
-    i0_f = istart * a0 + b0;
-    i2_f = istart * a2 + b2;
-
     for (i1 = istart; i1 <= iend; ++i1)
     {
+      i0_f = i1 * a0 + b0;
+      i2_f = i1 * a2 + b2;
+      it_f = i1 * at + bt;
       // non-TOF contribution
       toAdd = cf * bilinear_interp_fixed1(image, n0, n1, n2, i0_f, i1, i2_f);
 
       _apply_fwd_tof_weights(it_f, max_tof_bin_diff, tof_bin_width, local_tof_sigma,
                              tof_weights, toAdd, projection_values, i, num_tof_bins);
 
-      i0_f += a0;
-      i2_f += a2;
-      it_f += at;
     }
   }
   else if (direction == 2)
@@ -193,21 +198,17 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
     a1 = (d1 * voxel_size[direction]) / (voxel_size[1] * dr);
     b1 = (lor_start[3 * i + 1] - image_origin[1] + d1 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[1];
 
-    // get the intersection points of the ray and the start image plane in voxel coordinates
-    i0_f = istart * a0 + b0;
-    i1_f = istart * a1 + b1;
-
     for (i2 = istart; i2 <= iend; ++i2)
     {
+      i0_f = i2 * a0 + b0;
+      i1_f = i2 * a1 + b1;
+      it_f = i2 * at + bt;
       // non-TOF contribution
       toAdd = cf * bilinear_interp_fixed2(image, n0, n1, n2, i0_f, i1_f, i2);
 
       _apply_fwd_tof_weights(it_f, max_tof_bin_diff, tof_bin_width, local_tof_sigma,
                              tof_weights, toAdd, projection_values, i, num_tof_bins);
 
-      i0_f += a0;
-      i1_f += a1;
-      it_f += at;
     }
   }
 }

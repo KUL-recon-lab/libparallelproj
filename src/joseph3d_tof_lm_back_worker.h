@@ -76,6 +76,17 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(std::size_t i,
   float local_tof_sigma = is_lor_dependent_tof_sigma ? tof_sigma[i] : tof_sigma[0];
   float local_tof_center_offset = is_lor_dependent_tof_center_offset ? tof_center_offset[i] : tof_center_offset[0];
 
+  // Guard against degenerate TOF parameters that would make the plane-range
+  // computation below divide by zero or yield non-finite istart/iend (whose cast
+  // to int is undefined). Python-level validation normally prevents this; this
+  // protects direct C-API callers. Such an event contributes nothing.
+  if (!(tof_bin_width > 0.0f) || !isfinite(tof_bin_width) ||
+      !(local_tof_sigma > 0.0f) || !isfinite(local_tof_sigma) ||
+      !(num_sigmas > 0.0f) || !isfinite(num_sigmas))
+  {
+    return;
+  }
+
   // sign variable that indicated whether TOF bin numbers increase or decrease when
   // through the image along the principal axis direction
   float sign = (lor_end[3 * i + direction] >= lor_start[3 * i + direction]) ? 1.0 : -1.0;
@@ -97,7 +108,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(std::size_t i,
   istart = static_cast<int>(floorf(((it - sign * num_sigmas * local_tof_sigma / tof_bin_width) - bt) / at));
   iend = static_cast<int>(ceilf(((it + sign * num_sigmas * local_tof_sigma / tof_bin_width) - bt) / at));
 
-  float it_f = istart * at + bt;
+  float it_f;
 
   float tof_plane_weight;
   float tof_plane_weights_sum = 0.0;
@@ -108,9 +119,9 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(std::size_t i,
   // in principle, we could buffer all tof_plane_weights here, but this would require quite some memory when executed in parallel
   for (i0 = istart; i0 <= iend; ++i0)
   {
+    it_f = i0 * at + bt;
     // TOF contribution
     tof_plane_weights_sum += effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width);
-    it_f += at;
   }
 
   // this is the "corrected" value up to the tof_plane_weight that we have to inject into the planes using the adjoint of the bilinear interpolation
@@ -140,21 +151,15 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(std::size_t i,
     b2 = (lor_start[3 * i + 2] - image_origin[2] + d2 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[2];
 
 
-    // get the intersection points of the ray and the start image plane in voxel coordinates
-    i1_f = istart * a1 + b1;
-    i2_f = istart * a2 + b2;
-    // reset it_f for 2nd loop
-    it_f = istart * at + bt;
-
     for (i0 = istart; i0 <= iend; ++i0)
     {
+      i1_f = i0 * a1 + b1;
+      i2_f = i0 * a2 + b2;
+      it_f = i0 * at + bt;
       // TOF contribution
       tof_plane_weight = effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width);
       bilinear_interp_adj_fixed0(image, n0, n1, n2, i0, i1_f, i2_f, toAdd * tof_plane_weight);
 
-      i1_f += a1;
-      i2_f += a2;
-      it_f += at;
     }
   }
   else if (direction == 1)
@@ -167,21 +172,15 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(std::size_t i,
     a2 = (d2 * voxel_size[direction]) / (voxel_size[2] * dr);
     b2 = (lor_start[3 * i + 2] - image_origin[2] + d2 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[2];
 
-    // get the intersection points of the ray and the start image plane in voxel coordinates
-    i0_f = istart * a0 + b0;
-    i2_f = istart * a2 + b2;
-    // reset it_f for 2nd loop
-    it_f = istart * at + bt;
-
     for (i1 = istart; i1 <= iend; ++i1)
     {
+      i0_f = i1 * a0 + b0;
+      i2_f = i1 * a2 + b2;
+      it_f = i1 * at + bt;
       // TOF contribution
       tof_plane_weight = effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width);
       bilinear_interp_adj_fixed1(image, n0, n1, n2, i0_f, i1, i2_f, toAdd * tof_plane_weight);
 
-      i0_f += a0;
-      i2_f += a2;
-      it_f += at;
     }
   }
   else if (direction == 2)
@@ -194,21 +193,15 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(std::size_t i,
     a1 = (d1 * voxel_size[direction]) / (voxel_size[1] * dr);
     b1 = (lor_start[3 * i + 1] - image_origin[1] + d1 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[1];
 
-    // get the intersection points of the ray and the start image plane in voxel coordinates
-    i0_f = istart * a0 + b0;
-    i1_f = istart * a1 + b1;
-    // reset it_f for 2nd loop
-    it_f = istart * at + bt;
-
     for (i2 = istart; i2 <= iend; ++i2)
     {
+      i0_f = i2 * a0 + b0;
+      i1_f = i2 * a1 + b1;
+      it_f = i2 * at + bt;
       // TOF contribution
       tof_plane_weight = effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width);
       bilinear_interp_adj_fixed2(image, n0, n1, n2, i0_f, i1_f, i2, toAdd * tof_plane_weight);
 
-      i0_f += a0;
-      i1_f += a1;
-      it_f += at;
     }
   }
 }
