@@ -57,6 +57,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
   // istart and iend are set to -1
   if (istart_vol == -1)
   {
+    projection_values[i] = 0.0f; // ensure missed LM events produce a defined (zero) value
     return;
   }
 

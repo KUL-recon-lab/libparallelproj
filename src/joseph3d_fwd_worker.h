@@ -40,14 +40,15 @@ WORKER_QUALIFIER inline void joseph3d_fwd_worker(std::size_t i,
   // cf is the correction factor voxel_size[dir]/cos[dir]
   ray_cube_intersection_joseph(lor_start + 3 * i, lor_end + 3 * i, image_origin, voxel_size, image_dim, direction, cf, istart, iend);
 
+  // always initialise the output; this also covers LORs that miss the cube
+  projection_values[i] = 0.0f;
+
   // if the ray does not intersect the image cube, return
   // istart and iend are set to -1
   if (istart == -1)
   {
     return;
   }
-
-  projection_values[i] = 0.0f;
 
   if (direction == 0)
   {
