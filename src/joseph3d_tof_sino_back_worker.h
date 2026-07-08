@@ -134,7 +134,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(std::size_t i,
   // the TOF bin number of intersection point of the ray with a given image plane along the principal axis is it_f = i*at + bt
   float at = sign * cf / tof_bin_width;
   float bt = (image_origin[direction] - tof_origin) / tof_slope;
-  float it_f = istart * at + bt;
+  float it_f;
 
   //////
   //////////////////////////////////////////////////////////////////////////////
@@ -153,17 +153,13 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(std::size_t i,
     a2 = (d2 * voxel_size[direction]) / (voxel_size[2] * dr);
     b2 = (lor_start[3 * i + 2] - image_origin[2] + d2 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[2];
 
-    // get the intersection points of the ray and the start image plane in voxel coordinates
-    i1_f = istart * a1 + b1;
-    i2_f = istart * a2 + b2;
-
     for (i0 = istart; i0 <= iend; ++i0)
     {
+      i1_f = i0 * a1 + b1;
+      i2_f = i0 * a2 + b2;
+      it_f = i0 * at + bt;
       val = cf * _gather_back_tof_weights(it_f, max_tof_bin_diff, tof_bin_width, local_tof_sigma, tof_weights, projection_values, lor_offset, num_tof_bins);
       bilinear_interp_adj_fixed0(image, n0, n1, n2, i0, i1_f, i2_f, val);
-      i1_f += a1;
-      i2_f += a2;
-      it_f += at;
     }
   }
   else if (direction == 1)
@@ -176,17 +172,13 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(std::size_t i,
     a2 = (d2 * voxel_size[direction]) / (voxel_size[2] * dr);
     b2 = (lor_start[3 * i + 2] - image_origin[2] + d2 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[2];
 
-    // get the intersection points of the ray and the start image plane in voxel coordinates
-    i0_f = istart * a0 + b0;
-    i2_f = istart * a2 + b2;
-
     for (i1 = istart; i1 <= iend; ++i1)
     {
+      i0_f = i1 * a0 + b0;
+      i2_f = i1 * a2 + b2;
+      it_f = i1 * at + bt;
       val = cf * _gather_back_tof_weights(it_f, max_tof_bin_diff, tof_bin_width, local_tof_sigma, tof_weights, projection_values, lor_offset, num_tof_bins);
       bilinear_interp_adj_fixed1(image, n0, n1, n2, i0_f, i1, i2_f, val);
-      i0_f += a0;
-      i2_f += a2;
-      it_f += at;
     }
   }
   else if (direction == 2)
@@ -199,17 +191,13 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(std::size_t i,
     a1 = (d1 * voxel_size[direction]) / (voxel_size[1] * dr);
     b1 = (lor_start[3 * i + 1] - image_origin[1] + d1 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[1];
 
-    // get the intersection points of the ray and the start image plane in voxel coordinates
-    i0_f = istart * a0 + b0;
-    i1_f = istart * a1 + b1;
-
     for (i2 = istart; i2 <= iend; ++i2)
     {
+      i0_f = i2 * a0 + b0;
+      i1_f = i2 * a1 + b1;
+      it_f = i2 * at + bt;
       val = cf * _gather_back_tof_weights(it_f, max_tof_bin_diff, tof_bin_width, local_tof_sigma, tof_weights, projection_values, lor_offset, num_tof_bins);
       bilinear_interp_adj_fixed2(image, n0, n1, n2, i0_f, i1_f, i2, val);
-      i0_f += a0;
-      i1_f += a1;
-      it_f += at;
     }
   }
 }
