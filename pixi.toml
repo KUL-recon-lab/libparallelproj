@@ -1,7 +1,20 @@
 [workspace]
 name = "libparallelproj"
 channels = ["conda-forge"]
-platforms = ["linux-64", "win-64", "osx-64", "osx-arm64"]
+platforms = [
+    "linux-64",
+    "win-64",
+    "osx-64",
+    "osx-arm64",
+    # CUDA-tagged platforms (pixi "rich platforms", >= 0.71): distinct platform
+    # identities that advertise a CUDA driver via the __cuda virtual package.
+    # They replace the deprecated per-feature [feature.cudaX.system-requirements]
+    # cuda = "..." and are referenced by name from the cuda12 / cuda13 features.
+    { name = "linux-64-cuda12", platform = "linux-64", cuda = "12" },
+    { name = "win-64-cuda12", platform = "win-64", cuda = "12" },
+    { name = "linux-64-cuda13", platform = "linux-64", cuda = "13" },
+    { name = "win-64-cuda13", platform = "win-64", cuda = "13" },
+]
 
 # ── Default feature: build infrastructure + true runtime deps ──────────────
 # cmake/ninja  — build tools   (conda: build)
@@ -32,7 +45,8 @@ tag-release = "python scripts/tag_release.py"
 # ── test feature ───────────────────────────────────────────────────────────
 # Pure test deps — not needed to build or run the library itself.
 # pytorch resolves to the CPU build in the default env; in cuda12/cuda13 envs
-# the solver picks the CUDA-enabled build automatically via system-requirements.
+# the solver picks the CUDA-enabled build automatically via the CUDA-tagged
+# platforms those features are pinned to.
 # pytest-cov is used in CI to generate Python coverage reports.
 [feature.test.dependencies]
 pytest           = "*"
@@ -41,6 +55,14 @@ array-api-strict = "*"
 pytorch          = "*"
 
 # ── cpu feature ────────────────────────────────────────────────────────────
+# Restrict the CPU environment to the plain OS/arch platforms. Without this the
+# cpu/default environment would inherit *all* workspace platforms -- now
+# including the CUDA-tagged linux-64-cuda* / win-64-cuda* identities -- and try
+# to solve them (which requires a CUDA driver). The CUDA environments select the
+# tagged platforms via the cuda12 / cuda13 features instead.
+[feature.cpu]
+platforms = ["linux-64", "win-64", "osx-64", "osx-arm64"]
+
 # build tool (conda: build)
 [feature.cpu.dependencies]
 cxx-compiler = "*"
@@ -72,11 +94,7 @@ uninstall          = "cmake --build build --target uninstall"
 
 # ── cuda12 feature ─────────────────────────────────────────────────────────
 [feature.cuda12]
-platforms = ["linux-64", "win-64"]
-
-# tells the solver the host machine provides a CUDA 12 driver
-[feature.cuda12.system-requirements]
-cuda = "12"
+platforms = ["linux-64-cuda12", "win-64-cuda12"]
 
 # build tools (conda: build): cxx-compiler + nvcc
 # host dep   (conda: host):   cuda-cudart-dev — CUDA runtime headers + link stubs
@@ -103,10 +121,7 @@ install     = "cmake --install build-cuda12"
 
 # ── cuda13 feature ─────────────────────────────────────────────────────────
 [feature.cuda13]
-platforms = ["linux-64", "win-64"]
-
-[feature.cuda13.system-requirements]
-cuda = "13"
+platforms = ["linux-64-cuda13", "win-64-cuda13"]
 
 [feature.cuda13.dependencies]
 cxx-compiler    = "*"
