@@ -1,6 +1,25 @@
 Changelog
 =========
 
+v2.0.8 (unreleased)
+-------------------
+
+Fixed
+^^^^^
+
+* **TOF projectors: the TOF center offset now always shifts towards the LOR end
+  point.** As documented, a positive ``tof_center_offset`` shifts the central
+  TOF bin from the LOR midpoint towards ``lor_end``. The four TOF workers
+  (sinogram and listmode, forward and back) applied the offset along the
+  principal axis direction instead, so for LORs with
+  ``lor_end[dir] < lor_start[dir]`` (``dir`` = principal axis) the shift went
+  towards ``lor_start``. **Results change for non-zero offsets on those LORs**;
+  zero offsets are unaffected. If you calibrated offsets against the previous
+  behavior, negate them for LORs with ``lor_end[dir] < lor_start[dir]``.
+  Swapping start and end point of a LOR now requires mirroring the TOF bin
+  index (``i -> N - 1 - i``) *and* negating its offset to obtain the same
+  projection. New tests: ``tests/test_tof_center_offset.py``.
+
 v2.0.7 (2026-07-08)
 -------------------
 

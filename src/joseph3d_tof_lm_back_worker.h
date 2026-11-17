@@ -92,7 +92,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(std::size_t i,
   float sign = (lor_end[3 * i + direction] >= lor_start[3 * i + direction]) ? 1.0 : -1.0;
 
   // the center of the first TOF bin (TOF bin 0) projected onto the principal axis
-  float tof_origin = 0.5 * (lor_start[3 * i + direction] + lor_end[3 * i + direction]) - sign * (0.5 * num_tof_bins - 0.5) * (tof_bin_width * costheta) + local_tof_center_offset * costheta;
+  float tof_origin = 0.5 * (lor_start[3 * i + direction] + lor_end[3 * i + direction]) - sign * (0.5 * num_tof_bins - 0.5) * (tof_bin_width * costheta) + sign * local_tof_center_offset * costheta;
   // slope of TOF bin number as a function of distance along the principal axis
   // the position of the TOF bins projects onto the principal axis is: tof_origin + tof_bin_number*tof_slope
   float tof_slope = sign * tof_bin_width * costheta;
