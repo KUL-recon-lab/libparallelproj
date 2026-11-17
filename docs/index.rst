@@ -11,6 +11,7 @@ The library implements the Joseph 3D ray-driven projection algorithm :cite:`Jose
 - **Non-TOF projections**: Standard forward and back projection
 - **TOF sinogram projections**: Time-Of-Flight sinogram-based projections
 - **TOF listmode projections**: Time-Of-Flight listmode (event-by-event) projections
+- **TOF listmode point projections**: fast, approximate TOF listmode projections that reduce every event to the center of its TOF bin (trilinear interpolation / splatting, e.g. for TOF histo-images)
 
 **github repository**: `<https://github.com/KUL-recon-lab/libparallelproj>`_
 

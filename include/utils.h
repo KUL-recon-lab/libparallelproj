@@ -408,3 +408,130 @@ WORKER_QUALIFIER inline float effective_gaussian_tof_kernel(float dx, float sigm
   float x2 = (dx - 0.5f * tbin_width) / denom;
   return 0.5f * (erff(x1) - erff(x2));
 }
+
+/**
+ * @brief Continuous voxel coordinates of the center of a TOF bin on a LOR.
+ *
+ * TOF bin @p tof_bin is centered at a distance
+ * (tof_bin - (num_tof_bins - 1) / 2) * tof_bin_width + tof_center_offset
+ * from the LOR midpoint, measured along the LOR towards @p lor_end.
+ * The returned coordinates are in units of voxels, with voxel [i,j,k] centered at (i,j,k).
+ *
+ * @param lor_start          pointer to the 3 coordinates of the LOR start point
+ * @param lor_end            pointer to the 3 coordinates of the LOR end point
+ * @param image_origin       pointer to the 3 coordinates of the center of voxel [0,0,0]
+ * @param voxel_size         pointer to the 3 voxel sizes
+ * @param tof_bin_width      width of the TOF bins (spatial units)
+ * @param tof_center_offset  offset of the central TOF bin from the LOR midpoint towards lor_end
+ * @param tof_bin            TOF bin index
+ * @param num_tof_bins       number of TOF bins
+ * @param f                  output: continuous voxel coordinates (3 values)
+ * @return false for a degenerate LOR (start == end) or non-finite input, true otherwise
+ */
+WORKER_QUALIFIER inline bool tof_bin_center_voxel_coords(const float *lor_start,
+                                                         const float *lor_end,
+                                                         const float *image_origin,
+                                                         const float *voxel_size,
+                                                         float tof_bin_width,
+                                                         float tof_center_offset,
+                                                         int tof_bin,
+                                                         int num_tof_bins,
+                                                         float *f)
+{
+  float d0 = lor_end[0] - lor_start[0];
+  float d1 = lor_end[1] - lor_start[1];
+  float d2 = lor_end[2] - lor_start[2];
+  float len = sqrtf(d0 * d0 + d1 * d1 + d2 * d2);
+
+  if (!(len > 0.0f) || !isfinite(len))
+  {
+    return false;
+  }
+
+  // signed distance of the TOF bin center from the LOR midpoint towards lor_end
+  float x = (static_cast<float>(tof_bin) - 0.5f * static_cast<float>(num_tof_bins - 1)) * tof_bin_width + tof_center_offset;
+  float s = x / len;
+
+  f[0] = (0.5f * (lor_start[0] + lor_end[0]) + s * d0 - image_origin[0]) / voxel_size[0];
+  f[1] = (0.5f * (lor_start[1] + lor_end[1]) + s * d1 - image_origin[1]) / voxel_size[1];
+  f[2] = (0.5f * (lor_start[2] + lor_end[2]) + s * d2 - image_origin[2]) / voxel_size[2];
+
+  return isfinite(f[0]) && isfinite(f[1]) && isfinite(f[2]);
+}
+
+/**
+ * @brief Calls fn(flat_index, weight) for each of the up to 8 trilinear
+ * interpolation neighbors of the continuous voxel coordinate @p f that lie
+ * inside the image (C-contiguous layout, index n1*n2*i + n2*j + k).
+ *
+ * Points outside [-1, n) along any axis have no neighbors inside the image.
+ * Out-of-image neighbors are treated as zero (forward) / dropped (adjoint),
+ * so the interpolation and its adjoint are exact transposes of each other.
+ */
+template <typename F>
+WORKER_QUALIFIER inline void trilinear_neighbors(const float *f, int n0, int n1, int n2, F fn)
+{
+  // the negated comparisons also reject NaN before any float -> int conversion
+  if (!(f[0] > -1.0f && f[0] < n0 && f[1] > -1.0f && f[1] < n1 && f[2] > -1.0f && f[2] < n2))
+  {
+    return;
+  }
+
+  float fl0 = floorf(f[0]);
+  float fl1 = floorf(f[1]);
+  float fl2 = floorf(f[2]);
+
+  int i0 = static_cast<int>(fl0);
+  int i1 = static_cast<int>(fl1);
+  int i2 = static_cast<int>(fl2);
+
+  float r0 = f[0] - fl0;
+  float r1 = f[1] - fl1;
+  float r2 = f[2] - fl2;
+
+  for (int a = 0; a < 2; ++a)
+  {
+    int j0 = i0 + a;
+    if (j0 < 0 || j0 >= n0)
+      continue;
+    float w0 = a ? r0 : 1.0f - r0;
+
+    for (int b = 0; b < 2; ++b)
+    {
+      int j1 = i1 + b;
+      if (j1 < 0 || j1 >= n1)
+        continue;
+      float w01 = w0 * (b ? r1 : 1.0f - r1);
+
+      for (int c = 0; c < 2; ++c)
+      {
+        int j2 = i2 + c;
+        if (j2 < 0 || j2 >= n2)
+          continue;
+        fn((std::size_t(j0) * n1 + j1) * n2 + j2, w01 * (c ? r2 : 1.0f - r2));
+      }
+    }
+  }
+}
+
+/**
+ * @brief Trilinear interpolation of @p img at continuous voxel coordinate @p f
+ * (zero outside of the image).
+ */
+WORKER_QUALIFIER inline float trilinear_interp(const float *img, int n0, int n1, int n2, const float *f)
+{
+  float acc = 0.0f;
+  trilinear_neighbors(f, n0, n1, n2, [&](std::size_t k, float w)
+                      { acc += w * img[k]; });
+  return acc;
+}
+
+/**
+ * @brief Adjoint of trilinear_interp: atomically adds @p val, distributed with
+ * the trilinear weights, to the neighbors of @p f inside of @p img.
+ */
+WORKER_QUALIFIER inline void trilinear_interp_adj(float *img, int n0, int n1, int n2, const float *f, float val)
+{
+  trilinear_neighbors(f, n0, n1, n2, [&](std::size_t k, float w)
+                      { atomic_sum(&img[k], val * w); });
+}

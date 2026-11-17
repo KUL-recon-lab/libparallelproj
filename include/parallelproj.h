@@ -335,3 +335,114 @@ extern "C"
 #ifdef __cplusplus
 }
 #endif
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+  /*! @brief 3D listmode TOF "point" forward projector
+
+  Fast, approximate TOF listmode forward projector: for every event, the
+  image is trilinearly interpolated at a single point, the center of the
+  event's TOF bin. No ray tracing and no TOF kernel are involved.
+
+  TOF bin @p i of an event is centered at a distance
+  `(i - (num_tof_bins - 1) / 2) * tof_bin_width + tof_center_offset`
+  from the LOR midpoint, measured along the LOR towards @p lor_end
+  (same bin placement as joseph3d_tof_lm_fwd()).
+  Image values outside of the image are treated as zero.
+
+  \pp_note_pointer_types
+
+  \pp_param_lor_start{num_events}
+  \pp_param_lor_end{num_events}
+  \pp_param_image_fwd
+  \pp_note_image_layout
+  \pp_param_image_origin
+  \pp_param_voxel_size
+  \pp_param_projection_values_tof_lm_out{num_events}
+  \pp_param_count{num_events,events}
+  \pp_param_tof_image_dim
+  \pp_param_tof_bin_width
+  \pp_param_tof_center_offset{num_events,is_lor_dependent_tof_center_offset}
+  \pp_param_tof_bin_index{num_events}
+  \pp_param_tof_num_bins
+  \pp_param_tof_dep_center{events}
+  \pp_param_device_id
+  \pp_param_threads
+  */
+
+  PARALLELPROJ_API void tof_lm_point_fwd(const float *lor_start,
+                                         const float *lor_end,
+                                         const float *image,
+                                         const float *image_origin,
+                                         const float *voxel_size,
+                                         float *projection_values,
+                                         std::size_t num_events,
+                                         const int *image_dim,
+                                         float tof_bin_width,
+                                         const float *tof_center_offset,
+                                         const short *tof_bin_index,
+                                         short num_tof_bins,
+                                         unsigned char is_lor_dependent_tof_center_offset,
+                                         int device_id = 0,
+                                         int threads_per_block = 64);
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+  /*! @brief 3D listmode TOF "point" back projector (adjoint of tof_lm_point_fwd())
+
+  Adds the value of every event, distributed with trilinear interpolation
+  weights, to the (up to 8) voxels around the center of the event's TOF bin.
+  Back projecting events with value 1 creates a TOF "histo-image": every
+  event whose TOF bin center lies within the box spanned by the centers of
+  the outermost voxels adds exactly 1 to the image sum (events closer to the
+  image border add less, events further outside add nothing).
+
+  \pp_note_pointer_types
+
+  \pp_param_lor_start{num_events}
+  \pp_param_lor_end{num_events}
+  \pp_param_image_back
+  \pp_note_image_layout
+  \pp_param_image_origin
+  \pp_param_voxel_size
+  \pp_param_projection_values_tof_lm_back{num_events}
+  \pp_param_count{num_events,events}
+  \pp_param_tof_image_dim
+  \pp_param_tof_bin_width
+  \pp_param_tof_center_offset{num_events,is_lor_dependent_tof_center_offset}
+  \pp_param_tof_bin_index{num_events}
+  \pp_param_tof_num_bins
+  \pp_param_tof_dep_center{events}
+  \pp_param_device_id
+  \pp_param_threads
+  */
+
+  PARALLELPROJ_API void tof_lm_point_back(const float *lor_start,
+                                          const float *lor_end,
+                                          float *image,
+                                          const float *image_origin,
+                                          const float *voxel_size,
+                                          const float *projection_values,
+                                          std::size_t num_events,
+                                          const int *image_dim,
+                                          float tof_bin_width,
+                                          const float *tof_center_offset,
+                                          const short *tof_bin_index,
+                                          short num_tof_bins,
+                                          unsigned char is_lor_dependent_tof_center_offset,
+                                          int device_id = 0,
+                                          int threads_per_block = 64);
+
+#ifdef __cplusplus
+}
+#endif

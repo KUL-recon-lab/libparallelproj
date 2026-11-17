@@ -32,3 +32,10 @@ TOF Listmode Projections
 .. autofunction:: parallelproj_core.joseph3d_tof_lm_fwd
 
 .. autofunction:: parallelproj_core.joseph3d_tof_lm_back
+
+TOF Listmode Point Projections
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: parallelproj_core.tof_lm_point_fwd
+
+.. autofunction:: parallelproj_core.tof_lm_point_back
