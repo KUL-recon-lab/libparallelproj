@@ -96,7 +96,7 @@ def test_tof_sino_fwd(
     tof_origin: float = (
         0.5 * (xstart[direction] + xend[direction])
         - sign * (0.5 * num_tofbins - 0.5) * (tofbin_width * costheta)
-        + tof_center_offset * costheta
+        + sign * tof_center_offset * costheta
     )
     tof_slope: float = sign * (tofbin_width * costheta)
 
