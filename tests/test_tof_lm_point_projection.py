@@ -324,6 +324,15 @@ def test_tof_lm_point_invalid_arguments(xp: ModuleType, dev: str):
         # valid call
         fn(xs, xe, img, org, vs, vals, 1.0, off, tb, 3)
 
+        with pytest.raises(ValueError):  # start / end not 2D
+            fn(xp.reshape(xs, (12,)), xp.reshape(xe, (12,)), img, org, vs, vals, 1.0, off, tb, 3)
+        with pytest.raises(ValueError):  # start / end not of shape (n, 3)
+            fn(xp.reshape(xs, (6, 2)), xp.reshape(xe, (6, 2)), img, org, vs,
+               xp.zeros(6, dtype=f32, device=dev), 1.0, off, xp.zeros(6, dtype=xp.int16, device=dev), 3)
+        with pytest.raises(ValueError):  # projection values not 1D
+            fn(xs, xe, img, org, vs, xp.reshape(vals, (4, 1)), 1.0, off, tb, 3)
+        with pytest.raises(ValueError):  # TOF bin indices not 1D
+            fn(xs, xe, img, org, vs, vals, 1.0, off, xp.reshape(tb, (4, 1)), 3)
         with pytest.raises(ValueError):  # different number of events in start / end
             fn(xs, xe[:3, ...], img, org, vs, vals, 1.0, off, tb, 3)
         with pytest.raises(ValueError):  # wrong number of projection values
