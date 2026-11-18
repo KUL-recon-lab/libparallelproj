@@ -1,10 +1,15 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/tuple.h>
+#include <nanobind/stl/vector.h>
 #include "parallelproj.h"
 #include <cmath>
 #include <cstdint>
 #include <initializer_list>
 #include <string>
+#include <tuple>
+#include <vector>
 #include <stdexcept>
 
 namespace nb = nanobind;
@@ -30,7 +35,7 @@ namespace
   {
     int32_t type;
     int32_t id;
-    const char *name;
+    std::string name;
   };
 
   template <typename Array>
@@ -61,30 +66,37 @@ namespace
   // CUDA builds: if the main arrays are on a GPU, the computation runs on that GPU and an
   // explicitly requested different device_id is an error. For host arrays, device_id is
   // passed on unchanged (-1: current CUDA device).
-  int check_devices(std::initializer_list<ArrayDevice> main,
-                    std::initializer_list<ArrayDevice> params,
-                    int device_id)
+  //
+  // check_devices_impl() takes the build type as an argument, so that the logic of
+  // both build types can be tested in any build (exposed as _check_devices).
+  int check_devices_impl(const std::vector<ArrayDevice> &main,
+                         const std::vector<ArrayDevice> &params,
+                         int device_id,
+                         bool cuda_build)
   {
-    const ArrayDevice &ref = *main.begin();
+    if (main.empty())
+      throw std::invalid_argument("check_devices: no main arrays");
+
+    const ArrayDevice &ref = main.front();
 
     for (const ArrayDevice &a : main)
     {
       if (a.type != ref.type)
-        throw std::invalid_argument(std::string("All input arrays must be on the same device type (") +
+        throw std::invalid_argument("All input arrays must be on the same device type (" +
                                     ref.name + " and " + a.name + " differ)");
       if (a.id != ref.id)
-        throw std::invalid_argument(std::string("All input arrays must be on the same device ID (") +
+        throw std::invalid_argument("All input arrays must be on the same device ID (" +
                                     ref.name + " and " + a.name + " differ)");
     }
 
-    if (parallelproj_cuda_enabled() == 0)
+    if (!cuda_build)
     {
-      for (std::initializer_list<ArrayDevice> group : {main, params})
+      for (const std::vector<ArrayDevice> *group : {&main, &params})
       {
-        for (const ArrayDevice &a : group)
+        for (const ArrayDevice &a : *group)
         {
           if (!is_host_device(a.type))
-            throw std::invalid_argument(std::string(a.name) +
+            throw std::invalid_argument(a.name +
                                         " is not a CPU array, but parallelproj_core was built without CUDA support");
         }
       }
@@ -92,7 +104,7 @@ namespace
     }
 
     if (!is_host_device(ref.type) && !is_cuda_device(ref.type))
-      throw std::invalid_argument(std::string("unsupported device type of ") + ref.name +
+      throw std::invalid_argument("unsupported device type of " + ref.name +
                                   " (only CPU and CUDA arrays are supported)");
 
     for (const ArrayDevice &p : params)
@@ -100,7 +112,7 @@ namespace
       if (is_host_device(p.type))
         continue;
       if (!is_cuda_device(p.type) || !is_cuda_device(ref.type) || p.id != ref.id)
-        throw std::invalid_argument(std::string(p.name) +
+        throw std::invalid_argument(p.name +
                                     " must be a CPU array or on the same device as the other input arrays");
     }
 
@@ -114,6 +126,14 @@ namespace
     }
 
     return device_id;
+  }
+
+  int check_devices(std::initializer_list<ArrayDevice> main,
+                    std::initializer_list<ArrayDevice> params,
+                    int device_id)
+  {
+    return check_devices_impl(std::vector<ArrayDevice>(main), std::vector<ArrayDevice>(params),
+                              device_id, parallelproj_cuda_enabled() != 0);
   }
 } // namespace
 
@@ -833,6 +853,26 @@ NB_MODULE(parallelproj_core, m)
   m.attr("version_patch") = parallelproj_version_patch();
 
   m.attr("cuda_enabled") = parallelproj_cuda_enabled();
+
+  // internal: the device check logic of the projector bindings, exposed for testing
+  // (arrays given as (name, DLPack device type, device id) tuples)
+  m.def(
+      "_check_devices",
+      [](const std::vector<std::tuple<std::string, int, int>> &main,
+         const std::vector<std::tuple<std::string, int, int>> &params,
+         int device_id, bool cuda_build)
+      {
+        auto convert = [](const std::vector<std::tuple<std::string, int, int>> &in)
+        {
+          std::vector<ArrayDevice> out;
+          for (const auto &t : in)
+            out.push_back({std::get<1>(t), std::get<2>(t), std::get<0>(t)});
+          return out;
+        };
+        return check_devices_impl(convert(main), convert(params), device_id, cuda_build);
+      },
+      "main"_a, "params"_a, "device_id"_a, "cuda_build"_a,
+      "Internal: device check logic of the projector bindings (for testing).");
 
   m.def("joseph3d_fwd", &joseph3d_fwd_py,
         "lor_start"_a.noconvert(), "lor_end"_a.noconvert(), "image"_a.noconvert(),

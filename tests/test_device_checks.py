@@ -206,6 +206,71 @@ def test_host_arrays_accepted(name):
 
 
 ################################################################################
+# decision logic of the device checks for both build types
+# (exposed as _check_devices, so the CUDA-build logic is also tested in CPU builds)
+################################################################################
+
+KDL_CUDA_HOST = 3
+KDL_ROCM = 10
+KDL_CUDA_MANAGED = 13
+
+
+def _main(device_type, device_id=0, n=3):
+    return [(f"array{k}", device_type, device_id) for k in range(n)]
+
+
+@pytest.mark.parametrize("cuda_build_flag", [False, True])
+@pytest.mark.parametrize("host_type", [KDL_CPU, KDL_CUDA_HOST])
+def test_check_devices_host_arrays(cuda_build_flag, host_type):
+    # host arrays: device_id is passed on unchanged (-1: automatic / current device)
+    for device_id in (-1, 0, 2):
+        assert ppb._check_devices(_main(host_type), [("p", KDL_CPU, 0)], device_id, cuda_build_flag) == device_id
+
+
+def test_check_devices_cpu_build_rejects_device_arrays():
+    for t in (KDL_CUDA, KDL_CUDA_MANAGED, KDL_ROCM):
+        with pytest.raises(ValueError, match="array0 is not a CPU array"):
+            ppb._check_devices(_main(t), [], -1, False)
+        with pytest.raises(ValueError, match="p is not a CPU array"):
+            ppb._check_devices(_main(KDL_CPU), [("p", t, 0)], -1, False)
+
+
+@pytest.mark.parametrize("cuda_type", [KDL_CUDA, KDL_CUDA_MANAGED])
+def test_check_devices_cuda_build_gpu_arrays(cuda_type):
+    # GPU arrays: the computation runs on their device
+    assert ppb._check_devices(_main(cuda_type, 1), [], -1, True) == 1
+    assert ppb._check_devices(_main(cuda_type, 1), [], 1, True) == 1
+    # an explicit, different device_id is an error
+    with pytest.raises(ValueError, match="does not match the CUDA device"):
+        ppb._check_devices(_main(cuda_type, 1), [], 0, True)
+    # parameter arrays: on the CPU or on the same device
+    assert ppb._check_devices(_main(cuda_type, 1), [("p", KDL_CPU, 0), ("q", cuda_type, 1)], -1, True) == 1
+    with pytest.raises(ValueError, match="q must be a CPU array or on the same device"):
+        ppb._check_devices(_main(cuda_type, 1), [("q", cuda_type, 0)], -1, True)
+    with pytest.raises(ValueError, match="q must be a CPU array or on the same device"):
+        ppb._check_devices(_main(cuda_type, 1), [("q", KDL_ROCM, 1)], -1, True)
+
+
+def test_check_devices_cuda_build_other_cases():
+    # GPU parameter arrays with host main arrays are an error
+    with pytest.raises(ValueError, match="q must be a CPU array or on the same device"):
+        ppb._check_devices(_main(KDL_CPU), [("q", KDL_CUDA, 0)], -1, True)
+    # unsupported device types
+    with pytest.raises(ValueError, match="unsupported device type of array0"):
+        ppb._check_devices(_main(KDL_ROCM), [], -1, True)
+
+
+@pytest.mark.parametrize("cuda_build_flag", [False, True])
+def test_check_devices_main_arrays_must_match(cuda_build_flag):
+    with pytest.raises(ValueError, match="same device type \\(array0 and x differ\\)"):
+        ppb._check_devices(_main(KDL_CUDA, 0) + [("x", KDL_CPU, 0)], [], -1, cuda_build_flag)
+    with pytest.raises(ValueError, match="same device ID \\(array0 and x differ\\)"):
+        ppb._check_devices(_main(KDL_CUDA, 0) + [("x", KDL_CUDA, 1)], [], -1, cuda_build_flag)
+    with pytest.raises(ValueError, match="no main arrays"):
+        ppb._check_devices([], [], -1, cuda_build_flag)
+
+
+################################################################################
 # tests with real GPU arrays
 ################################################################################
 
