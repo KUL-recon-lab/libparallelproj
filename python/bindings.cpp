@@ -1088,7 +1088,9 @@ NB_MODULE(parallelproj_core, m)
         num_tof_bins : int
             Number of TOF bins.
         num_sigmas : float, optional
-            Number of sigmas for TOF kernel calculation (default: 3.0).
+            Half width of the truncated Gaussian TOF kernel in units of sigma
+            (default: 3.0). The weights of the TOF bins overlapping the kernel support
+            sum to 1; windows wider than 64 TOF bins are truncated and renormalized.
         device_id : int, optional
             CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
             input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
@@ -1145,7 +1147,9 @@ NB_MODULE(parallelproj_core, m)
         num_tof_bins : int
             Number of TOF bins.
         num_sigmas : float, optional
-            Number of sigmas for TOF kernel calculation (default: 3.0).
+            Half width of the truncated Gaussian TOF kernel in units of sigma
+            (default: 3.0). The weights of the TOF bins overlapping the kernel support
+            sum to 1; windows wider than 64 TOF bins are truncated and renormalized.
         device_id : int, optional
             CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
             input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
@@ -1209,7 +1213,9 @@ NB_MODULE(parallelproj_core, m)
         num_tof_bins : int
             Number of TOF bins.
         num_sigmas : float, optional
-            Number of sigmas for TOF kernel calculation (default: 3.0).
+            Half width of the truncated Gaussian TOF kernel in units of sigma
+            (default: 3.0). The weights of the TOF bins overlapping the kernel support
+            sum to 1; windows wider than 64 TOF bins are truncated and renormalized.
         device_id : int, optional
             CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
             input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
@@ -1269,7 +1275,9 @@ NB_MODULE(parallelproj_core, m)
         num_tof_bins : int
             Number of TOF bins.
         num_sigmas : float, optional
-            Number of sigmas for TOF kernel calculation (default: 3.0).
+            Half width of the truncated Gaussian TOF kernel in units of sigma
+            (default: 3.0). The weights of the TOF bins overlapping the kernel support
+            sum to 1; windows wider than 64 TOF bins are truncated and renormalized.
         device_id : int, optional
             CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
             input arrays for GPU arrays, the current CUDA device for CPU arrays (which are

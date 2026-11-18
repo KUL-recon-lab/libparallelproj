@@ -7,14 +7,6 @@
 #include <math.h>
 #endif
 
-#ifndef MAX_NUM_TOF_WEIGHTS
-// default 64 can be changed at compile time
-// for a TOF sinogram projector, we don't expect that more than 64 TOF bins will
-// have a significant contribution
-// if they have, bigger TOF bin widths should be used
-#define MAX_NUM_TOF_WEIGHTS 64
-#endif
-
 template <typename T>
 WORKER_QUALIFIER inline void atomic_sum(T *target, T value)
 {

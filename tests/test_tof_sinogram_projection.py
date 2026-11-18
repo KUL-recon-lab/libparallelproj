@@ -124,16 +124,24 @@ def test_tof_sino_fwd(
     p_tof_ref = xp.zeros((1, num_tofbins), dtype=xp.float32, device=dev)
 
     for i in range(istart, iend + 1):
-        # min and max tof bin for which we have to calculate tof weights
-        it_min = math.floor(it_f - max_tof_bin_diff)
-        it_max = math.ceil(it_f + max_tof_bin_diff)
+        # truncated TOF kernel (see src/tof_kernel.h): the TOF bins overlapping the
+        # support [it_f - m, it_f + m], m = num_sigmas * sigma / bin_width, get the
+        # weights (F(upper edge) - F(lower edge)) / (F(m) - F(-m)) with the cumulative
+        # Gaussian F held constant outside the support
+        it_min = math.floor(it_f - max_tof_bin_diff + 0.5)
+        it_max = math.floor(it_f + max_tof_bin_diff + 0.5)
 
-        tof_weights = xp.zeros(it_max + 1 - it_min, device=dev, dtype=xp.float32)
-        for k, it in enumerate(range(it_min, it_max + 1)):
-            dist = abs(it_f - it) * tofbin_width
-            tof_weights[k] = effective_tof_kernel(dist, sigma_tof, tofbin_width)
+        def cdf2(u):
+            u = min(max(u, -max_tof_bin_diff), max_tof_bin_diff)
+            return math.erf(u * tofbin_width / (math.sqrt(2) * sigma_tof))
 
-        tof_weights /= xp.sum(tof_weights)
+        norm = cdf2(max_tof_bin_diff)
+        tof_weights = xp.asarray(
+            [(cdf2(it + 0.5 - it_f) - cdf2(it - 0.5 - it_f)) / (2 * norm)
+             for it in range(it_min, it_max + 1)],
+            dtype=xp.float32,
+            device=dev,
+        )
 
         for k, it in enumerate(range(it_min, it_max + 1)):
             if direction == 0:
@@ -315,8 +323,8 @@ def test_tof_sino_weight_buffer_clamp(
     nvox: int = 19,
     num_tofbins: int = 81,
 ):
-    """Fine TOF binning so the TOF window exceeds MAX_NUM_TOF_WEIGHTS (64) bins,
-    exercising the buffer-clamp branch in the sinogram TOF fwd/back workers. The
+    """Fine TOF binning so the TOF window exceeds the maximum of 64 bins,
+    exercising the window truncation in the sinogram TOF fwd/back workers. The
     clamp keeps the central bins and renormalizes, so the sum over TOF of a
     single-voxel forward projection is still conserved and fwd/back stay adjoint.
     """

@@ -185,30 +185,58 @@ In this case, we only evaluate the effective TOF weights for the relevant TOF bi
 Moreover, based on the width of the (effective) TOF kernel, we can further ignore ray samples that are far from the TOF bin center,
 which leads to a significant speedup (see next section).
 
-Truncation of the effective Gaussian TOF kernel
------------------------------------------------
+Truncation of the Gaussian TOF kernel
+-------------------------------------
 
 The continuous Gaussian as well as the effective TOF kernel (:math:`w_{\text{eff}}`) have infinite support,
 but in practice its tails contribute negligibly far from the center and are expensive to evaluate.
 
-A standard approach is to truncate the kernel beyond a configurable number of standard deviations :math:`n_\sigma`:
+We therefore truncate the **continuous** Gaussian kernel at a configurable number of standard
+deviations :math:`n_\sigma` (``num_sigmas``), i.e. we use the truncated kernel
 
 .. math::
 
-   |s - s_c| > n_\sigma \,\sigma_\text{TOF} \quad \Longrightarrow \quad w_{\text{eff}}(s; s_c, \sigma_\text{TOF}, \Delta) \approx 0.
+   g_\text{trunc}(s; s_c, \sigma_\text{TOF}) \propto
+   \begin{cases}
+     g(s; s_c, \sigma_\text{TOF}) & |s - s_c| \le n_\sigma \, \sigma_\text{TOF} \\
+     0 & \text{otherwise,}
+   \end{cases}
+
+normalized to unit integral. The effective TOF weight of a bin is the integral of the truncated
+kernel over the bin limits. With the cumulative Gaussian :math:`\Phi` this reads
+
+.. math::
+
+   w_{\text{eff}}(s_k; s_c, \sigma_\text{TOF}, \Delta) =
+   \frac{\Phi(\min(\max(u_+, -n_\sigma), n_\sigma)) - \Phi(\min(\max(u_-, -n_\sigma), n_\sigma))}{\Phi(n_\sigma) - \Phi(-n_\sigma)},
+   \qquad u_\pm = \frac{s_c \pm \Delta/2 - s_k}{\sigma_\text{TOF}},
+
+i.e. the cumulative kernel is held constant outside the support. Properties:
+
+- only TOF bins that overlap the support :math:`[s_k - n_\sigma \sigma_\text{TOF}, s_k + n_\sigma \sigma_\text{TOF}]`
+  of a ray sample get a non-zero weight (in sinogram mode, at most
+  :math:`\lfloor 2 n_\sigma \sigma_\text{TOF} / \Delta \rfloor + 2` bins per ray sample),
+- the weights of all these bins sum to exactly 1, so the sum over all TOF bins of a TOF sinogram
+  projection equals the non-TOF projection (as long as the TOF bins cover the support),
+- the weights are **continuous** in the position of the ray sample: a TOF bin entering or leaving
+  the support starts or ends with weight 0 (no jumps, so tiny rounding differences of the
+  positions cause only tiny differences of the projections),
+- sinogram and listmode projectors use the same weight for every (ray sample, TOF bin) pair, so a
+  listmode event gets exactly the value of its TOF sinogram bin.
 
 Implementation-wise, this means that
 
-1. in sinogram mode, at a given ray sample :math:`s_k`, we only evaluate the effective TOF weights for TOF bins whose centers are within
-:math:`n_\sigma \sigma_\text{TOF}` of :math:`s_k`.
+1. in sinogram mode, at a given ray sample :math:`s_k`, we only evaluate the weights of the TOF bins
+   overlapping the support around :math:`s_k`; neighbouring bins share an evaluation of
+   :math:`\Phi` at their common bin edge.
 
-2. in listmode, we only evaluate the effective TOF weights for ray samples :math:`s_k` that are within :math:`n_\sigma \sigma_\text{TOF}` of the TOF bin center :math:`s_c`.
+2. in listmode, we only visit ray samples :math:`s_k` whose support overlaps the TOF bin of the event.
 
 .. important::
 
-  1. The choice of :math:`n_\sigma` is a trade-off between accuracy and speed. A smaller :math:`n_\sigma` leads to faster computations but may introduce bias if the kernel tails are not negligible. This means that :math:`n_\sigma` should be chosen large enough to capture the majority of the kernel mass, otherwise the truncation may introduce bias in the projections. The default value :math:`n_\sigma=3` which is typically sufficient for most applications.
+  1. The choice of :math:`n_\sigma` is a trade-off between accuracy and speed. A smaller :math:`n_\sigma` leads to faster computations but changes the shape of the kernel (the truncated tails are missing). The default value :math:`n_\sigma=3` (99.7 % of the Gaussian mass) is typically sufficient for most applications.
 
-  2. We always **re-normalize** the effective TOF kernel **after truncation** to ensure that the integral over the truncated kernel is the same as the integral over the full kernel. In case :math:`n_\sigma` is too small (e.g. < 3) significant kernel mass is truncated and the re-normalization introduces bias in the shape of the effective TOF kernel (on top of the truncation).
+  2. In sinogram mode, TOF windows of more than 64 TOF bins (:math:`2 n_\sigma \sigma_\text{TOF} / \Delta \gtrsim 62`) are additionally truncated to the 64 bins centered on the ray sample and renormalized. Use wider TOF bins (or a smaller :math:`n_\sigma`) in that case.
 
 
 Math symbols vs C API variable names

@@ -5,6 +5,14 @@
 #include <iostream>
 #include <stdexcept>
 
+// One kernel per (accumulator size W, store width V). Every launch runs over all LORs;
+// a thread only projects its LOR if the LOR's class is (W, V), so that every LOR is
+// projected exactly once without the host knowing the TOF parameters (no host
+// synchronization; LOR-dependent TOF sigma possible). The class depends on the TOF
+// window size (sigma) and, for the store width, on how fast the TOF window moves along
+// the LOR. The accumulator size is checked first, so that most launches skip a LOR
+// after reading only its TOF sigma.
+template <int W, int V>
 __global__ void joseph3d_tof_sino_fwd_kernel(const float *lor_start,
                                              const float *lor_end,
                                              const float *image,
@@ -21,13 +29,21 @@ __global__ void joseph3d_tof_sino_fwd_kernel(const float *lor_start,
                                              unsigned char is_lor_dependent_tof_sigma,
                                              unsigned char is_lor_dependent_tof_center_offset)
 {
-    std::size_t i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < num_lors)
-    {
-        joseph3d_tof_sino_fwd_worker(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, image_dim.d, tof_bin_width,
-                                     tof_sigma, tof_center_offset, num_sigmas, num_tof_bins,
-                                     is_lor_dependent_tof_sigma, is_lor_dependent_tof_center_offset);
-    }
+    std::size_t i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (i >= num_lors)
+        return;
+
+    const float sigma = is_lor_dependent_tof_sigma ? tof_sigma[i] : tof_sigma[0];
+    const float half_width_bins = num_sigmas * sigma / tof_bin_width;
+    if (tof_acc_size_class(half_width_bins, V) != W)
+        return;
+    const int v_lor = tof_store_width(half_width_bins, tof_bins_per_plane(lor_start + 3 * i, lor_end + 3 * i, voxel_size, tof_bin_width));
+    if (v_lor != V)
+        return;
+
+    joseph3d_tof_sino_fwd_worker<W, V>(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, image_dim.d,
+                                       tof_bin_width, tof_sigma, tof_center_offset, num_sigmas, num_tof_bins,
+                                       is_lor_dependent_tof_sigma, is_lor_dependent_tof_center_offset);
 }
 
 //////////////////////////////////////////////////////////////////
@@ -120,12 +136,24 @@ void joseph3d_tof_sino_fwd(const float *lor_start,
     // when it is read, so without this flush the launch check below would
     // misattribute such a stale error to this kernel launch.
     cudaGetLastError();
-    joseph3d_tof_sino_fwd_kernel<<<num_blocks, threads_per_block, 0, call_stream.stream>>>(
-        d_lor_start.ptr, d_lor_end.ptr, d_image.ptr, d_image_origin.ptr, d_voxel_size.ptr,
-        d_projection_values.ptr, num_lors, h_image_dim,
-        tof_bin_width, d_tof_sigma.ptr, d_tof_center_offset.ptr, num_sigmas, num_tof_bins,
-        is_lor_dependent_tof_sigma, is_lor_dependent_tof_center_offset);
-    cuda_check_launch();
+    if (num_lors > 0)
+    {
+        // one launch per (accumulator size, store width), all on the call's stream
+#define TOF_SINO_FWD_LAUNCH(W_, V_)                                                                   \
+    joseph3d_tof_sino_fwd_kernel<W_, V_><<<num_blocks, threads_per_block, 0, call_stream.stream>>>( \
+        d_lor_start.ptr, d_lor_end.ptr, d_image.ptr, d_image_origin.ptr, d_voxel_size.ptr,          \
+        d_projection_values.ptr, num_lors, h_image_dim,                                             \
+        tof_bin_width, d_tof_sigma.ptr, d_tof_center_offset.ptr, num_sigmas, num_tof_bins,          \
+        is_lor_dependent_tof_sigma, is_lor_dependent_tof_center_offset)
+        for (int k = 0; k < TOF_NUM_ACC_SIZES; ++k)
+        {
+            TOF_SINO_FWD_DISPATCH(tof_acc_size(k), 1, TOF_SINO_FWD_LAUNCH);
+            cuda_check_launch();
+            TOF_SINO_FWD_DISPATCH(tof_acc_size(k), 4, TOF_SINO_FWD_LAUNCH);
+            cuda_check_launch();
+        }
+#undef TOF_SINO_FWD_LAUNCH
+    }
 
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////

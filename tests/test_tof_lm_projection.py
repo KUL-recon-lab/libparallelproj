@@ -39,7 +39,7 @@ def test_tof_lm_fwd(
     voxsize: tuple[float, float, float] = (1.5, 1.7, 1.6),
     vox_num: int = 29,
     tofbin_width: float = 4.0,
-    num_sigmas: float = 4.0,  # we use pm 4 sigma here, since the truncation is slightly different between sino and LM projectors
+    num_sigmas: float = 4.0,
     nvox: int = 59,
     verbose: bool = False,
 ):
@@ -591,13 +591,12 @@ def test_tof_lm_vs_sino_narrow_kernels(xp: ModuleType, dev: str, sigma_tof: floa
         xp.asarray(list(range(num_tofbins)), dtype=xp.int16, device=dev), num_tofbins, num_sigmas=num_sigmas,
     )
 
-    # Both projectors use the same (plane, TOF bin) pairs. A small difference remains
-    # for TOF kernels much narrower than the voxels: listmode normalizes the TOF weights
-    # of an event over the planes, the sinogram projector those of a plane over the TOF
-    # bins, which differ slightly when the kernel is sampled by only a few planes.
-    # (Before the listmode window included the TOF bin width, the difference was >= 1e-3
-    # for all sigmas here and ~1e-1 for sigma = 0.1.)
-    rel_tol = 1e-3 if sigma_tof < min(vox) else 3e-4
+    # Both projectors use the same truncated TOF kernel and the same weight of every
+    # (plane, TOF bin) pair (src/tof_kernel.h), so a listmode event gets the value of its
+    # TOF sinogram bin up to float rounding of the sums - also for TOF kernels much
+    # narrower than the voxels. (Before 3.0 the listmode projectors normalized the TOF
+    # weights of an event over the planes, which differed by up to 1e-1 here.)
+    rel_tol = 1e-5
     max_sino = float(xp.max(p_sino))
     assert max_sino > 0
     assert float(xp.max(xp.abs(p_lm - p_sino[0, :]))) < rel_tol * max_sino

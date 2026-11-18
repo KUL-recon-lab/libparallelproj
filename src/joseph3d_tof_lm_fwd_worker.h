@@ -1,6 +1,7 @@
 #pragma once
 #include "cuda_compat.h"
 #include "utils.h"
+#include "tof_kernel.h"
 
 WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
                                                         const float *lor_start,
@@ -86,10 +87,11 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
 
   // sign variable that indicated whether TOF bin numbers increase or decrease when
   // through the image along the principal axis direction
-  float sign = (lor_end[3 * i + direction] >= lor_start[3 * i + direction]) ? 1.0 : -1.0;
+  float sign = (lor_end[3 * i + direction] >= lor_start[3 * i + direction]) ? 1.0f : -1.0f;
 
   // the center of the first TOF bin (TOF bin 0) projected onto the principal axis
-  float tof_origin = 0.5 * (lor_start[3 * i + direction] + lor_end[3 * i + direction]) - sign * (0.5 * num_tof_bins - 0.5) * (tof_bin_width * costheta) + sign * local_tof_center_offset * costheta;
+  // (same float expression as in the TOF sinogram projectors)
+  float tof_origin = 0.5f * (lor_start[3 * i + direction] + lor_end[3 * i + direction]) - sign * (0.5f * num_tof_bins - 0.5f) * (tof_bin_width * costheta) + sign * local_tof_center_offset * costheta;
   // slope of TOF bin number as a function of distance along the principal axis
   // the position of the TOF bins projects onto the principal axis is: tof_origin + tof_bin_number*tof_slope
   float tof_slope = sign * tof_bin_width * costheta;
@@ -98,23 +100,24 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
   float at = sign * cf / tof_bin_width;
   float bt = (image_origin[direction] - tof_origin) / tof_slope;
 
-  // recompute istart and iend based on TOF bin and num_sigmas to consider
-  // in LM processing, we don't step through all planes, but only those that are within num_sigmas*local_tof_sigma of the TOF bin of the ray
-  // NOTE: that istart and iend can be outside the image boundaries
-  // NOTE: we need to loop over all planes between istart and iend even if they are outside the image boundaries, to make sure the TOF weights are normalized correctly
-  // Use the same truncation as the TOF sinogram projectors: bin it gets a
-  // contribution from a plane with TOF bin coordinate it_f iff
-  // floor(it_f - D) <= it <= ceil(it_f + D) with D = num_sigmas * sigma / bin_width,
-  // which is equivalent to |it_f - it| < D + 1. The "+ 1" accounts for the width of
-  // the TOF bin (the effective kernel is the Gaussian integrated over the bin).
+  // Truncated TOF kernel (same weights as the TOF sinogram projectors, see tof_kernel.h):
+  // the weight of TOF bin `it` for an image plane at TOF bin coordinate it_f is the
+  // weight of bin `it` in the sinogram projection of that plane, so a listmode event
+  // gets exactly the value of its TOF sinogram bin. Only planes with |it_f - it| <
+  // m + 0.5 (m = num_sigmas * sigma / tof_bin_width) can contribute; the plane range
+  // below uses m + 1 and is clipped to the planes intersected by the image.
+  const TOFKernelGauss kernel(local_tof_sigma, tof_bin_width, num_sigmas);
   const float max_tof_bin_diff = num_sigmas * local_tof_sigma / tof_bin_width + 1.0f;
   istart = static_cast<int>(floorf(((it - sign * max_tof_bin_diff) - bt) / at));
   iend = static_cast<int>(ceilf(((it + sign * max_tof_bin_diff) - bt) / at));
+  if (istart < istart_vol)
+    istart = istart_vol;
+  if (iend > iend_vol)
+    iend = iend_vol;
 
   float it_f;
 
   float tof_plane_weight;
-  float tof_plane_weights_sum = 0.0;
 
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////
@@ -134,10 +137,9 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
     {
       i1_f = i0 * a1 + b1;
       i2_f = i0 * a2 + b2;
-      it_f = i0 * at + bt;
+      it_f = tof_plane_position(i0, at, bt);
       // TOF contribution
-      tof_plane_weight = ((fabsf(it_f - it) < max_tof_bin_diff) ? effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width) : 0.0f);
-      tof_plane_weights_sum += tof_plane_weight;
+      tof_plane_weight = tof_bin_weight(kernel, it_f, it);
 
       // we only add contribution from valid planes where the ray intersects the image cube
       if (i0 >= istart_vol && i0 <= iend_vol)
@@ -161,10 +163,9 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
     {
       i0_f = i1 * a0 + b0;
       i2_f = i1 * a2 + b2;
-      it_f = i1 * at + bt;
+      it_f = tof_plane_position(i1, at, bt);
       // TOF contribution
-      tof_plane_weight = ((fabsf(it_f - it) < max_tof_bin_diff) ? effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width) : 0.0f);
-      tof_plane_weights_sum += tof_plane_weight;
+      tof_plane_weight = tof_bin_weight(kernel, it_f, it);
 
       // we only add contribution from valid planes where the ray intersects the image cube
       if (i1 >= istart_vol && i1 <= iend_vol)
@@ -188,10 +189,9 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
     {
       i0_f = i2 * a0 + b0;
       i1_f = i2 * a1 + b1;
-      it_f = i2 * at + bt;
+      it_f = tof_plane_position(i2, at, bt);
       // TOF contribution
-      tof_plane_weight = ((fabsf(it_f - it) < max_tof_bin_diff) ? effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width) : 0.0f);
-      tof_plane_weights_sum += tof_plane_weight;
+      tof_plane_weight = tof_bin_weight(kernel, it_f, it);
 
       // we only add contribution from valid planes where the ray intersects the image cube
       if (i2 >= istart_vol && i2 <= iend_vol)
@@ -202,12 +202,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
     }
   }
 
-  // the tof-weighted interpolated values has to be corrected for the non-TOF correction factor (cf)
-  // and also for the the fact that we truncated the plane range based on num sigmas
-  // the expected sum of the TOF weights is (tof_bin_width / cf)
-
-  // projection_values[i] = toAdd * cf * (tof_bin_width / cf) / tof_plane_weights_sum;
-  // if no image plane has a non-zero TOF weight (e.g. voxels larger than TOF bins and a
-  // very narrow TOF kernel), the event has no contribution (avoid 0 / 0 = NaN)
-  projection_values[i] = (tof_plane_weights_sum > 0.0f) ? toAdd * tof_bin_width / tof_plane_weights_sum : 0.0f;
+  // sum over the planes of TOF weight x interpolated image value, times the non-TOF
+  // correction factor cf (as in the TOF sinogram projection)
+  projection_values[i] = cf * toAdd;
 }
