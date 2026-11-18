@@ -41,6 +41,10 @@ Added
     running concurrently from one Python thread, and recording projector calls
     in CUDA graphs.
   - Calls with CPU arrays always return complete results.
+  - CUDA graph capture works with PyTorch tensors directly. CuPy arrays have to
+    be passed as ``x.__dlpack__(stream=handle)`` during capture: the bindings
+    import arrays via DLPack without a stream, and CuPy then orders the legacy
+    default stream after its current stream, which is not allowed during capture.
   - Temporary device buffers are allocated, copied and freed stream-ordered
     (``cudaMallocAsync`` / ``cudaFreeAsync``), and the image dimensions are
     passed to the kernels by value, so asynchronous calls do not synchronize

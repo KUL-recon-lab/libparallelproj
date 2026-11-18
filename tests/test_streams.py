@@ -310,8 +310,24 @@ def test_cuda_graph_capture(lib):
         s = cp.cuda.Stream(non_blocking=True)
         with s:
             _fwd(xs_gpu, xe_gpu, x_static, org_gpu, vs_gpu, p_static, stream=s.ptr)
+            s.synchronize()
+            # nanobind imports arrays via __dlpack__() without a stream argument.
+            # CuPy then orders the legacy default stream after its current stream,
+            # which is not allowed during capture. Passing DLPack capsules that name
+            # the capture stream avoids that (consumer stream == CuPy's stream).
+            cap = lambda x: x.__dlpack__(stream=s.ptr)
             s.begin_capture()
-            _fwd(xs_gpu, xe_gpu, x_static, org_gpu, vs_gpu, p_static, stream=s.ptr)
+            try:
+                _fwd(cap(xs_gpu), cap(xe_gpu), cap(x_static), cap(org_gpu), cap(vs_gpu),
+                     cap(p_static), stream=s.ptr)
+            except Exception:
+                # always end the capture: a stream left capturing breaks all later
+                # CUDA calls on this device (also in other tests)
+                try:
+                    s.end_capture()
+                except Exception:
+                    pass
+                raise
             g = s.end_capture()
         replay = lambda: g.launch(stream=s)
 

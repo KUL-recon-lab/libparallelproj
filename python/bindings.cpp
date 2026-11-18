@@ -996,6 +996,10 @@ NB_MODULE(parallelproj_core, m)
             stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
             operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
             Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
 
         Notes
         -----
@@ -1038,6 +1042,10 @@ NB_MODULE(parallelproj_core, m)
             stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
             operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
             Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
 
         Notes
         -----
@@ -1096,6 +1104,10 @@ NB_MODULE(parallelproj_core, m)
             stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
             operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
             Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
         )pbdoc");
 
   m.def("joseph3d_tof_sino_back", &joseph3d_tof_back_fwd_py,
@@ -1149,6 +1161,10 @@ NB_MODULE(parallelproj_core, m)
             stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
             operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
             Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
 
         Notes
         -----
@@ -1209,6 +1225,10 @@ NB_MODULE(parallelproj_core, m)
             stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
             operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
             Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
         )pbdoc");
 
   m.def("joseph3d_tof_lm_back", &joseph3d_tof_lm_back_py,
@@ -1265,6 +1285,10 @@ NB_MODULE(parallelproj_core, m)
             stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
             operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
             Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
 
         Notes
         -----
@@ -1329,6 +1353,10 @@ NB_MODULE(parallelproj_core, m)
             stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
             operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
             Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
         )pbdoc");
 
   m.def("tof_lm_point_back", &tof_lm_point_back_py,
@@ -1390,6 +1418,10 @@ NB_MODULE(parallelproj_core, m)
             stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
             operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
             Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
 
         Notes
         -----
