@@ -22,6 +22,15 @@ Breaking changes
   offsets for LORs with ``lor_end[dir] < lor_start[dir]``; TOF listmode
   projections (~0.1 % for typical TOF kernels, more for kernels that are narrow
   compared to the TOF bin width); TOF sinogram back projection of signed data.
+* **Changed numerical results: truncated TOF kernel in all TOF projectors** (see
+  "Changed"). Differences to 2.x are up to ~0.3 % of the maximum of a TOF
+  projection, at the edges of the TOF window; TOF listmode projections of kernels
+  that are narrow compared to the voxels change more (they now equal the TOF
+  sinogram bins).
+  (`#43 <https://github.com/KUL-recon-lab/libparallelproj/issues/43>`_)
+* **Removed the compile-time macro ``MAX_NUM_TOF_WEIGHTS``** (``utils.h``). The
+  maximum TOF window of 64 bins is now fixed.
+  (`#43 <https://github.com/KUL-recon-lab/libparallelproj/issues/43>`_)
 * **Python bindings:** ``device_id`` defaults to -1 (automatic) and must match
   the GPU of GPU input arrays if given (see "Changed").
 
@@ -83,6 +92,32 @@ Added
 
 Changed
 ^^^^^^^
+
+* **Much faster TOF sinogram forward projection, especially on GPUs.** The TOF
+  sums of a LOR are kept in a sliding window in registers and every TOF bin is
+  written exactly once, instead of adding into all bins of the TOF window in
+  global memory for every image plane. The accumulator size (8 to 64 TOF bins)
+  and, on GPUs, the store width (single bins or aligned groups of 4) are chosen
+  per LOR on the device (no host synchronization, LOR-dependent TOF resolution
+  supported). Measured on an RTX A6000 (5.5 M LORs, image 256x256x89): 8.3x
+  faster for TOF bins of ~sigma (169 ps bins, 400 ps CTR), 21x for bins of
+  sigma / 5, 8.7x for a 50 ps CTR; about 2x on CPUs.
+  (`#43 <https://github.com/KUL-recon-lab/libparallelproj/issues/43>`_)
+
+* **Truncated TOF kernel in all TOF projectors.** The weight of a TOF bin is the
+  integral of the Gaussian TOF kernel truncated at ``num_sigmas`` sigma over the
+  bin, normalized such that the weights of all bins overlapping the kernel support
+  sum to 1. Previously the full Gaussian bin integrals of all bins within
+  ``floor``/``ceil`` of the support were used, so a bin entering or leaving the
+  window changed the weights by a jump, and a rounding difference of the TOF
+  position could flip it (differences up to ~3e-4 between CPU and GPU or between
+  forward and back projection). The weights are now continuous in the TOF
+  position, the sum over the TOF bins of a sinogram projection equals the non-TOF
+  projection (if the TOF bins cover the support), and the TOF listmode projectors
+  use the same weights as the sinogram projectors: a listmode event gets exactly
+  the value of its TOF sinogram bin (previously the listmode weights of an event
+  were normalized over the image planes).
+  (`#43 <https://github.com/KUL-recon-lab/libparallelproj/issues/43>`_)
 
 * **Synchronous CUDA calls no longer wait for the whole GPU.** Without a
   stream, a projector call now waits only for its own (legacy default) stream
