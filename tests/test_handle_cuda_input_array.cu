@@ -9,12 +9,16 @@
 //
 // Tested behavior:
 //   1. An allocation that cannot possibly succeed makes the function throw
-//      std::runtime_error mentioning "cudaMalloc", and leaves
-//      device_ptr == nullptr and free_flag == false.
+//      std::runtime_error mentioning "cudaMalloc" (cudaMalloc or
+//      cudaMallocAsync), and leaves the CudaDevicePtr empty (ptr == nullptr,
+//      owns == false).
 //   2. The CUDA context stays usable after the failed allocation
 //      (recovery check with a small real allocation).
-//   3. Happy path: a small host array is copied to the device
-//      (free_flag == true) and the device copy matches element-wise.
+//   3. Happy path on the legacy default stream: a small host array is copied
+//      to the device (owns == true) and the device copy matches element-wise.
+//   4. Same on a non-blocking stream: the copy is queued on that stream
+//      (stream-ordered), the buffer is freed stream-ordered on that stream.
+//   5. Device memory is borrowed, not copied (owns == false, same pointer).
 
 #include "cuda_utils.h"
 #include "cuda_test_utils.h"
@@ -26,7 +30,7 @@
 #include <vector>
 
 // ---------------------------------------------------------------------------
-// 1. cudaMalloc failure must throw and leave clean state
+// 1. allocation failure must throw and leave clean state
 // ---------------------------------------------------------------------------
 bool test_oversized_alloc_throws(int device_id)
 {
@@ -39,20 +43,18 @@ bool test_oversized_alloc_throws(int device_id)
     // "few times free VRAM" would NOT be reliable here: Windows WDDM can
     // page device memory into system RAM and oversubscribe.
     //
-    // handle_cuda_input_array calls cudaMalloc BEFORE the host-to-device
-    // cudaMemcpy, so the deliberately wrong size never causes an
-    // out-of-bounds read of the small host buffer: the function must throw
-    // at the cudaMalloc stage.
+    // handle_cuda_input_array allocates BEFORE the host-to-device copy, so
+    // the deliberately wrong size never causes an out-of-bounds read of the
+    // small host buffer: the function must throw at the allocation stage.
     const std::size_t impossible_size = std::size_t(1) << 62;
 
-    float *device_ptr = nullptr;
-    bool free_flag = false;
+    CudaDevicePtr<float> d;
     bool threw_expected = false;
 
     try
     {
-        handle_cuda_input_array(host.data(), &device_ptr, impossible_size,
-                                free_flag, device_id, cudaMemAdviseSetReadMostly);
+        handle_cuda_input_array(host.data(), d, impossible_size, device_id,
+                                cudaMemAdviseSetReadMostly, cudaStreamLegacy);
     }
     catch (const std::runtime_error &e)
     {
@@ -64,7 +66,7 @@ bool test_oversized_alloc_throws(int device_id)
         }
         else
         {
-            std::cerr << "  FAIL: std::runtime_error thrown, but not from cudaMalloc: "
+            std::cerr << "  FAIL: std::runtime_error thrown, but not from cudaMalloc(Async): "
                       << msg << std::endl;
         }
     }
@@ -81,14 +83,14 @@ bool test_oversized_alloc_throws(int device_id)
     }
 
     // The failure path must not leave dangling state behind.
-    if (device_ptr != nullptr)
+    if (d.ptr != nullptr)
     {
-        std::cerr << "  FAIL: device_ptr not reset to nullptr after failure" << std::endl;
+        std::cerr << "  FAIL: ptr not reset to nullptr after failure" << std::endl;
         return false;
     }
-    if (free_flag)
+    if (d.owns)
     {
-        std::cerr << "  FAIL: free_flag set to true although allocation failed" << std::endl;
+        std::cerr << "  FAIL: owns set to true although allocation failed" << std::endl;
         return false;
     }
 
@@ -114,7 +116,7 @@ bool test_oversized_alloc_throws(int device_id)
 // ---------------------------------------------------------------------------
 bool test_context_recovers(int /*device_id*/)
 {
-    // A failed cudaMalloc does not corrupt the context, and the library is
+    // A failed allocation does not corrupt the context, and the library is
     // responsible for clearing the last-error state itself (checked in
     // test 1) - so WITHOUT any cleanup here, a small real allocation must
     // succeed afterwards.
@@ -133,60 +135,111 @@ bool test_context_recovers(int /*device_id*/)
 }
 
 // ---------------------------------------------------------------------------
-// 3. Happy path: host array gets a device copy that matches
+// 3. / 4. Happy path: host array gets a device copy that matches
 // ---------------------------------------------------------------------------
-bool test_host_array_roundtrip(int device_id)
+bool test_host_array_roundtrip(int device_id, cudaStream_t stream, const char *label)
 {
     const std::size_t n = 256;
     std::vector<float> host(n);
     for (std::size_t i = 0; i < n; ++i)
         host[i] = static_cast<float>(i) * 0.5f;
 
-    float *device_ptr = nullptr;
-    bool free_flag = false;
+    bool ok = true;
+    {
+        CudaDevicePtr<float> d;
 
-    try
-    {
-        handle_cuda_input_array(host.data(), &device_ptr, n * sizeof(float),
-                                free_flag, device_id, cudaMemAdviseSetReadMostly);
-    }
-    catch (const std::exception &e)
-    {
-        std::cerr << "  FAIL: unexpected exception on happy path: " << e.what() << std::endl;
-        return false;
-    }
-
-    if (!free_flag)
-    {
-        std::cerr << "  FAIL: free_flag should be true for a host input array" << std::endl;
-        return false;
-    }
-    if (device_ptr == nullptr)
-    {
-        std::cerr << "  FAIL: device_ptr is null on happy path" << std::endl;
-        return false;
-    }
-
-    std::vector<float> roundtrip(n, -1.0f);
-    cudaError_t err = cudaMemcpy(roundtrip.data(), device_ptr, n * sizeof(float),
-                                 cudaMemcpyDeviceToHost);
-    bool ok = (err == cudaSuccess);
-    if (!ok)
-        std::cerr << "  FAIL: D2H copy failed: " << cudaGetErrorString(err) << std::endl;
-
-    for (std::size_t i = 0; ok && i < n; ++i)
-    {
-        if (roundtrip[i] != host[i])
+        try
         {
-            std::cerr << "  FAIL: device copy differs at index " << i << std::endl;
-            ok = false;
+            handle_cuda_input_array(host.data(), d, n * sizeof(float), device_id,
+                                    cudaMemAdviseSetReadMostly, stream);
         }
-    }
+        catch (const std::exception &e)
+        {
+            std::cerr << "  FAIL: unexpected exception on happy path: " << e.what() << std::endl;
+            return false;
+        }
 
-    cudaFree(device_ptr);
+        if (!d.owns)
+        {
+            std::cerr << "  FAIL: owns should be true for a host input array" << std::endl;
+            return false;
+        }
+        if (d.ptr == nullptr)
+        {
+            std::cerr << "  FAIL: ptr is null on happy path" << std::endl;
+            return false;
+        }
+        if (d.stream != stream)
+        {
+            std::cerr << "  FAIL: buffer does not remember the stream it belongs to" << std::endl;
+            return false;
+        }
+
+        // read back, stream-ordered after the H2D copy
+        std::vector<float> roundtrip(n, -1.0f);
+        cudaError_t err = cudaMemcpyAsync(roundtrip.data(), d.ptr, n * sizeof(float),
+                                          cudaMemcpyDeviceToHost, stream);
+        if (err == cudaSuccess)
+            err = cudaStreamSynchronize(stream);
+        ok = (err == cudaSuccess);
+        if (!ok)
+            std::cerr << "  FAIL: D2H copy failed: " << cudaGetErrorString(err) << std::endl;
+
+        for (std::size_t i = 0; ok && i < n; ++i)
+        {
+            if (roundtrip[i] != host[i])
+            {
+                std::cerr << "  FAIL: device copy differs at index " << i << std::endl;
+                ok = false;
+            }
+        }
+    } // d frees its buffer here (stream-ordered on `stream` if supported)
+
+    cudaError_t err = cudaStreamSynchronize(stream);
+    if (err != cudaSuccess)
+    {
+        std::cerr << "  FAIL: error after freeing the buffer: " << cudaGetErrorString(err) << std::endl;
+        ok = false;
+    }
 
     if (ok)
-        std::cout << "  PASS: host array round trip" << std::endl;
+        std::cout << "  PASS: host array round trip (" << label << ")" << std::endl;
+    return ok;
+}
+
+// ---------------------------------------------------------------------------
+// 5. Device memory is borrowed
+// ---------------------------------------------------------------------------
+bool test_device_array_borrowed(int device_id)
+{
+    float *dev_ptr = nullptr;
+    if (cudaMalloc(&dev_ptr, 64 * sizeof(float)) != cudaSuccess)
+    {
+        std::cerr << "  FAIL: cudaMalloc" << std::endl;
+        return false;
+    }
+
+    bool ok = true;
+    {
+        CudaDevicePtr<float> d;
+        handle_cuda_input_array(static_cast<const float *>(dev_ptr), d, 64 * sizeof(float), device_id,
+                                cudaMemAdviseSetReadMostly, cudaStreamLegacy);
+        if (d.ptr != dev_ptr || d.owns)
+        {
+            std::cerr << "  FAIL: device array should be borrowed (same pointer, owns == false)" << std::endl;
+            ok = false;
+        }
+    } // must not free dev_ptr
+
+    // dev_ptr must still be valid (freeing it twice would fail)
+    if (cudaFree(dev_ptr) != cudaSuccess)
+    {
+        std::cerr << "  FAIL: borrowed device pointer was freed by CudaDevicePtr" << std::endl;
+        ok = false;
+    }
+
+    if (ok)
+        std::cout << "  PASS: device array borrowed" << std::endl;
     return ok;
 }
 
@@ -211,8 +264,21 @@ int main()
     std::cout << "test 2: context recovery after failed allocation" << std::endl;
     all_passed = test_context_recovers(device_id) && all_passed;
 
-    std::cout << "test 3: host array round trip" << std::endl;
-    all_passed = test_host_array_roundtrip(device_id) && all_passed;
+    std::cout << "test 3: host array round trip on the legacy default stream" << std::endl;
+    all_passed = test_host_array_roundtrip(device_id, cudaStreamLegacy, "legacy default stream") && all_passed;
+
+    std::cout << "test 4: host array round trip on a non-blocking stream" << std::endl;
+    cudaStream_t stream = nullptr;
+    if (cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) != cudaSuccess)
+    {
+        std::cerr << "FAIL: cudaStreamCreateWithFlags" << std::endl;
+        return 1;
+    }
+    all_passed = test_host_array_roundtrip(device_id, stream, "non-blocking stream") && all_passed;
+    cudaStreamDestroy(stream);
+
+    std::cout << "test 5: device arrays are borrowed" << std::endl;
+    all_passed = test_device_array_borrowed(device_id) && all_passed;
 
     if (all_passed)
     {

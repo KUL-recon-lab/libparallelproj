@@ -15,7 +15,8 @@ void tof_lm_point_fwd(const float *lor_start,
                       short num_tof_bins,
                       unsigned char is_lor_dependent_tof_center_offset,
                       int device_id,
-                      int threads_per_block)
+                      int threads_per_block,
+                      void * /* stream: ignored without CUDA */)
 {
 
 #pragma omp parallel for

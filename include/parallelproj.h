@@ -69,6 +69,7 @@ extern "C"
   \pp_param_image_dim
   \pp_param_device_id
   \pp_param_threads
+  \pp_param_stream
   */
   PARALLELPROJ_API void joseph3d_fwd(const float *lor_start,
                                      const float *lor_end,
@@ -79,7 +80,8 @@ extern "C"
                                      std::size_t num_lors,
                                      const int *image_dim,
                                      int device_id = 0,
-                                     int threads_per_block = 64);
+                                     int threads_per_block = 64,
+                                     void *stream = nullptr);
 
 #ifdef __cplusplus
 }
@@ -106,6 +108,7 @@ extern "C"
   \pp_param_image_dim
   \pp_param_device_id
   \pp_param_threads
+  \pp_param_stream
    */
   PARALLELPROJ_API void joseph3d_back(const float *lor_start,
                                       const float *lor_end,
@@ -116,7 +119,8 @@ extern "C"
                                       std::size_t num_lors,
                                       const int *image_dim,
                                       int device_id = 0,
-                                      int threads_per_block = 64);
+                                      int threads_per_block = 64,
+                                      void *stream = nullptr);
 
 #ifdef __cplusplus
 }
@@ -150,6 +154,7 @@ extern "C"
   \pp_param_tof_dep_center{LORs}
   \pp_param_device_id
   \pp_param_threads
+  \pp_param_stream
   */
 
   PARALLELPROJ_API void joseph3d_tof_sino_fwd(const float *lor_start,
@@ -168,7 +173,8 @@ extern "C"
                                               unsigned char is_lor_dependent_tof_sigma,
                                               unsigned char is_lor_dependent_tof_center_offset,
                                               int device_id = 0,
-                                              int threads_per_block = 64);
+                                              int threads_per_block = 64,
+                                              void *stream = nullptr);
 
 #ifdef __cplusplus
 }
@@ -207,6 +213,7 @@ extern "C"
   \pp_param_tof_dep_center{LORs}
   \pp_param_device_id
   \pp_param_threads
+  \pp_param_stream
 
   */
   PARALLELPROJ_API void joseph3d_tof_sino_back(const float *lor_start,
@@ -225,7 +232,8 @@ extern "C"
                                                unsigned char is_lor_dependent_tof_sigma,
                                                unsigned char is_lor_dependent_tof_center_offset,
                                                int device_id = 0,
-                                               int threads_per_block = 64);
+                                               int threads_per_block = 64,
+                                               void *stream = nullptr);
 #ifdef __cplusplus
 }
 #endif
@@ -258,6 +266,7 @@ extern "C"
   \pp_param_tof_dep_center{events}
   \pp_param_device_id
   \pp_param_threads
+  \pp_param_stream
   */
 
   PARALLELPROJ_API void joseph3d_tof_lm_fwd(const float *lor_start,
@@ -277,7 +286,8 @@ extern "C"
                                             unsigned char is_lor_dependent_tof_sigma,
                                             unsigned char is_lor_dependent_tof_center_offset,
                                             int device_id = 0,
-                                            int threads_per_block = 64);
+                                            int threads_per_block = 64,
+                                            void *stream = nullptr);
 
 #ifdef __cplusplus
 }
@@ -311,6 +321,7 @@ extern "C"
   \pp_param_tof_dep_center{events}
   \pp_param_device_id
   \pp_param_threads
+  \pp_param_stream
   */
 
   PARALLELPROJ_API void joseph3d_tof_lm_back(const float *lor_start,
@@ -330,7 +341,8 @@ extern "C"
                                              unsigned char is_lor_dependent_tof_sigma,
                                              unsigned char is_lor_dependent_tof_center_offset,
                                              int device_id = 0,
-                                             int threads_per_block = 64);
+                                             int threads_per_block = 64,
+                                             void *stream = nullptr);
 
 #ifdef __cplusplus
 }
@@ -371,6 +383,7 @@ extern "C"
   \pp_param_tof_dep_center{events}
   \pp_param_device_id
   \pp_param_threads
+  \pp_param_stream
   */
 
   PARALLELPROJ_API void tof_lm_point_fwd(const float *lor_start,
@@ -387,7 +400,8 @@ extern "C"
                                          short num_tof_bins,
                                          unsigned char is_lor_dependent_tof_center_offset,
                                          int device_id = 0,
-                                         int threads_per_block = 64);
+                                         int threads_per_block = 64,
+                                         void *stream = nullptr);
 
 #ifdef __cplusplus
 }
@@ -425,6 +439,7 @@ extern "C"
   \pp_param_tof_dep_center{events}
   \pp_param_device_id
   \pp_param_threads
+  \pp_param_stream
   */
 
   PARALLELPROJ_API void tof_lm_point_back(const float *lor_start,
@@ -441,7 +456,8 @@ extern "C"
                                           short num_tof_bins,
                                           unsigned char is_lor_dependent_tof_center_offset,
                                           int device_id = 0,
-                                          int threads_per_block = 64);
+                                          int threads_per_block = 64,
+                                          void *stream = nullptr);
 
 #ifdef __cplusplus
 }

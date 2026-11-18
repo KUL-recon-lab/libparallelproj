@@ -49,6 +49,7 @@ ALIASES                += pp_param_tof_dep_sigma{1}="@param is_lor_dependent_tof
 ALIASES                += pp_param_tof_dep_center{1}="@param is_lor_dependent_tof_center_offset Unsigned char 0 or 1.^^0 means that the first value in @p tof_center_offset is used for all \1.^^1 (non-zero) means that the TOF center offsets are LOR dependent."
 ALIASES                += pp_param_device_id="@param device_id ID of the CUDA device to use for computation (default: 0). A negative value uses the current CUDA device. The caller's current CUDA device is restored before the function returns. Ignored in builds without CUDA."
 ALIASES                += pp_param_threads="@param threads_per_block Number of threads per block for GPU computation (default: 64)."
+ALIASES                += pp_param_stream="@param stream CUDA stream (a cudaStream_t, passed as void*) for this call. nullptr (default): the call runs on the legacy default stream and is synchronous, i.e. it waits for that stream (not for the whole device) before returning. Any other stream (including cudaStreamLegacy / cudaStreamPerThread): all copies and the kernel are queued on that stream and, for device / managed arrays, the call returns without waiting. Calls with host arrays always wait for their stream before returning. Ignored in builds without CUDA."
 
 # HTML Output
 HTML_OUTPUT            = html

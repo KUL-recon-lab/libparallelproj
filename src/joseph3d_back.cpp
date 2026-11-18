@@ -10,7 +10,8 @@ void joseph3d_back(const float *lor_start,
                    std::size_t num_lors,
                    const int *image_dim,
                    int device_id,
-                   int threads_per_block)
+                   int threads_per_block,
+                   void * /* stream: ignored without CUDA */)
 {
 
 #pragma omp parallel for
