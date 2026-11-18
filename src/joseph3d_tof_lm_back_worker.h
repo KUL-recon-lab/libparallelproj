@@ -125,6 +125,12 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(std::size_t i,
   }
 
   // this is the "corrected" value up to the tof_plane_weight that we have to inject into the planes using the adjoint of the bilinear interpolation
+  // if no image plane has a non-zero TOF weight (e.g. voxels larger than TOF bins and a
+  // very narrow TOF kernel), the event has no contribution (avoid adding inf * 0 = NaN)
+  if (!(tof_plane_weights_sum > 0.0f))
+  {
+    return;
+  }
   toAdd = projection_values[i] * tof_bin_width / tof_plane_weights_sum;
 
    

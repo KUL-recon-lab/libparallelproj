@@ -201,5 +201,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
   // the expected sum of the TOF weights is (tof_bin_width / cf)
 
   // projection_values[i] = toAdd * cf * (tof_bin_width / cf) / tof_plane_weights_sum;
-  projection_values[i] = toAdd * tof_bin_width / tof_plane_weights_sum;
+  // if no image plane has a non-zero TOF weight (e.g. voxels larger than TOF bins and a
+  // very narrow TOF kernel), the event has no contribution (avoid 0 / 0 = NaN)
+  projection_values[i] = (tof_plane_weights_sum > 0.0f) ? toAdd * tof_bin_width / tof_plane_weights_sum : 0.0f;
 }
