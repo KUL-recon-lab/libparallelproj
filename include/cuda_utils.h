@@ -72,7 +72,6 @@ struct CudaDevicePtr {
     T* get() const { return ptr; }
 };
 
-// Checked device-to-host copy. Throws std::runtime_error on failure.
 // Makes device_id the current CUDA device for the lifetime of the guard and restores the
 // caller's current device afterwards (also if an exception is thrown). A library call must
 // not change the current device of the caller (e.g. CuPy / PyTorch create new arrays on it).
@@ -119,6 +118,7 @@ private:
     bool restore_ = false;
 };
 
+// Checked device-to-host copy. Throws std::runtime_error on failure.
 inline void cuda_memcpy_d2h(void* dst, const void* src, std::size_t size)
 {
     cudaError_t err = cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost);

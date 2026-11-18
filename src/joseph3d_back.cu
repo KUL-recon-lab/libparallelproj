@@ -37,12 +37,13 @@ void joseph3d_back(const float *lor_start,
                    int device_id,
                    int threads_per_block)
 {
+    // Use device_id (if >= 0) during this call and restore the caller's current
+    // CUDA device afterwards (also on errors). Declared before the first CUDA call
+    // and before all device buffers (RAII: buffers are freed before the device is restored).
+    CudaDeviceGuard device_guard(device_id);
+
     // Calculate nvoxels from image_dim - image_dim can be device pointer!
     std::size_t nvoxels = cuda_nvoxels_from_img_dim(image_dim);
-
-    // Use device_id (if >= 0) during this call and restore the caller's current
-    // CUDA device afterwards. Declared before all device buffers (RAII order).
-    CudaDeviceGuard device_guard(device_id);
 
     /////////////////////////////////////////////////////////////////
     /////////////////////////////////////////////////////////////////
