@@ -61,7 +61,7 @@ sphinx_gallery_conf = {
     # examples are executed when the docs are built, except those with "gpu" in the
     # file name (no GPU on the docs build servers): they are shown without output
     "filename_pattern": r"[\\/]\d{2,3}_(?![^\\/]*gpu)[^\\/]*\.py$",
-    "ignore_pattern": r"(^|[\\/])utils\.py$",
+    "ignore_pattern": r"(^|[\\/])(gpu_)?utils\.py$",
     "plot_gallery": True,
     "within_subsection_order": FileNameSortKey,
 }

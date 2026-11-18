@@ -52,11 +52,18 @@ Added
 
   (`#41 <https://github.com/KUL-recon-lab/libparallelproj/issues/41>`_)
 
-* **New gallery example "Multiple GPUs and CUDA Streams"**
-  (``docs/examples/05_multi_gpu_streams.py``, PyTorch): synchronous vs.
-  asynchronous calls, a mini batch split across several GPUs, an autograd layer
-  that works with one or several GPUs, and how to time GPU code. Examples with
-  ``gpu`` in their file name are not executed when the docs are built.
+* **New gallery examples for multiple GPUs** (PyTorch):
+
+  - ``05_multi_gpu_streams.py``: synchronous vs. asynchronous calls, a mini
+    batch split across several GPUs, an autograd layer that works with one or
+    several GPUs, and how to time GPU code (non-TOF sinogram projectors),
+  - ``06_multi_gpu_tof_sinogram.py``: the same with the TOF sinogram projectors,
+  - ``07_multi_gpu_tof_listmode.py``: TOF listmode projectors with a different
+    number of events per sample, load balancing across GPUs, and a training step
+    with the Poisson listmode log-likelihood.
+
+  Shared helpers are in ``docs/examples/gpu_utils.py``. Examples with ``gpu`` in
+  their file name are not executed when the docs are built.
 
 * **Python bindings release the GIL** while a projector runs, so that other
   Python threads (e.g. one thread per GPU) can run in the meantime.

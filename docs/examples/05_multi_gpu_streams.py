@@ -38,37 +38,30 @@ if they are called one after another from a single Python thread.
 """
 
 # %%
-import sys
-import time
+# The helper module ``gpu_utils.py`` (next to the examples) contains the device
+# check, the current stream of a tensor, the timing function and the scanner
+# geometry / phantoms used by all multi-GPU examples. The two GPU-specific helpers are
+#
+# .. code-block:: python
+#
+#     def current_stream(x):
+#         """handle of the current CUDA stream of the GPU of tensor x"""
+#         return torch.cuda.current_stream(x.device).cuda_stream
+#
+#     def synchronize_all(devices):
+#         """wait until all queued work on all GPUs is done"""
+#         for d in devices:
+#             torch.cuda.synchronize(d)
+
 import torch
 import parallelproj_core
+from gpu_utils import (cuda_devices, current_stream, best_time, sinogram_lors,
+                       image_origin, random_images)
 
-if not (parallelproj_core.cuda_enabled == 1 and torch.cuda.is_available()):
-    print("This example needs a CUDA build of parallelproj_core, PyTorch with CUDA and a GPU.")
-    sys.exit(0)
-
-devices = [torch.device(f"cuda:{k}") for k in range(torch.cuda.device_count())]
+devices = cuda_devices()  # exits with a message if no GPU can be used
 num_gpus = len(devices)
 print(f"parallelproj_core {parallelproj_core.__version__}, PyTorch {torch.__version__}")
 print(f"using {num_gpus} GPU(s): {[torch.cuda.get_device_name(d) for d in devices]}")
-
-# %%
-# Helper functions
-# ----------------
-# The current stream of the GPU of a tensor, and a function that waits until all
-# queued work on all GPUs is done (only needed for timing, see below).
-
-
-def current_stream(x: torch.Tensor) -> int:
-    """handle of the current CUDA stream of the GPU of tensor x"""
-    return torch.cuda.current_stream(x.device).cuda_stream
-
-
-def synchronize_all():
-    """wait until all queued work on all GPUs is done"""
-    for d in devices:
-        torch.cuda.synchronize(d)
-
 
 # %%
 # Scanner geometry and images
@@ -78,26 +71,9 @@ def synchronize_all():
 # only use data that is already on that GPU.
 
 
-def sinogram_lors(radius=350.0, num_rad=200, num_views=180, num_rings=16, ring_spacing=4.0):
-    """start and end points of all LORs of a cylindrical scanner (direct and oblique planes)"""
-    phi = torch.arange(num_views) * torch.pi / num_views
-    s = (torch.arange(num_rad) - (num_rad - 1) / 2) * 2.5
-    P, S = torch.meshgrid(phi, s, indexing="ij")
-    a = torch.arccos(S / radius)
-    p1 = torch.stack([radius * torch.cos(P + a), radius * torch.sin(P + a)], -1).reshape(-1, 2)
-    p2 = torch.stack([radius * torch.cos(P - a), radius * torch.sin(P - a)], -1).reshape(-1, 2)
-    z = (torch.arange(num_rings) - (num_rings - 1) / 2) * ring_spacing
-    z1, z2 = torch.meshgrid(z, z, indexing="ij")
-    z1, z2 = z1.reshape(-1, 1, 1), z2.reshape(-1, 1, 1)
-    n = p1.shape[0]
-    start = torch.cat([p1.expand(z1.shape[0], n, 2), z1.expand(-1, n, 1)], -1).reshape(-1, 3)
-    end = torch.cat([p2.expand(z2.shape[0], n, 2), z2.expand(-1, n, 1)], -1).reshape(-1, 3)
-    return start.float().contiguous(), end.float().contiguous()
-
-
 img_shape = (128, 128, 48)
 voxel_size = torch.tensor([2.0, 2.0, 2.0])
-img_origin = (-torch.tensor(img_shape) / 2 + 0.5) * voxel_size
+img_origin = image_origin(img_shape, voxel_size)
 lor_start, lor_end = sinogram_lors()
 print(f"{lor_start.shape[0] / 1e6:.1f} million LORs, image {img_shape}")
 
@@ -107,24 +83,6 @@ geometry = {
             img_origin=img_origin.to(d), voxel_size=voxel_size.to(d))
     for d in devices
 }
-
-
-def random_images(batch_size, seed=0):
-    """a batch of simple phantoms: a cylinder with a few random hot spheres"""
-    g = torch.Generator().manual_seed(seed)
-    x = torch.arange(img_shape[0]) - img_shape[0] / 2
-    y = torch.arange(img_shape[1]) - img_shape[1] / 2
-    z = torch.arange(img_shape[2]) - img_shape[2] / 2
-    X, Y, Z = torch.meshgrid(x, y, z, indexing="ij")
-    imgs = torch.zeros((batch_size,) + img_shape)
-    for b in range(batch_size):
-        img = ((X**2 + Y**2) < 50**2).float()
-        for _ in range(4):
-            c = (torch.rand(3, generator=g) - 0.5) * torch.tensor([60.0, 60.0, 30.0])
-            r = 4 + 6 * torch.rand(1, generator=g)
-            img += 3.0 * (((X - c[0]) ** 2 + (Y - c[1]) ** 2 + (Z - c[2]) ** 2) < r**2).float()
-        imgs[b] = img
-    return imgs
 
 
 # %%
@@ -159,7 +117,7 @@ def back_project(y, stream=None):
 # A mini batch of ``2 * num_gpus`` images is split into one chunk per GPU (2 images
 # per GPU). Each chunk is moved to its GPU.
 
-batch = random_images(2 * num_gpus)
+batch = random_images(2 * num_gpus, img_shape)
 chunks = [c.to(d) for c, d in zip(torch.tensor_split(batch, num_gpus), devices)]
 
 
@@ -189,17 +147,20 @@ def project_batch(chunks, use_streams):
 # ``torch.utils.benchmark.Timer``, which take care of synchronization and warm-up.
 
 
-def best_time(fn, repeats=3):
-    fn()  # warm-up
-    times = []
-    for _ in range(repeats):
-        synchronize_all()
-        t0 = time.perf_counter()
-        fn()
-        synchronize_all()
-        times.append(time.perf_counter() - t0)
-    return min(times)
-
+# ``best_time(fn, devices)`` from ``gpu_utils`` does exactly that:
+#
+# .. code-block:: python
+#
+#     def best_time(fn, devices, repeats=3):
+#         fn()  # warm-up
+#         times = []
+#         for _ in range(repeats):
+#             synchronize_all(devices)
+#             t0 = time.perf_counter()
+#             fn()
+#             synchronize_all(devices)
+#             times.append(time.perf_counter() - t0)
+#         return min(times)
 
 # %%
 # Synchronous vs. asynchronous calls
@@ -208,8 +169,8 @@ def best_time(fn, repeats=3):
 # GPUs work one after another. **Asynchronous** (current stream of each GPU): the
 # loop only queues the work, and all GPUs run at the same time.
 
-t_sync = best_time(lambda: project_batch(chunks, use_streams=False))
-t_async = best_time(lambda: project_batch(chunks, use_streams=True))
+t_sync = best_time(lambda: project_batch(chunks, use_streams=False), devices)
+t_async = best_time(lambda: project_batch(chunks, use_streams=True), devices)
 
 print(f"{num_gpus} GPU(s), batch of {batch.shape[0]} images (forward + back projection)")
 print(f"  synchronous calls (stream=None):     {t_sync:.3f} s")
@@ -280,7 +241,7 @@ def training_step():
     return loss
 
 
-t_step = best_time(training_step)
+t_step = best_time(training_step, devices)
 loss = training_step()
 print(f"training step on {num_gpus} GPU(s): {t_step:.3f} s, loss {loss.item():.4e}")
 
@@ -311,3 +272,5 @@ print(f"relative error of the gradient: {rel_err:.2e}")
 # - **CuPy:** use ``cupy.cuda.get_current_stream().ptr`` as stream handle. During CUDA
 #   graph capture, pass CuPy arrays as ``x.__dlpack__(stream=handle)``.
 # - **CPU arrays** (NumPy) work as well; such calls always return complete results.
+# - **TOF:** the next examples do the same with the TOF sinogram projectors and with
+#   the TOF listmode projectors (different numbers of events per sample).
