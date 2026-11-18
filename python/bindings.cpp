@@ -1,7 +1,15 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/tuple.h>
+#include <nanobind/stl/vector.h>
 #include "parallelproj.h"
 #include <cmath>
+#include <cstdint>
+#include <initializer_list>
+#include <string>
+#include <tuple>
+#include <vector>
 #include <stdexcept>
 
 namespace nb = nanobind;
@@ -17,6 +25,118 @@ using Float3DArray = nb::ndarray<float, nb::c_contig, nb::ndim<3>>;
 // 1D c-contiguous float arrays
 using ConstFloat1D3ELArray = nb::ndarray<const float, nb::c_contig, nb::shape<3>>;
 
+////////////////////////////////////////////////////////////////////////////////
+// Device checks shared by all projector bindings
+////////////////////////////////////////////////////////////////////////////////
+
+namespace
+{
+  struct ArrayDevice
+  {
+    int32_t type;
+    int32_t id;
+    std::string name;
+  };
+
+  template <typename Array>
+  ArrayDevice array_device(const Array &a, const char *name)
+  {
+    return {a.device_type(), a.device_id(), name};
+  }
+
+  bool is_host_device(int32_t type)
+  {
+    return type == nb::device::cpu::value || type == nb::device::cuda_host::value;
+  }
+
+  bool is_cuda_device(int32_t type)
+  {
+    return type == nb::device::cuda::value || type == nb::device::cuda_managed::value;
+  }
+
+  // Checks the devices of all array arguments and returns the CUDA device ID to use.
+  //
+  // - main: the arrays that define where the computation runs (LOR / event coordinates,
+  //   image, projection values, ...). They must all be on the same device (type and ID).
+  // - params: small parameter arrays (e.g. tof_sigma, tof_center_offset). They may be
+  //   CPU arrays (copied to the GPU in CUDA builds) or on the same device as the main arrays.
+  // - device_id: requested CUDA device (-1: automatic).
+  //
+  // CPU-only builds: all arrays must be CPU arrays.
+  // CUDA builds: if the main arrays are on a GPU, the computation runs on that GPU and an
+  // explicitly requested different device_id is an error. For host arrays, device_id is
+  // passed on unchanged (-1: current CUDA device).
+  //
+  // check_devices_impl() takes the build type as an argument, so that the logic of
+  // both build types can be tested in any build (exposed as _check_devices).
+  int check_devices_impl(const std::vector<ArrayDevice> &main,
+                         const std::vector<ArrayDevice> &params,
+                         int device_id,
+                         bool cuda_build)
+  {
+    if (main.empty())
+      throw std::invalid_argument("check_devices: no main arrays");
+
+    const ArrayDevice &ref = main.front();
+
+    for (const ArrayDevice &a : main)
+    {
+      if (a.type != ref.type)
+        throw std::invalid_argument("All input arrays must be on the same device type (" +
+                                    ref.name + " and " + a.name + " differ)");
+      if (a.id != ref.id)
+        throw std::invalid_argument("All input arrays must be on the same device ID (" +
+                                    ref.name + " and " + a.name + " differ)");
+    }
+
+    if (!cuda_build)
+    {
+      for (const std::vector<ArrayDevice> *group : {&main, &params})
+      {
+        for (const ArrayDevice &a : *group)
+        {
+          if (!is_host_device(a.type))
+            throw std::invalid_argument(a.name +
+                                        " is not a CPU array, but parallelproj_core was built without CUDA support");
+        }
+      }
+      return device_id;
+    }
+
+    if (!is_host_device(ref.type) && !is_cuda_device(ref.type))
+      throw std::invalid_argument("unsupported device type of " + ref.name +
+                                  " (only CPU and CUDA arrays are supported)");
+
+    for (const ArrayDevice &p : params)
+    {
+      if (is_host_device(p.type))
+        continue;
+      if (!is_cuda_device(p.type) || !is_cuda_device(ref.type) || p.id != ref.id)
+        throw std::invalid_argument(p.name +
+                                    " must be a CPU array or on the same device as the other input arrays");
+    }
+
+    if (is_cuda_device(ref.type))
+    {
+      if (device_id >= 0 && device_id != ref.id)
+        throw std::invalid_argument("device_id = " + std::to_string(device_id) +
+                                    " does not match the CUDA device of the input arrays (" +
+                                    std::to_string(ref.id) + ")");
+      return ref.id;
+    }
+
+    return device_id;
+  }
+
+  int check_devices(std::initializer_list<ArrayDevice> main,
+                    std::initializer_list<ArrayDevice> params,
+                    int device_id)
+  {
+    return check_devices_impl(std::vector<ArrayDevice>(main), std::vector<ArrayDevice>(params),
+                              device_id, parallelproj_cuda_enabled() != 0);
+  }
+} // namespace
+
 // Wrapper for joseph3d_fwd
 void joseph3d_fwd_py(ConstFloatNDArray lor_start,
                      ConstFloatNDArray lor_end,
@@ -24,7 +144,7 @@ void joseph3d_fwd_py(ConstFloatNDArray lor_start,
                      ConstFloat1D3ELArray image_origin,
                      ConstFloat1D3ELArray voxel_size,
                      FloatNDArray projection_values,
-                     int device_id = 0,
+                     int device_id = -1,
                      int threads_per_block = 64)
 {
   // 1 check that ndim of lor_start and lor_end >=2 and last dim ==3
@@ -49,26 +169,10 @@ void joseph3d_fwd_py(ConstFloatNDArray lor_start,
       throw std::invalid_argument("projection_values must have a shape equal to lor_start.shape[:-1]");
   }
 
-  // 4 check that lor_start, lor_end, image, image_origin, voxel_size, projection_values have the same device type
-  if (lor_start.device_type() != lor_end.device_type() ||
-      lor_start.device_type() != image.device_type() ||
-      lor_start.device_type() != image_origin.device_type() ||
-      lor_start.device_type() != voxel_size.device_type() ||
-      lor_start.device_type() != projection_values.device_type())
-  {
-    throw std::invalid_argument("All input arrays must be on the same device type");
-  }
-
-  // 5 check that lor_start, lor_end, image, image_origin, voxel_size, projection_values have the same device ID
-  if (lor_start.device_id() != lor_end.device_id() ||
-      lor_start.device_id() != image.device_id() ||
-      lor_start.device_id() != image_origin.device_id() ||
-      lor_start.device_id() != voxel_size.device_id() ||
-      lor_start.device_id() != projection_values.device_id())
-  {
-    throw std::invalid_argument("All input arrays must be on the same device ID");
-  }
-
+  // check the devices of all arrays and get the CUDA device to use
+  device_id = check_devices({array_device(lor_start, "lor_start"), array_device(lor_end, "lor_end"), array_device(image, "image"), array_device(image_origin, "image_origin"), array_device(voxel_size, "voxel_size"), array_device(projection_values, "projection_values")},
+                            {},
+                            device_id);
   // 7 compute the number of LORs as the product of all dimensions except the last
   // the last dimension must be 3 (3 floating point values per LOR endpoint)
   std::size_t num_lors = 1;
@@ -95,7 +199,7 @@ void joseph3d_back_py(ConstFloatNDArray lor_start,
                       ConstFloat1D3ELArray image_origin,
                       ConstFloat1D3ELArray voxel_size,
                       ConstFloatNDArray projection_values,
-                      int device_id = 0,
+                      int device_id = -1,
                       int threads_per_block = 64)
 {
   // 1 check that ndim of lor_start and lor_end >=2 and last dim ==3
@@ -120,26 +224,10 @@ void joseph3d_back_py(ConstFloatNDArray lor_start,
       throw std::invalid_argument("projection_values must have a shape equal to lor_start.shape[:-1]");
   }
 
-  // 4 check that lor_start, lor_end, image, image_origin, voxel_size, projection_values have the same device type
-  if (lor_start.device_type() != lor_end.device_type() ||
-      lor_start.device_type() != image.device_type() ||
-      lor_start.device_type() != image_origin.device_type() ||
-      lor_start.device_type() != voxel_size.device_type() ||
-      lor_start.device_type() != projection_values.device_type())
-  {
-    throw std::invalid_argument("All input arrays must be on the same device type");
-  }
-
-  // 5 check that lor_start, lor_end, image, image_origin, voxel_size, projection_values have the same device ID
-  if (lor_start.device_id() != lor_end.device_id() ||
-      lor_start.device_id() != image.device_id() ||
-      lor_start.device_id() != image_origin.device_id() ||
-      lor_start.device_id() != voxel_size.device_id() ||
-      lor_start.device_id() != projection_values.device_id())
-  {
-    throw std::invalid_argument("All input arrays must be on the same device ID");
-  }
-
+  // check the devices of all arrays and get the CUDA device to use
+  device_id = check_devices({array_device(lor_start, "lor_start"), array_device(lor_end, "lor_end"), array_device(image, "image"), array_device(image_origin, "image_origin"), array_device(voxel_size, "voxel_size"), array_device(projection_values, "projection_values")},
+                            {},
+                            device_id);
   // 7 compute the number of LORs as the product of all dimensions except the last
   // the last dimension must be 3 (3 floating point values per LOR endpoint)
   std::size_t num_lors = 1;
@@ -171,7 +259,7 @@ void joseph3d_tof_sino_fwd_py(ConstFloatNDArray lor_start,
                               ConstFloatNDArray tof_center_offset,
                               short num_tof_bins,
                               float num_sigmas = 3.0f,
-                              int device_id = 0,
+                              int device_id = -1,
                               int threads_per_block = 64)
 {
   bool is_lor_dependent_tof_sigma;
@@ -202,26 +290,10 @@ void joseph3d_tof_sino_fwd_py(ConstFloatNDArray lor_start,
   if (projection_values.shape(projection_values.ndim() - 1) != static_cast<std::size_t>(num_tof_bins))
     throw std::invalid_argument("last dimension of projection_values must equal num_tof_bins");
 
-  // 4 check that lor_start, lor_end, image, image_origin, voxel_size, projection_values have the same device type
-  if (lor_start.device_type() != lor_end.device_type() ||
-      lor_start.device_type() != image.device_type() ||
-      lor_start.device_type() != image_origin.device_type() ||
-      lor_start.device_type() != voxel_size.device_type() ||
-      lor_start.device_type() != projection_values.device_type())
-  {
-    throw std::invalid_argument("All input arrays must be on the same device type");
-  }
-
-  // 5 check that lor_start, lor_end, image, image_origin, voxel_size, projection_values have the same device ID
-  if (lor_start.device_id() != lor_end.device_id() ||
-      lor_start.device_id() != image.device_id() ||
-      lor_start.device_id() != image_origin.device_id() ||
-      lor_start.device_id() != voxel_size.device_id() ||
-      lor_start.device_id() != projection_values.device_id())
-  {
-    throw std::invalid_argument("All input arrays must be on the same device ID");
-  }
-
+  // check the devices of all arrays and get the CUDA device to use
+  device_id = check_devices({array_device(lor_start, "lor_start"), array_device(lor_end, "lor_end"), array_device(image, "image"), array_device(image_origin, "image_origin"), array_device(voxel_size, "voxel_size"), array_device(projection_values, "projection_values")},
+                            {array_device(tof_sigma, "tof_sigma"), array_device(tof_center_offset, "tof_center_offset")},
+                            device_id);
   // 7 compute the number of LORs as the product of all dimensions except the last
   // the last dimension must be 3 (3 floating point values per LOR endpoint)
   std::size_t num_lors = 1;
@@ -307,7 +379,7 @@ void joseph3d_tof_back_fwd_py(ConstFloatNDArray lor_start,
                               ConstFloatNDArray tof_center_offset,
                               short num_tof_bins,
                               float num_sigmas = 3.0f,
-                              int device_id = 0,
+                              int device_id = -1,
                               int threads_per_block = 64)
 {
   bool is_lor_dependent_tof_sigma;
@@ -338,26 +410,10 @@ void joseph3d_tof_back_fwd_py(ConstFloatNDArray lor_start,
   if (projection_values.shape(projection_values.ndim() - 1) != static_cast<std::size_t>(num_tof_bins))
     throw std::invalid_argument("last dimension of projection_values must equal num_tof_bins");
 
-  // 4 check that lor_start, lor_end, image, image_origin, voxel_size, projection_values have the same device type
-  if (lor_start.device_type() != lor_end.device_type() ||
-      lor_start.device_type() != image.device_type() ||
-      lor_start.device_type() != image_origin.device_type() ||
-      lor_start.device_type() != voxel_size.device_type() ||
-      lor_start.device_type() != projection_values.device_type())
-  {
-    throw std::invalid_argument("All input arrays must be on the same device type");
-  }
-
-  // 5 check that lor_start, lor_end, image, image_origin, voxel_size, projection_values have the same device ID
-  if (lor_start.device_id() != lor_end.device_id() ||
-      lor_start.device_id() != image.device_id() ||
-      lor_start.device_id() != image_origin.device_id() ||
-      lor_start.device_id() != voxel_size.device_id() ||
-      lor_start.device_id() != projection_values.device_id())
-  {
-    throw std::invalid_argument("All input arrays must be on the same device ID");
-  }
-
+  // check the devices of all arrays and get the CUDA device to use
+  device_id = check_devices({array_device(lor_start, "lor_start"), array_device(lor_end, "lor_end"), array_device(image, "image"), array_device(image_origin, "image_origin"), array_device(voxel_size, "voxel_size"), array_device(projection_values, "projection_values")},
+                            {array_device(tof_sigma, "tof_sigma"), array_device(tof_center_offset, "tof_center_offset")},
+                            device_id);
   // 7 compute the number of LORs as the product of all dimensions except the last
   // the last dimension must be 3 (3 floating point values per LOR endpoint)
   std::size_t num_lors = 1;
@@ -443,7 +499,7 @@ void joseph3d_tof_lm_fwd_py(ConstFloatNDArray event_start,
                             ConstShortNDArray tof_bin_index,
                             short num_tof_bins,
                             float num_sigmas = 3.0f,
-                            int device_id = 0,
+                            int device_id = -1,
                             int threads_per_block = 64)
 {
   bool is_lor_dependent_tof_sigma;
@@ -470,28 +526,10 @@ void joseph3d_tof_lm_fwd_py(ConstFloatNDArray event_start,
   if (tof_bin_index.shape(0) != num_events)
     throw std::invalid_argument("tof_bin_index.shape[0] must match event_start.shape[0]");
 
-  // 3 check that all arrays have the same device type
-  if (event_start.device_type() != event_end.device_type() ||
-      event_start.device_type() != image.device_type() ||
-      event_start.device_type() != image_origin.device_type() ||
-      event_start.device_type() != voxel_size.device_type() ||
-      event_start.device_type() != projection_values.device_type() ||
-      event_start.device_type() != tof_bin_index.device_type())
-  {
-    throw std::invalid_argument("All input arrays must be on the same device type");
-  }
-
-  // 4 check that all arrays have the same device ID
-  if (event_start.device_id() != event_end.device_id() ||
-      event_start.device_id() != image.device_id() ||
-      event_start.device_id() != image_origin.device_id() ||
-      event_start.device_id() != voxel_size.device_id() ||
-      event_start.device_id() != projection_values.device_id() ||
-      event_start.device_id() != tof_bin_index.device_id())
-  {
-    throw std::invalid_argument("All input arrays must be on the same device ID");
-  }
-
+  // check the devices of all arrays and get the CUDA device to use
+  device_id = check_devices({array_device(event_start, "event_start"), array_device(event_end, "event_end"), array_device(image, "image"), array_device(image_origin, "image_origin"), array_device(voxel_size, "voxel_size"), array_device(projection_values, "projection_values"), array_device(tof_bin_index, "tof_bin_index")},
+                            {array_device(tof_sigma, "tof_sigma"), array_device(tof_center_offset, "tof_center_offset")},
+                            device_id);
   int image_dim[3] = {static_cast<int>(image.shape(0)),
                       static_cast<int>(image.shape(1)),
                       static_cast<int>(image.shape(2))};
@@ -561,7 +599,7 @@ void joseph3d_tof_lm_back_py(ConstFloatNDArray event_start,
                              ConstShortNDArray tof_bin_index,
                              short num_tof_bins,
                              float num_sigmas = 3.0f,
-                             int device_id = 0,
+                             int device_id = -1,
                              int threads_per_block = 64)
 {
   bool is_lor_dependent_tof_sigma;
@@ -588,28 +626,10 @@ void joseph3d_tof_lm_back_py(ConstFloatNDArray event_start,
   if (tof_bin_index.shape(0) != num_events)
     throw std::invalid_argument("tof_bin_index.shape[0] must match event_start.shape[0]");
 
-  // 3 check that all arrays have the same device type
-  if (event_start.device_type() != event_end.device_type() ||
-      event_start.device_type() != image.device_type() ||
-      event_start.device_type() != image_origin.device_type() ||
-      event_start.device_type() != voxel_size.device_type() ||
-      event_start.device_type() != projection_values.device_type() ||
-      event_start.device_type() != tof_bin_index.device_type())
-  {
-    throw std::invalid_argument("All input arrays must be on the same device type");
-  }
-
-  // 4 check that all arrays have the same device ID
-  if (event_start.device_id() != event_end.device_id() ||
-      event_start.device_id() != image.device_id() ||
-      event_start.device_id() != image_origin.device_id() ||
-      event_start.device_id() != voxel_size.device_id() ||
-      event_start.device_id() != projection_values.device_id() ||
-      event_start.device_id() != tof_bin_index.device_id())
-  {
-    throw std::invalid_argument("All input arrays must be on the same device ID");
-  }
-
+  // check the devices of all arrays and get the CUDA device to use
+  device_id = check_devices({array_device(event_start, "event_start"), array_device(event_end, "event_end"), array_device(image, "image"), array_device(image_origin, "image_origin"), array_device(voxel_size, "voxel_size"), array_device(projection_values, "projection_values"), array_device(tof_bin_index, "tof_bin_index")},
+                            {array_device(tof_sigma, "tof_sigma"), array_device(tof_center_offset, "tof_center_offset")},
+                            device_id);
   int image_dim[3] = {static_cast<int>(image.shape(0)),
                       static_cast<int>(image.shape(1)),
                       static_cast<int>(image.shape(2))};
@@ -703,28 +723,6 @@ static bool check_tof_lm_point_args(const ConstFloatNDArray &event_start,
   if (num_tof_bins < 1)
     throw std::invalid_argument("num_tof_bins must be >= 1");
 
-  if (event_start.device_type() != event_end.device_type() ||
-      event_start.device_type() != image.device_type() ||
-      event_start.device_type() != image_origin.device_type() ||
-      event_start.device_type() != voxel_size.device_type() ||
-      event_start.device_type() != projection_values.device_type() ||
-      event_start.device_type() != tof_center_offset.device_type() ||
-      event_start.device_type() != tof_bin_index.device_type())
-  {
-    throw std::invalid_argument("All input arrays must be on the same device type");
-  }
-
-  if (event_start.device_id() != event_end.device_id() ||
-      event_start.device_id() != image.device_id() ||
-      event_start.device_id() != image_origin.device_id() ||
-      event_start.device_id() != voxel_size.device_id() ||
-      event_start.device_id() != projection_values.device_id() ||
-      event_start.device_id() != tof_center_offset.device_id() ||
-      event_start.device_id() != tof_bin_index.device_id())
-  {
-    throw std::invalid_argument("All input arrays must be on the same device ID");
-  }
-
   // the shape of tof_center_offset must be either [1,] or [num_events,]
   if (tof_center_offset.ndim() == 1 && tof_center_offset.shape(0) == 1)
     return false;
@@ -744,7 +742,7 @@ void tof_lm_point_fwd_py(ConstFloatNDArray event_start,
                          ConstFloatNDArray tof_center_offset,
                          ConstShortNDArray tof_bin_index,
                          short num_tof_bins,
-                         int device_id = 0,
+                         int device_id = -1,
                          int threads_per_block = 64)
 {
   bool is_lor_dependent_tof_center_offset = check_tof_lm_point_args(
@@ -754,6 +752,11 @@ void tof_lm_point_fwd_py(ConstFloatNDArray event_start,
   int image_dim[3] = {static_cast<int>(image.shape(0)),
                       static_cast<int>(image.shape(1)),
                       static_cast<int>(image.shape(2))};
+
+  // check the devices of all arrays and get the CUDA device to use
+  device_id = check_devices({array_device(event_start, "event_start"), array_device(event_end, "event_end"), array_device(image, "image"), array_device(image_origin, "image_origin"), array_device(voxel_size, "voxel_size"), array_device(projection_values, "projection_values"), array_device(tof_bin_index, "tof_bin_index")},
+                            {array_device(tof_center_offset, "tof_center_offset")},
+                            device_id);
 
   tof_lm_point_fwd(event_start.data(),
                    event_end.data(),
@@ -783,7 +786,7 @@ void tof_lm_point_back_py(ConstFloatNDArray event_start,
                           ConstFloatNDArray tof_center_offset,
                           ConstShortNDArray tof_bin_index,
                           short num_tof_bins,
-                          int device_id = 0,
+                          int device_id = -1,
                           int threads_per_block = 64)
 {
   bool is_lor_dependent_tof_center_offset = check_tof_lm_point_args(
@@ -793,6 +796,11 @@ void tof_lm_point_back_py(ConstFloatNDArray event_start,
   int image_dim[3] = {static_cast<int>(image.shape(0)),
                       static_cast<int>(image.shape(1)),
                       static_cast<int>(image.shape(2))};
+
+  // check the devices of all arrays and get the CUDA device to use
+  device_id = check_devices({array_device(event_start, "event_start"), array_device(event_end, "event_end"), array_device(image, "image"), array_device(image_origin, "image_origin"), array_device(voxel_size, "voxel_size"), array_device(projection_values, "projection_values"), array_device(tof_bin_index, "tof_bin_index")},
+                            {array_device(tof_center_offset, "tof_center_offset")},
+                            device_id);
 
   tof_lm_point_back(event_start.data(),
                     event_end.data(),
@@ -846,10 +854,30 @@ NB_MODULE(parallelproj_core, m)
 
   m.attr("cuda_enabled") = parallelproj_cuda_enabled();
 
+  // internal: the device check logic of the projector bindings, exposed for testing
+  // (arrays given as (name, DLPack device type, device id) tuples)
+  m.def(
+      "_check_devices",
+      [](const std::vector<std::tuple<std::string, int, int>> &main,
+         const std::vector<std::tuple<std::string, int, int>> &params,
+         int device_id, bool cuda_build)
+      {
+        auto convert = [](const std::vector<std::tuple<std::string, int, int>> &in)
+        {
+          std::vector<ArrayDevice> out;
+          for (const auto &t : in)
+            out.push_back({std::get<1>(t), std::get<2>(t), std::get<0>(t)});
+          return out;
+        };
+        return check_devices_impl(convert(main), convert(params), device_id, cuda_build);
+      },
+      "main"_a, "params"_a, "device_id"_a, "cuda_build"_a,
+      "Internal: device check logic of the projector bindings (for testing).");
+
   m.def("joseph3d_fwd", &joseph3d_fwd_py,
         "lor_start"_a.noconvert(), "lor_end"_a.noconvert(), "image"_a.noconvert(),
         "image_origin"_a.noconvert(), "voxel_size"_a.noconvert(), "projection_values"_a.noconvert(),
-        "device_id"_a = 0, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64,
         R"pbdoc(
         Forward projection using the Joseph 3D algorithm.
 
@@ -868,7 +896,9 @@ NB_MODULE(parallelproj_core, m)
         projection_values : ndarray
           Output array for projection results, shape must match lor_start.shape[:-1].
         device_id : int, optional
-            Device ID for computation (default: 0).
+            CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
+            input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
+            copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
 
@@ -880,7 +910,7 @@ NB_MODULE(parallelproj_core, m)
   m.def("joseph3d_back", &joseph3d_back_py,
         "lor_start"_a.noconvert(), "lor_end"_a.noconvert(), "image"_a.noconvert(),
         "image_origin"_a.noconvert(), "voxel_size"_a.noconvert(), "projection_values"_a.noconvert(),
-        "device_id"_a = 0, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64,
         R"pbdoc(
         Backprojection using the Joseph 3D algorithm.
 
@@ -899,7 +929,9 @@ NB_MODULE(parallelproj_core, m)
         projection_values : ndarray
           Input values to backproject, shape must match lor_start.shape[:-1].
         device_id : int, optional
-            Device ID for computation (default: 0).
+            CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
+            input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
+            copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
 
@@ -917,7 +949,7 @@ NB_MODULE(parallelproj_core, m)
         "tof_center_offset"_a.noconvert(),
         "num_tof_bins"_a,
         "num_sigmas"_a = 3.0f,
-        "device_id"_a = 0, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64,
         R"pbdoc(
         TOF sinogram forward projection using the Joseph 3D algorithm.
 
@@ -946,7 +978,9 @@ NB_MODULE(parallelproj_core, m)
         num_sigmas : float, optional
             Number of sigmas for TOF kernel calculation (default: 3.0).
         device_id : int, optional
-            Device ID for computation (default: 0).
+            CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
+            input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
+            copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
         )pbdoc");
@@ -959,7 +993,7 @@ NB_MODULE(parallelproj_core, m)
         "tof_center_offset"_a.noconvert(),
         "num_tof_bins"_a,
         "num_sigmas"_a = 3.0f,
-        "device_id"_a = 0, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64,
         R"pbdoc(
         TOF sinogram backprojection using the Joseph 3D algorithm.
 
@@ -988,7 +1022,9 @@ NB_MODULE(parallelproj_core, m)
         num_sigmas : float, optional
             Number of sigmas for TOF kernel calculation (default: 3.0).
         device_id : int, optional
-            Device ID for computation (default: 0).
+            CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
+            input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
+            copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
 
@@ -1006,7 +1042,7 @@ NB_MODULE(parallelproj_core, m)
         "tof_bin_index"_a.noconvert(),
         "num_tof_bins"_a,
         "num_sigmas"_a = 3.0f,
-        "device_id"_a = 0, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64,
         R"pbdoc(
         TOF listmode forward projection using the Joseph 3D algorithm.
 
@@ -1037,7 +1073,9 @@ NB_MODULE(parallelproj_core, m)
         num_sigmas : float, optional
             Number of sigmas for TOF kernel calculation (default: 3.0).
         device_id : int, optional
-            Device ID for computation (default: 0).
+            CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
+            input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
+            copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
         )pbdoc");
@@ -1051,7 +1089,7 @@ NB_MODULE(parallelproj_core, m)
         "tof_bin_index"_a.noconvert(),
         "num_tof_bins"_a,
         "num_sigmas"_a = 3.0f,
-        "device_id"_a = 0, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64,
         R"pbdoc(
         TOF listmode backprojection using the Joseph 3D algorithm.
 
@@ -1082,7 +1120,9 @@ NB_MODULE(parallelproj_core, m)
         num_sigmas : float, optional
             Number of sigmas for TOF kernel calculation (default: 3.0).
         device_id : int, optional
-            Device ID for computation (default: 0).
+            CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
+            input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
+            copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
 
@@ -1098,7 +1138,7 @@ NB_MODULE(parallelproj_core, m)
         "tof_center_offset"_a.noconvert(),
         "tof_bin_index"_a.noconvert(),
         "num_tof_bins"_a,
-        "device_id"_a = 0, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64,
         R"pbdoc(
         TOF listmode "point" forward projection.
 
@@ -1135,7 +1175,9 @@ NB_MODULE(parallelproj_core, m)
         num_tof_bins : int
             Number of TOF bins.
         device_id : int, optional
-            Device ID for computation (default: 0).
+            CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
+            input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
+            copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
         )pbdoc");
@@ -1147,7 +1189,7 @@ NB_MODULE(parallelproj_core, m)
         "tof_center_offset"_a.noconvert(),
         "tof_bin_index"_a.noconvert(),
         "num_tof_bins"_a,
-        "device_id"_a = 0, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64,
         R"pbdoc(
         TOF listmode "point" back projection (adjoint of :func:`tof_lm_point_fwd`).
 
@@ -1185,7 +1227,9 @@ NB_MODULE(parallelproj_core, m)
         num_tof_bins : int
             Number of TOF bins.
         device_id : int, optional
-            Device ID for computation (default: 0).
+            CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
+            input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
+            copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
 

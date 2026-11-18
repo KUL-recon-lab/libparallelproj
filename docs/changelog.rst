@@ -19,8 +19,30 @@ Added
   looks, motion detection on short frames, inputs for neural networks, and as
   an approximate TOF projector in iterative methods.
 
+Changed
+^^^^^^^
+
+* **Python bindings: ``device_id`` defaults to -1 (automatic).** For GPU input
+  arrays the projectors now run on the GPU of the arrays; an explicit
+  ``device_id`` that does not match it raises a ``ValueError``. For CPU input
+  arrays, -1 means the current CUDA device (previously always device 0). The C
+  API is unchanged.
+  (`#39 <https://github.com/KUL-recon-lab/libparallelproj/issues/39>`_)
+
 Fixed
 ^^^^^
+
+* **Python bindings: complete device checks.** A CPU-only build accepted GPU
+  arrays (as long as all of them were on the same GPU) and dereferenced device
+  pointers on the host; it now raises a ``ValueError``. With several GPUs,
+  arrays on a GPU other than ``device_id`` (default 0) were processed by a
+  kernel on the wrong GPU. ``tof_sigma`` and ``tof_center_offset`` were not
+  part of the device checks; they can now be CPU arrays or arrays on the GPU of
+  the other input arrays. All projector bindings use one shared check.
+  The CUDA projectors now also restore the caller's current CUDA device after
+  switching to ``device_id`` (previously the current device of the process was
+  left changed, so e.g. new CuPy arrays were created on that device).
+  (`#39 <https://github.com/KUL-recon-lab/libparallelproj/issues/39>`_)
 
 * **TOF listmode projectors: the TOF window now includes the TOF bin width.**
   The listmode projectors only used image planes within
