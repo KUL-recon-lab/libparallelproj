@@ -1,11 +1,73 @@
 Changelog
 =========
 
-v2.1.0 (unreleased)
+v3.0.0 (unreleased)
 -------------------
+
+3.0 bundles the changes planned for 2.1 (never released) with CUDA stream
+support, which changes the C API signatures (ABI). Code that includes
+``parallelproj.h`` compiles unchanged, but has to be rebuilt.
+
+Breaking changes
+^^^^^^^^^^^^^^^^
+
+* **C API: new trailing parameter ``void *stream = nullptr`` of all projector
+  functions** (see "Added"). Existing calls compile unchanged and keep their
+  synchronous behavior, but the ABI changed: the shared library version (SONAME)
+  is now ``libparallelproj.so.3``, and binaries built against 2.x must be rebuilt.
+  Code that stores typed function pointers to the projector functions, or
+  declares them itself, needs to add the parameter.
+  (`#41 <https://github.com/KUL-recon-lab/libparallelproj/issues/41>`_)
+* **Changed numerical results** (bug fixes, see "Fixed"): non-zero TOF center
+  offsets for LORs with ``lor_end[dir] < lor_start[dir]``; TOF listmode
+  projections (~0.1 % for typical TOF kernels, more for kernels that are narrow
+  compared to the TOF bin width); TOF sinogram back projection of signed data.
+* **Python bindings:** ``device_id`` defaults to -1 (automatic) and must match
+  the GPU of GPU input arrays if given (see "Changed").
 
 Added
 ^^^^^
+
+* **CUDA stream support.** All projector functions take an optional CUDA stream
+  (C API: ``void *stream = nullptr``; Python: ``stream=None``, an integer handle
+  such as ``torch.cuda.current_stream(dev).cuda_stream`` or
+  ``cupy.cuda.get_current_stream().ptr``, where ``0`` is the default stream).
+
+  - Without a stream, a call is synchronous as before: results are complete on
+    return.
+  - With a stream, all copies and the kernel are queued on that stream and, for
+    GPU arrays, the call returns immediately, like a PyTorch / CuPy operation on
+    that stream. This allows inputs produced on side streams, several GPUs
+    running concurrently from one Python thread, and recording projector calls
+    in CUDA graphs.
+  - Calls with CPU arrays always return complete results.
+  - CUDA graph capture works with PyTorch tensors directly. CuPy arrays have to
+    be passed as ``x.__dlpack__(stream=handle)`` during capture: the bindings
+    import arrays via DLPack without a stream, and CuPy then orders the legacy
+    default stream after its current stream, which is not allowed during capture.
+  - Temporary device buffers are allocated, copied and freed stream-ordered
+    (``cudaMallocAsync`` / ``cudaFreeAsync``), and the image dimensions are
+    passed to the kernels by value, so asynchronous calls do not synchronize
+    internally.
+
+  (`#41 <https://github.com/KUL-recon-lab/libparallelproj/issues/41>`_)
+
+* **New gallery examples for multiple GPUs** (PyTorch):
+
+  - ``05_multi_gpu_streams.py``: synchronous vs. asynchronous calls, a mini
+    batch split across several GPUs, an autograd layer that works with one or
+    several GPUs, and how to time GPU code (non-TOF sinogram projectors),
+  - ``06_multi_gpu_tof_sinogram.py``: the same with the TOF sinogram projectors,
+  - ``07_multi_gpu_tof_listmode.py``: TOF listmode projectors with a different
+    number of events per sample, load balancing across GPUs, and a training step
+    with the Poisson listmode log-likelihood.
+
+  Shared helpers are in ``docs/examples/gpu_utils.py``. Examples with ``gpu`` in
+  their file name are not executed when the docs are built.
+
+* **Python bindings release the GIL** while a projector runs, so that other
+  Python threads (e.g. one thread per GPU) can run in the meantime.
+  (`#41 <https://github.com/KUL-recon-lab/libparallelproj/issues/41>`_)
 
 * **TOF listmode "point" projector:** new ``tof_lm_point_fwd`` /
   ``tof_lm_point_back`` (C API and Python bindings, CPU/OpenMP and CUDA).
@@ -21,6 +83,13 @@ Added
 
 Changed
 ^^^^^^^
+
+* **Synchronous CUDA calls no longer wait for the whole GPU.** Without a
+  stream, a projector call now waits only for its own (legacy default) stream
+  instead of calling ``cudaDeviceSynchronize()``. Results are still complete on
+  return, but the call no longer waits for unrelated work on other
+  (non-blocking) streams, e.g. the gradient all-reduce of PyTorch DDP.
+  (`#41 <https://github.com/KUL-recon-lab/libparallelproj/issues/41>`_)
 
 * **Python bindings: ``device_id`` defaults to -1 (automatic).** For GPU input
   arrays the projectors now run on the GPU of the arrays; an explicit

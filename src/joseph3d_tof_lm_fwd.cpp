@@ -18,7 +18,8 @@ void joseph3d_tof_lm_fwd(const float *lor_start,
                          unsigned char is_lor_dependent_tof_sigma,
                          unsigned char is_lor_dependent_tof_center_offset,
                          int device_id,
-                         int threads_per_block)
+                         int threads_per_block,
+                         void * /* stream: ignored without CUDA */)
 {
 
 #pragma omp parallel for

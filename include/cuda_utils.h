@@ -27,25 +27,31 @@
 //
 // Ownership semantics (the `owns` flag, set by handle_cuda_input_array):
 //   * owns == true  : the input was a host array; a temporary device copy
-//                     was allocated with cudaMalloc and must be freed.
-//                     The destructor calls cudaFree(ptr).
+//                     was allocated and must be freed.
+//                     If the buffer was allocated stream-ordered
+//                     (cudaMallocAsync, stream_ordered == true), the destructor
+//                     frees it with cudaFreeAsync on the same stream, i.e. after
+//                     all work queued on that stream (copies, kernel) has used it,
+//                     without synchronizing the host. Otherwise (GPUs without
+//                     memory pool support) it calls cudaFree.
 //   * owns == false : the input was already device or managed memory; `ptr`
 //                     just borrows the caller's pointer. The destructor does
 //                     nothing — we must not free memory we do not own.
 //
 // The wrapper is non-copyable: two copies owning the same pointer would
-// both call cudaFree on it (double free). It is movable, so ownership can
-// be transferred; the moved-from object is set to {nullptr, false} so its
-// destructor is a no-op.
+// both free it (double free). It is movable, so ownership can be
+// transferred; the moved-from object is reset so its destructor is a no-op.
 //
-// Note: cudaFree in a destructor must not throw (destructors that throw
-// during stack unwinding terminate the program), so its return value is
+// Note: freeing in a destructor must not throw (destructors that throw
+// during stack unwinding terminate the program), so the return value is
 // deliberately ignored. This is the same trade-off std::unique_ptr makes.
 // ---------------------------------------------------------------------------
 template <typename T>
 struct CudaDevicePtr {
-    T*   ptr  = nullptr;  // device pointer used in kernel launches
-    bool owns = false;    // true only if we cudaMalloc'ed ptr ourselves
+    T*           ptr            = nullptr; // device pointer used in kernel launches
+    bool         owns           = false;   // true only if we allocated ptr ourselves
+    bool         stream_ordered = false;   // allocated with cudaMallocAsync on `stream`
+    cudaStream_t stream         = nullptr; // stream used for a stream-ordered free
 
     CudaDevicePtr() = default;
 
@@ -55,21 +61,65 @@ struct CudaDevicePtr {
 
     // Movable: transfers ownership and disarms the source object.
     CudaDevicePtr(CudaDevicePtr&& other) noexcept
-        : ptr(other.ptr), owns(other.owns)
-    { other.ptr = nullptr; other.owns = false; }
+        : ptr(other.ptr), owns(other.owns), stream_ordered(other.stream_ordered), stream(other.stream)
+    { other.disarm(); }
     CudaDevicePtr& operator=(CudaDevicePtr&& other) noexcept {
         if (this != &other) {
-            if (owns && ptr) cudaFree(ptr); // release current allocation first
+            release(); // release current allocation first
             ptr = other.ptr; owns = other.owns;
-            other.ptr = nullptr; other.owns = false;
+            stream_ordered = other.stream_ordered; stream = other.stream;
+            other.disarm();
         }
         return *this;
     }
 
     // Runs automatically on scope exit (including exception unwinding).
-    ~CudaDevicePtr() { if (owns && ptr) cudaFree(ptr); }
+    ~CudaDevicePtr() { release(); }
 
     T* get() const { return ptr; }
+
+private:
+    void release() noexcept {
+        if (owns && ptr) {
+            if (stream_ordered)
+                cudaFreeAsync(ptr, stream);
+            else
+                cudaFree(ptr);
+        }
+        disarm();
+    }
+    void disarm() noexcept { ptr = nullptr; owns = false; stream_ordered = false; stream = nullptr; }
+};
+
+// ---------------------------------------------------------------------------
+// CudaCallStream: the stream a projector call runs on.
+//
+// stream == nullptr (default of the C API): legacy default stream and the call
+//   is synchronous: before returning it waits for its stream (not for the whole
+//   device, i.e. not for unrelated work on other streams).
+// otherwise: all work (copies, kernel, frees) is queued on the given stream and,
+//   for device / managed arrays, the call returns without waiting.
+// Calls with host arrays always wait for their stream before returning (host
+// outputs must be complete, host inputs must not be read after returning).
+// ---------------------------------------------------------------------------
+struct CudaCallStream
+{
+    cudaStream_t stream;
+    bool synchronous;
+
+    explicit CudaCallStream(void *user_stream)
+        : stream(user_stream ? static_cast<cudaStream_t>(user_stream) : cudaStreamLegacy),
+          synchronous(user_stream == nullptr) {}
+};
+
+// Image dimensions passed to the kernels by value (no device copy needed).
+struct ImageDim
+{
+    int d[3];
+    std::size_t nvoxels() const
+    {
+        return static_cast<std::size_t>(d[0]) * static_cast<std::size_t>(d[1]) * static_cast<std::size_t>(d[2]);
+    }
 };
 
 // Makes device_id the current CUDA device for the lifetime of the guard and restores the
@@ -130,15 +180,17 @@ inline void cuda_memcpy_d2h(void* dst, const void* src, std::size_t size)
     }
 }
 
-// Derive nvoxels = img_dim[0]*img_dim[1]*img_dim[2] when img_dim may be a
-// host, CUDA managed or device pointer. Throws std::invalid_argument or
-// std::runtime_error on error; returns computed nvoxels on success.
-inline std::size_t cuda_nvoxels_from_img_dim(const int *img_dim_ptr)
+// Read the image dimensions when img_dim may be a host, CUDA managed or device
+// pointer. A device / managed img_dim is copied on `stream` and waited for
+// (only this stream); pass a host pointer for fully asynchronous calls and for
+// CUDA graph capture (the Python bindings always do). Throws
+// std::invalid_argument or std::runtime_error on error.
+inline ImageDim cuda_image_dim_to_host(const int *img_dim_ptr, cudaStream_t stream)
 {
     if (!img_dim_ptr)
-        throw std::invalid_argument("nvoxels_from_img_dim: img_dim_ptr is null");
+        throw std::invalid_argument("image_dim is null");
 
-    int h_img_dim[3] = {0, 0, 0};
+    ImageDim h = {{0, 0, 0}};
     cudaPointerAttributes attr;
     cudaError_t err = cudaPointerGetAttributes(&attr, static_cast<const void *>(img_dim_ptr));
     if (err != cudaSuccess)
@@ -151,33 +203,81 @@ inline std::size_t cuda_nvoxels_from_img_dim(const int *img_dim_ptr)
     // If pointer known to CUDA and points to device/managed memory, copy to host.
     if (err == cudaSuccess && (attr.type == cudaMemoryTypeDevice || attr.type == cudaMemoryTypeManaged))
     {
-        err = cudaMemcpy(h_img_dim, img_dim_ptr, 3 * sizeof(int), cudaMemcpyDeviceToHost);
+        err = cudaMemcpyAsync(h.d, img_dim_ptr, 3 * sizeof(int), cudaMemcpyDeviceToHost, stream);
+        if (err == cudaSuccess)
+            err = cudaStreamSynchronize(stream);
         if (err != cudaSuccess)
         {
             cudaGetLastError(); // clear last-error state before throwing
-            throw std::runtime_error(std::string("nvoxels_from_img_dim: cudaMemcpy failed: ") + cudaGetErrorString(err));
+            throw std::runtime_error(std::string("copy of image_dim to host failed: ") + cudaGetErrorString(err));
         }
     }
     else
     {
         // Treat as host pointer (or pointer attributes not available) — read directly.
-        h_img_dim[0] = img_dim_ptr[0];
-        h_img_dim[1] = img_dim_ptr[1];
-        h_img_dim[2] = img_dim_ptr[2];
+        h.d[0] = img_dim_ptr[0];
+        h.d[1] = img_dim_ptr[1];
+        h.d[2] = img_dim_ptr[2];
     }
 
-    if (h_img_dim[0] <= 0 || h_img_dim[1] <= 0 || h_img_dim[2] <= 0)
-        throw std::invalid_argument("nvoxels_from_img_dim: invalid img_dim values");
+    if (h.d[0] <= 0 || h.d[1] <= 0 || h.d[2] <= 0)
+        throw std::invalid_argument("invalid image_dim values");
 
-    return static_cast<std::size_t>(h_img_dim[0]) *
-           static_cast<std::size_t>(h_img_dim[1]) *
-           static_cast<std::size_t>(h_img_dim[2]);
+    return h;
 }
+
+// Queue a device-to-host copy on `stream` (completed by cuda_finish_call).
+inline void cuda_memcpy_d2h_async(void *dst, const void *src, std::size_t size, cudaStream_t stream)
+{
+    cudaError_t err = cudaMemcpyAsync(dst, src, size, cudaMemcpyDeviceToHost, stream);
+    if (err != cudaSuccess)
+    {
+        cudaGetLastError(); // clear last-error state before throwing
+        throw std::runtime_error(std::string("cudaMemcpyAsync (D2H) failed: ") + cudaGetErrorString(err));
+    }
+}
+
+// Check the kernel launch (launch errors are reported immediately, also for
+// asynchronous calls). Throws std::runtime_error on failure.
+inline void cuda_check_launch()
+{
+    cudaError_t launch_err = cudaGetLastError();
+    if (launch_err != cudaSuccess)
+        throw std::runtime_error(std::string("CUDA kernel launch failed: ") + cudaGetErrorString(launch_err));
+}
+
+// Finish a projector call: wait for the call's stream if the call is
+// synchronous or involves host buffers (copied inputs / outputs), otherwise
+// return immediately (asynchronous call with device / managed arrays). Errors
+// during kernel execution are reported here for waiting calls; for asynchronous
+// calls they surface at the caller's next synchronizing operation.
+inline void cuda_finish_call(const CudaCallStream &call_stream, bool has_host_buffers)
+{
+    if (!call_stream.synchronous && !has_host_buffers)
+        return;
+
+    cudaError_t sync_err = cudaStreamSynchronize(call_stream.stream);
+    if (sync_err != cudaSuccess)
+    {
+        cudaGetLastError(); // clear last-error state before throwing
+        throw std::runtime_error(std::string("CUDA kernel error: ") + cudaGetErrorString(sync_err));
+    }
+}
+
+// Make an input / output array available on the GPU for a projector call.
+// Device and managed arrays are used directly (managed arrays get memory hints
+// and a prefetch on `stream`). Host arrays are copied to a temporary device
+// buffer, allocated and copied stream-ordered on `stream` (cudaMallocAsync /
+// cudaMemcpyAsync; cudaMalloc on GPUs without memory pool support). The
+// CudaDevicePtr owns the temporary buffer and frees it stream-ordered.
+// Throws std::runtime_error on failure (out is left empty).
 
 // Overload for constant input_ptr (const T*)
 template <typename T>
-void handle_cuda_input_array(const T *input_ptr, T **device_ptr, std::size_t size, bool &free_flag, int device_id, cudaMemoryAdvise memory_hint);
+void handle_cuda_input_array(const T *input_ptr, CudaDevicePtr<T> &out, std::size_t size, int device_id,
+                             cudaMemoryAdvise memory_hint, cudaStream_t stream);
 
 // Overload for non-constant input_ptr (T*)
 template <typename T>
-void handle_cuda_input_array(T *input_ptr, T **device_ptr, std::size_t size, bool &free_flag, int device_id, cudaMemoryAdvise memory_hint);
+void handle_cuda_input_array(T *input_ptr, CudaDevicePtr<T> &out, std::size_t size, int device_id,
+                             cudaMemoryAdvise memory_hint, cudaStream_t stream);

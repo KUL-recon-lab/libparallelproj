@@ -129,23 +129,60 @@ def histo_image(tof_bins, bin_width, num_bins):
 
 # %%
 # TOF histo-images without and with dithering.
-t0 = time.perf_counter()
 histo_plain = histo_image(tof_bin, tof_bin_width, num_tof_bins)
-t_point = time.perf_counter() - t0
-
 histo_dithered = histo_image(tof_bin_dithered, tof_bin_width / k, num_tof_bins * k)
 
 # %%
 # For comparison: TOF listmode Joseph back projection of the same events
 # (original 10 mm TOF bins, Gaussian TOF kernel).
-joseph_image = xp.zeros(img_shape, dtype=xp.float32, device=dev)
-t0 = time.perf_counter()
-parallelproj_core.joseph3d_tof_lm_back(
-    d_start, d_end, joseph_image, d_origin, d_voxsize, d_ones,
-    tof_bin_width, xp.asarray([tof_sigma], dtype=xp.float32, device=dev), d_offset,
-    xp.asarray(tof_bin, device=dev), num_tof_bins,
-)
-t_joseph = time.perf_counter() - t0
+d_tof_bin = xp.asarray(tof_bin, device=dev)
+d_tof_sigma = xp.asarray([tof_sigma], dtype=xp.float32, device=dev)
+
+
+def joseph_back():
+    img = xp.zeros(img_shape, dtype=xp.float32, device=dev)
+    parallelproj_core.joseph3d_tof_lm_back(
+        d_start, d_end, img, d_origin, d_voxsize, d_ones,
+        tof_bin_width, d_tof_sigma, d_offset, d_tof_bin, num_tof_bins,
+    )
+    return img
+
+
+joseph_image = joseph_back()
+
+# %%
+# Timing
+# ------
+# GPU work can run asynchronously: a call may return before the GPU is done
+# (e.g. projections with ``stream=...``, and all PyTorch / CuPy operations). To
+# get meaningful timings, synchronize the GPU before reading the clock, and
+# exclude the first call (one-time GPU initialization) with a warm-up call.
+# Alternatives are CUDA events, or ``torch.utils.benchmark.Timer`` /
+# ``cupyx.profiler.benchmark``, which take care of both.
+
+
+def synchronize():
+    """wait until all queued GPU work is done (no-op for NumPy arrays)"""
+    if hasattr(dev, "synchronize"):  # CuPy device
+        dev.synchronize()
+
+
+def best_time(fn, repeats=3):
+    """best wall-clock time of fn() over a few runs, after a warm-up call"""
+    fn()  # warm-up
+    times = []
+    for _ in range(repeats):
+        synchronize()
+        t0 = time.perf_counter()
+        fn()
+        synchronize()
+        times.append(time.perf_counter() - t0)
+    return min(times)
+
+
+# (both timings use event data that is already on the device)
+t_point = best_time(lambda: histo_image(d_tof_bin, tof_bin_width, num_tof_bins))
+t_joseph = best_time(joseph_back)
 
 print(f"tof_lm_point_back:    {t_point:.3f} s")
 print(f"joseph3d_tof_lm_back: {t_joseph:.3f} s")

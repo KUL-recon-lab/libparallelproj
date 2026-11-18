@@ -3,10 +3,12 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
+#include <nanobind/stl/optional.h>
 #include "parallelproj.h"
 #include <cmath>
 #include <cstdint>
 #include <initializer_list>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -135,6 +137,25 @@ namespace
     return check_devices_impl(std::vector<ArrayDevice>(main), std::vector<ArrayDevice>(params),
                               device_id, parallelproj_cuda_enabled() != 0);
   }
+
+  // Stream handle (Python int, as returned by torch.cuda.Stream.cuda_stream or
+  // cupy.cuda.Stream.ptr) -> stream argument of the C API.
+  //   None -> nullptr: legacy default stream, synchronous call
+  //   0    -> cudaStreamLegacy: legacy default stream, asynchronous call
+  //           (PyTorch and CuPy report their default stream as handle 0)
+  //   else -> that stream, asynchronous call
+  // The bindings are built without CUDA headers, so cudaStreamLegacy is spelled
+  // out here; its value ((cudaStream_t)0x1) is fixed by the CUDA runtime API.
+  constexpr std::uintptr_t cuda_stream_legacy_handle = 0x1;
+
+  void *stream_pointer(const std::optional<std::uintptr_t> &stream)
+  {
+    if (!stream.has_value())
+      return nullptr;
+    if (*stream == 0)
+      return reinterpret_cast<void *>(cuda_stream_legacy_handle);
+    return reinterpret_cast<void *>(*stream);
+  }
 } // namespace
 
 // Wrapper for joseph3d_fwd
@@ -145,7 +166,8 @@ void joseph3d_fwd_py(ConstFloatNDArray lor_start,
                      ConstFloat1D3ELArray voxel_size,
                      FloatNDArray projection_values,
                      int device_id = -1,
-                     int threads_per_block = 64)
+                     int threads_per_block = 64,
+                     std::optional<std::uintptr_t> stream = std::nullopt)
 {
   // 1 check that ndim of lor_start and lor_end >=2 and last dim ==3
   if (lor_start.ndim() < 2 || lor_start.shape(lor_start.ndim() - 1) != 3)
@@ -185,7 +207,13 @@ void joseph3d_fwd_py(ConstFloatNDArray lor_start,
                       static_cast<int>(image.shape(1)),
                       static_cast<int>(image.shape(2))};
 
-  joseph3d_fwd(lor_start.data(), lor_end.data(), image.data(), image_origin.data(), voxel_size.data(), projection_values.data(), num_lors, image_dim, device_id, threads_per_block);
+  // release the GIL while the projector runs (other Python threads, e.g.
+  // one thread per GPU, can run in the meantime)
+  {
+    nb::gil_scoped_release release;
+    joseph3d_fwd(lor_start.data(), lor_end.data(), image.data(), image_origin.data(), voxel_size.data(), projection_values.data(), num_lors, image_dim, device_id, threads_per_block,
+                 stream_pointer(stream));
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -200,7 +228,8 @@ void joseph3d_back_py(ConstFloatNDArray lor_start,
                       ConstFloat1D3ELArray voxel_size,
                       ConstFloatNDArray projection_values,
                       int device_id = -1,
-                      int threads_per_block = 64)
+                      int threads_per_block = 64,
+                      std::optional<std::uintptr_t> stream = std::nullopt)
 {
   // 1 check that ndim of lor_start and lor_end >=2 and last dim ==3
   if (lor_start.ndim() < 2 || lor_start.shape(lor_start.ndim() - 1) != 3)
@@ -240,7 +269,13 @@ void joseph3d_back_py(ConstFloatNDArray lor_start,
                       static_cast<int>(image.shape(1)),
                       static_cast<int>(image.shape(2))};
 
-  joseph3d_back(lor_start.data(), lor_end.data(), image.data(), image_origin.data(), voxel_size.data(), projection_values.data(), num_lors, image_dim, device_id, threads_per_block);
+  // release the GIL while the projector runs (other Python threads, e.g.
+  // one thread per GPU, can run in the meantime)
+  {
+    nb::gil_scoped_release release;
+    joseph3d_back(lor_start.data(), lor_end.data(), image.data(), image_origin.data(), voxel_size.data(), projection_values.data(), num_lors, image_dim, device_id, threads_per_block,
+                 stream_pointer(stream));
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -260,7 +295,8 @@ void joseph3d_tof_sino_fwd_py(ConstFloatNDArray lor_start,
                               short num_tof_bins,
                               float num_sigmas = 3.0f,
                               int device_id = -1,
-                              int threads_per_block = 64)
+                              int threads_per_block = 64,
+                              std::optional<std::uintptr_t> stream = std::nullopt)
 {
   bool is_lor_dependent_tof_sigma;
   bool is_lor_dependent_tof_center_offset;
@@ -344,23 +380,29 @@ void joseph3d_tof_sino_fwd_py(ConstFloatNDArray lor_start,
     throw std::invalid_argument("shape of tof_center_offset must match shape of lor_start[:-1] or be scalar");
   }
 
-  joseph3d_tof_sino_fwd(lor_start.data(),
-                        lor_end.data(),
-                        image.data(),
-                        image_origin.data(),
-                        voxel_size.data(),
-                        projection_values.data(),
-                        num_lors,
-                        image_dim,
-                        tof_bin_width,
-                        tof_sigma.data(),
-                        tof_center_offset.data(),
-                        num_sigmas,
-                        num_tof_bins,
-                        static_cast<unsigned char>(is_lor_dependent_tof_sigma ? 1 : 0),
-                        static_cast<unsigned char>(is_lor_dependent_tof_center_offset ? 1 : 0),
-                        device_id,
-                        threads_per_block);
+  // release the GIL while the projector runs (other Python threads, e.g.
+  // one thread per GPU, can run in the meantime)
+  {
+    nb::gil_scoped_release release;
+    joseph3d_tof_sino_fwd(lor_start.data(),
+                            lor_end.data(),
+                            image.data(),
+                            image_origin.data(),
+                            voxel_size.data(),
+                            projection_values.data(),
+                            num_lors,
+                            image_dim,
+                            tof_bin_width,
+                            tof_sigma.data(),
+                            tof_center_offset.data(),
+                            num_sigmas,
+                            num_tof_bins,
+                            static_cast<unsigned char>(is_lor_dependent_tof_sigma ? 1 : 0),
+                            static_cast<unsigned char>(is_lor_dependent_tof_center_offset ? 1 : 0),
+                            device_id,
+                            threads_per_block,
+                            stream_pointer(stream));
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -380,7 +422,8 @@ void joseph3d_tof_back_fwd_py(ConstFloatNDArray lor_start,
                               short num_tof_bins,
                               float num_sigmas = 3.0f,
                               int device_id = -1,
-                              int threads_per_block = 64)
+                              int threads_per_block = 64,
+                              std::optional<std::uintptr_t> stream = std::nullopt)
 {
   bool is_lor_dependent_tof_sigma;
   bool is_lor_dependent_tof_center_offset;
@@ -464,23 +507,29 @@ void joseph3d_tof_back_fwd_py(ConstFloatNDArray lor_start,
     throw std::invalid_argument("shape of tof_center_offset must match shape of lor_start[:-1] or be scalar");
   }
 
-  joseph3d_tof_sino_back(lor_start.data(),
-                         lor_end.data(),
-                         image.data(),
-                         image_origin.data(),
-                         voxel_size.data(),
-                         projection_values.data(),
-                         num_lors,
-                         image_dim,
-                         tof_bin_width,
-                         tof_sigma.data(),
-                         tof_center_offset.data(),
-                         num_sigmas,
-                         num_tof_bins,
-                         static_cast<unsigned char>(is_lor_dependent_tof_sigma ? 1 : 0),
-                         static_cast<unsigned char>(is_lor_dependent_tof_center_offset ? 1 : 0),
-                         device_id,
-                         threads_per_block);
+  // release the GIL while the projector runs (other Python threads, e.g.
+  // one thread per GPU, can run in the meantime)
+  {
+    nb::gil_scoped_release release;
+    joseph3d_tof_sino_back(lor_start.data(),
+                             lor_end.data(),
+                             image.data(),
+                             image_origin.data(),
+                             voxel_size.data(),
+                             projection_values.data(),
+                             num_lors,
+                             image_dim,
+                             tof_bin_width,
+                             tof_sigma.data(),
+                             tof_center_offset.data(),
+                             num_sigmas,
+                             num_tof_bins,
+                             static_cast<unsigned char>(is_lor_dependent_tof_sigma ? 1 : 0),
+                             static_cast<unsigned char>(is_lor_dependent_tof_center_offset ? 1 : 0),
+                             device_id,
+                             threads_per_block,
+                             stream_pointer(stream));
+  }
 }
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -500,7 +549,8 @@ void joseph3d_tof_lm_fwd_py(ConstFloatNDArray event_start,
                             short num_tof_bins,
                             float num_sigmas = 3.0f,
                             int device_id = -1,
-                            int threads_per_block = 64)
+                            int threads_per_block = 64,
+                            std::optional<std::uintptr_t> stream = std::nullopt)
 {
   bool is_lor_dependent_tof_sigma;
   bool is_lor_dependent_tof_center_offset;
@@ -562,24 +612,30 @@ void joseph3d_tof_lm_fwd_py(ConstFloatNDArray event_start,
     throw std::invalid_argument("shape of tof_center_offset must be [1,] or [num_events,]");
   }
 
-  joseph3d_tof_lm_fwd(event_start.data(),
-                      event_end.data(),
-                      image.data(),
-                      image_origin.data(),
-                      voxel_size.data(),
-                      projection_values.data(),
-                      num_events,
-                      image_dim,
-                      tof_bin_width,
-                      tof_sigma.data(),
-                      tof_center_offset.data(),
-                      num_sigmas,
-                      tof_bin_index.data(),
-                      num_tof_bins,
-                      static_cast<unsigned char>(is_lor_dependent_tof_sigma ? 1 : 0),
-                      static_cast<unsigned char>(is_lor_dependent_tof_center_offset ? 1 : 0),
-                      device_id,
-                      threads_per_block);
+  // release the GIL while the projector runs (other Python threads, e.g.
+  // one thread per GPU, can run in the meantime)
+  {
+    nb::gil_scoped_release release;
+    joseph3d_tof_lm_fwd(event_start.data(),
+                          event_end.data(),
+                          image.data(),
+                          image_origin.data(),
+                          voxel_size.data(),
+                          projection_values.data(),
+                          num_events,
+                          image_dim,
+                          tof_bin_width,
+                          tof_sigma.data(),
+                          tof_center_offset.data(),
+                          num_sigmas,
+                          tof_bin_index.data(),
+                          num_tof_bins,
+                          static_cast<unsigned char>(is_lor_dependent_tof_sigma ? 1 : 0),
+                          static_cast<unsigned char>(is_lor_dependent_tof_center_offset ? 1 : 0),
+                          device_id,
+                          threads_per_block,
+                          stream_pointer(stream));
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -600,7 +656,8 @@ void joseph3d_tof_lm_back_py(ConstFloatNDArray event_start,
                              short num_tof_bins,
                              float num_sigmas = 3.0f,
                              int device_id = -1,
-                             int threads_per_block = 64)
+                             int threads_per_block = 64,
+                             std::optional<std::uintptr_t> stream = std::nullopt)
 {
   bool is_lor_dependent_tof_sigma;
   bool is_lor_dependent_tof_center_offset;
@@ -662,24 +719,30 @@ void joseph3d_tof_lm_back_py(ConstFloatNDArray event_start,
     throw std::invalid_argument("shape of tof_center_offset must be [1,] or [num_events,]");
   }
 
-  joseph3d_tof_lm_back(event_start.data(),
-                       event_end.data(),
-                       image.data(),
-                       image_origin.data(),
-                       voxel_size.data(),
-                       projection_values.data(),
-                       num_events,
-                       image_dim,
-                       tof_bin_width,
-                       tof_sigma.data(),
-                       tof_center_offset.data(),
-                       num_sigmas,
-                       tof_bin_index.data(),
-                       num_tof_bins,
-                       static_cast<unsigned char>(is_lor_dependent_tof_sigma ? 1 : 0),
-                       static_cast<unsigned char>(is_lor_dependent_tof_center_offset ? 1 : 0),
-                       device_id,
-                       threads_per_block);
+  // release the GIL while the projector runs (other Python threads, e.g.
+  // one thread per GPU, can run in the meantime)
+  {
+    nb::gil_scoped_release release;
+    joseph3d_tof_lm_back(event_start.data(),
+                           event_end.data(),
+                           image.data(),
+                           image_origin.data(),
+                           voxel_size.data(),
+                           projection_values.data(),
+                           num_events,
+                           image_dim,
+                           tof_bin_width,
+                           tof_sigma.data(),
+                           tof_center_offset.data(),
+                           num_sigmas,
+                           tof_bin_index.data(),
+                           num_tof_bins,
+                           static_cast<unsigned char>(is_lor_dependent_tof_sigma ? 1 : 0),
+                           static_cast<unsigned char>(is_lor_dependent_tof_center_offset ? 1 : 0),
+                           device_id,
+                           threads_per_block,
+                           stream_pointer(stream));
+  }
 }
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -743,7 +806,8 @@ void tof_lm_point_fwd_py(ConstFloatNDArray event_start,
                          ConstShortNDArray tof_bin_index,
                          short num_tof_bins,
                          int device_id = -1,
-                         int threads_per_block = 64)
+                         int threads_per_block = 64,
+                         std::optional<std::uintptr_t> stream = std::nullopt)
 {
   bool is_lor_dependent_tof_center_offset = check_tof_lm_point_args(
       event_start, event_end, image, image_origin, voxel_size, projection_values,
@@ -758,21 +822,27 @@ void tof_lm_point_fwd_py(ConstFloatNDArray event_start,
                             {array_device(tof_center_offset, "tof_center_offset")},
                             device_id);
 
-  tof_lm_point_fwd(event_start.data(),
-                   event_end.data(),
-                   image.data(),
-                   image_origin.data(),
-                   voxel_size.data(),
-                   projection_values.data(),
-                   event_start.shape(0),
-                   image_dim,
-                   tof_bin_width,
-                   tof_center_offset.data(),
-                   tof_bin_index.data(),
-                   num_tof_bins,
-                   static_cast<unsigned char>(is_lor_dependent_tof_center_offset ? 1 : 0),
-                   device_id,
-                   threads_per_block);
+  // release the GIL while the projector runs (other Python threads, e.g.
+  // one thread per GPU, can run in the meantime)
+  {
+    nb::gil_scoped_release release;
+    tof_lm_point_fwd(event_start.data(),
+                       event_end.data(),
+                       image.data(),
+                       image_origin.data(),
+                       voxel_size.data(),
+                       projection_values.data(),
+                       event_start.shape(0),
+                       image_dim,
+                       tof_bin_width,
+                       tof_center_offset.data(),
+                       tof_bin_index.data(),
+                       num_tof_bins,
+                       static_cast<unsigned char>(is_lor_dependent_tof_center_offset ? 1 : 0),
+                       device_id,
+                       threads_per_block,
+                       stream_pointer(stream));
+  }
 }
 
 // Wrapper for tof_lm_point_back
@@ -787,7 +857,8 @@ void tof_lm_point_back_py(ConstFloatNDArray event_start,
                           ConstShortNDArray tof_bin_index,
                           short num_tof_bins,
                           int device_id = -1,
-                          int threads_per_block = 64)
+                          int threads_per_block = 64,
+                          std::optional<std::uintptr_t> stream = std::nullopt)
 {
   bool is_lor_dependent_tof_center_offset = check_tof_lm_point_args(
       event_start, event_end, image, image_origin, voxel_size, projection_values,
@@ -802,21 +873,27 @@ void tof_lm_point_back_py(ConstFloatNDArray event_start,
                             {array_device(tof_center_offset, "tof_center_offset")},
                             device_id);
 
-  tof_lm_point_back(event_start.data(),
-                    event_end.data(),
-                    image.data(),
-                    image_origin.data(),
-                    voxel_size.data(),
-                    projection_values.data(),
-                    event_start.shape(0),
-                    image_dim,
-                    tof_bin_width,
-                    tof_center_offset.data(),
-                    tof_bin_index.data(),
-                    num_tof_bins,
-                    static_cast<unsigned char>(is_lor_dependent_tof_center_offset ? 1 : 0),
-                    device_id,
-                    threads_per_block);
+  // release the GIL while the projector runs (other Python threads, e.g.
+  // one thread per GPU, can run in the meantime)
+  {
+    nb::gil_scoped_release release;
+    tof_lm_point_back(event_start.data(),
+                        event_end.data(),
+                        image.data(),
+                        image_origin.data(),
+                        voxel_size.data(),
+                        projection_values.data(),
+                        event_start.shape(0),
+                        image_dim,
+                        tof_bin_width,
+                        tof_center_offset.data(),
+                        tof_bin_index.data(),
+                        num_tof_bins,
+                        static_cast<unsigned char>(is_lor_dependent_tof_center_offset ? 1 : 0),
+                        device_id,
+                        threads_per_block,
+                        stream_pointer(stream));
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -854,6 +931,15 @@ NB_MODULE(parallelproj_core, m)
 
   m.attr("cuda_enabled") = parallelproj_cuda_enabled();
 
+  // internal: the stream pointer passed to the C API for a given stream argument
+  // (exposed for testing)
+  m.def(
+      "_stream_pointer",
+      [](std::optional<std::uintptr_t> stream)
+      { return reinterpret_cast<std::uintptr_t>(stream_pointer(stream)); },
+      "stream"_a = nb::none(),
+      "Internal: stream pointer passed to the C API for a given stream argument (for testing).");
+
   // internal: the device check logic of the projector bindings, exposed for testing
   // (arrays given as (name, DLPack device type, device id) tuples)
   m.def(
@@ -877,7 +963,7 @@ NB_MODULE(parallelproj_core, m)
   m.def("joseph3d_fwd", &joseph3d_fwd_py,
         "lor_start"_a.noconvert(), "lor_end"_a.noconvert(), "image"_a.noconvert(),
         "image_origin"_a.noconvert(), "voxel_size"_a.noconvert(), "projection_values"_a.noconvert(),
-        "device_id"_a = -1, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64, "stream"_a = nb::none(),
         R"pbdoc(
         Forward projection using the Joseph 3D algorithm.
 
@@ -901,6 +987,19 @@ NB_MODULE(parallelproj_core, m)
             copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
+        stream : int or None, optional
+            CUDA stream handle for this call (CUDA builds only, ignored otherwise), e.g.
+            ``torch.cuda.current_stream(dev).cuda_stream`` or
+            ``cupy.cuda.get_current_stream().ptr``. ``None`` (default): the call is
+            synchronous, i.e. results are complete on return (it waits for its own
+            stream, not for the whole GPU). Otherwise the call is queued on that
+            stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
+            operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
+            Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
 
         Notes
         -----
@@ -910,7 +1009,7 @@ NB_MODULE(parallelproj_core, m)
   m.def("joseph3d_back", &joseph3d_back_py,
         "lor_start"_a.noconvert(), "lor_end"_a.noconvert(), "image"_a.noconvert(),
         "image_origin"_a.noconvert(), "voxel_size"_a.noconvert(), "projection_values"_a.noconvert(),
-        "device_id"_a = -1, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64, "stream"_a = nb::none(),
         R"pbdoc(
         Backprojection using the Joseph 3D algorithm.
 
@@ -934,6 +1033,19 @@ NB_MODULE(parallelproj_core, m)
             copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
+        stream : int or None, optional
+            CUDA stream handle for this call (CUDA builds only, ignored otherwise), e.g.
+            ``torch.cuda.current_stream(dev).cuda_stream`` or
+            ``cupy.cuda.get_current_stream().ptr``. ``None`` (default): the call is
+            synchronous, i.e. results are complete on return (it waits for its own
+            stream, not for the whole GPU). Otherwise the call is queued on that
+            stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
+            operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
+            Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
 
         Notes
         -----
@@ -949,7 +1061,7 @@ NB_MODULE(parallelproj_core, m)
         "tof_center_offset"_a.noconvert(),
         "num_tof_bins"_a,
         "num_sigmas"_a = 3.0f,
-        "device_id"_a = -1, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64, "stream"_a = nb::none(),
         R"pbdoc(
         TOF sinogram forward projection using the Joseph 3D algorithm.
 
@@ -983,6 +1095,19 @@ NB_MODULE(parallelproj_core, m)
             copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
+        stream : int or None, optional
+            CUDA stream handle for this call (CUDA builds only, ignored otherwise), e.g.
+            ``torch.cuda.current_stream(dev).cuda_stream`` or
+            ``cupy.cuda.get_current_stream().ptr``. ``None`` (default): the call is
+            synchronous, i.e. results are complete on return (it waits for its own
+            stream, not for the whole GPU). Otherwise the call is queued on that
+            stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
+            operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
+            Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
         )pbdoc");
 
   m.def("joseph3d_tof_sino_back", &joseph3d_tof_back_fwd_py,
@@ -993,7 +1118,7 @@ NB_MODULE(parallelproj_core, m)
         "tof_center_offset"_a.noconvert(),
         "num_tof_bins"_a,
         "num_sigmas"_a = 3.0f,
-        "device_id"_a = -1, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64, "stream"_a = nb::none(),
         R"pbdoc(
         TOF sinogram backprojection using the Joseph 3D algorithm.
 
@@ -1027,6 +1152,19 @@ NB_MODULE(parallelproj_core, m)
             copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
+        stream : int or None, optional
+            CUDA stream handle for this call (CUDA builds only, ignored otherwise), e.g.
+            ``torch.cuda.current_stream(dev).cuda_stream`` or
+            ``cupy.cuda.get_current_stream().ptr``. ``None`` (default): the call is
+            synchronous, i.e. results are complete on return (it waits for its own
+            stream, not for the whole GPU). Otherwise the call is queued on that
+            stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
+            operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
+            Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
 
         Notes
         -----
@@ -1042,7 +1180,7 @@ NB_MODULE(parallelproj_core, m)
         "tof_bin_index"_a.noconvert(),
         "num_tof_bins"_a,
         "num_sigmas"_a = 3.0f,
-        "device_id"_a = -1, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64, "stream"_a = nb::none(),
         R"pbdoc(
         TOF listmode forward projection using the Joseph 3D algorithm.
 
@@ -1078,6 +1216,19 @@ NB_MODULE(parallelproj_core, m)
             copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
+        stream : int or None, optional
+            CUDA stream handle for this call (CUDA builds only, ignored otherwise), e.g.
+            ``torch.cuda.current_stream(dev).cuda_stream`` or
+            ``cupy.cuda.get_current_stream().ptr``. ``None`` (default): the call is
+            synchronous, i.e. results are complete on return (it waits for its own
+            stream, not for the whole GPU). Otherwise the call is queued on that
+            stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
+            operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
+            Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
         )pbdoc");
 
   m.def("joseph3d_tof_lm_back", &joseph3d_tof_lm_back_py,
@@ -1089,7 +1240,7 @@ NB_MODULE(parallelproj_core, m)
         "tof_bin_index"_a.noconvert(),
         "num_tof_bins"_a,
         "num_sigmas"_a = 3.0f,
-        "device_id"_a = -1, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64, "stream"_a = nb::none(),
         R"pbdoc(
         TOF listmode backprojection using the Joseph 3D algorithm.
 
@@ -1125,6 +1276,19 @@ NB_MODULE(parallelproj_core, m)
             copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
+        stream : int or None, optional
+            CUDA stream handle for this call (CUDA builds only, ignored otherwise), e.g.
+            ``torch.cuda.current_stream(dev).cuda_stream`` or
+            ``cupy.cuda.get_current_stream().ptr``. ``None`` (default): the call is
+            synchronous, i.e. results are complete on return (it waits for its own
+            stream, not for the whole GPU). Otherwise the call is queued on that
+            stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
+            operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
+            Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
 
         Notes
         -----
@@ -1138,7 +1302,7 @@ NB_MODULE(parallelproj_core, m)
         "tof_center_offset"_a.noconvert(),
         "tof_bin_index"_a.noconvert(),
         "num_tof_bins"_a,
-        "device_id"_a = -1, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64, "stream"_a = nb::none(),
         R"pbdoc(
         TOF listmode "point" forward projection.
 
@@ -1180,6 +1344,19 @@ NB_MODULE(parallelproj_core, m)
             copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
+        stream : int or None, optional
+            CUDA stream handle for this call (CUDA builds only, ignored otherwise), e.g.
+            ``torch.cuda.current_stream(dev).cuda_stream`` or
+            ``cupy.cuda.get_current_stream().ptr``. ``None`` (default): the call is
+            synchronous, i.e. results are complete on return (it waits for its own
+            stream, not for the whole GPU). Otherwise the call is queued on that
+            stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
+            operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
+            Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
         )pbdoc");
 
   m.def("tof_lm_point_back", &tof_lm_point_back_py,
@@ -1189,7 +1366,7 @@ NB_MODULE(parallelproj_core, m)
         "tof_center_offset"_a.noconvert(),
         "tof_bin_index"_a.noconvert(),
         "num_tof_bins"_a,
-        "device_id"_a = -1, "threads_per_block"_a = 64,
+        "device_id"_a = -1, "threads_per_block"_a = 64, "stream"_a = nb::none(),
         R"pbdoc(
         TOF listmode "point" back projection (adjoint of :func:`tof_lm_point_fwd`).
 
@@ -1232,6 +1409,19 @@ NB_MODULE(parallelproj_core, m)
             copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
         threads_per_block : int, optional
             Number of threads per block for GPU (default: 64).
+        stream : int or None, optional
+            CUDA stream handle for this call (CUDA builds only, ignored otherwise), e.g.
+            ``torch.cuda.current_stream(dev).cuda_stream`` or
+            ``cupy.cuda.get_current_stream().ptr``. ``None`` (default): the call is
+            synchronous, i.e. results are complete on return (it waits for its own
+            stream, not for the whole GPU). Otherwise the call is queued on that
+            stream and, for GPU arrays, returns immediately, like a PyTorch / CuPy
+            operation on that stream; ``0`` is the default stream of PyTorch / CuPy.
+            Calls with CPU arrays always return complete results.
+            CuPy arrays inside CUDA graph capture: pass them as
+            ``x.__dlpack__(stream=handle)`` (the arrays are imported via DLPack without a
+            stream, and CuPy then orders the legacy default stream after its current
+            stream, which is not allowed during capture).
 
         Notes
         -----
