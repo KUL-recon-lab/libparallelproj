@@ -102,8 +102,14 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
   // in LM processing, we don't step through all planes, but only those that are within num_sigmas*local_tof_sigma of the TOF bin of the ray
   // NOTE: that istart and iend can be outside the image boundaries
   // NOTE: we need to loop over all planes between istart and iend even if they are outside the image boundaries, to make sure the TOF weights are normalized correctly
-  istart = static_cast<int>(floorf(((it - sign * num_sigmas * local_tof_sigma / tof_bin_width) - bt) / at));
-  iend = static_cast<int>(ceilf(((it + sign * num_sigmas * local_tof_sigma / tof_bin_width) - bt) / at));
+  // Use the same truncation as the TOF sinogram projectors: bin it gets a
+  // contribution from a plane with TOF bin coordinate it_f iff
+  // floor(it_f - D) <= it <= ceil(it_f + D) with D = num_sigmas * sigma / bin_width,
+  // which is equivalent to |it_f - it| < D + 1. The "+ 1" accounts for the width of
+  // the TOF bin (the effective kernel is the Gaussian integrated over the bin).
+  const float max_tof_bin_diff = num_sigmas * local_tof_sigma / tof_bin_width + 1.0f;
+  istart = static_cast<int>(floorf(((it - sign * max_tof_bin_diff) - bt) / at));
+  iend = static_cast<int>(ceilf(((it + sign * max_tof_bin_diff) - bt) / at));
 
   float it_f;
 
@@ -130,7 +136,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
       i2_f = i0 * a2 + b2;
       it_f = i0 * at + bt;
       // TOF contribution
-      tof_plane_weight = effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width);
+      tof_plane_weight = ((fabsf(it_f - it) < max_tof_bin_diff) ? effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width) : 0.0f);
       tof_plane_weights_sum += tof_plane_weight;
 
       // we only add contribution from valid planes where the ray intersects the image cube
@@ -157,7 +163,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
       i2_f = i1 * a2 + b2;
       it_f = i1 * at + bt;
       // TOF contribution
-      tof_plane_weight = effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width);
+      tof_plane_weight = ((fabsf(it_f - it) < max_tof_bin_diff) ? effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width) : 0.0f);
       tof_plane_weights_sum += tof_plane_weight;
 
       // we only add contribution from valid planes where the ray intersects the image cube
@@ -184,7 +190,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
       i1_f = i2 * a1 + b1;
       it_f = i2 * at + bt;
       // TOF contribution
-      tof_plane_weight = effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width);
+      tof_plane_weight = ((fabsf(it_f - it) < max_tof_bin_diff) ? effective_gaussian_tof_kernel(fabsf(it_f - it) * tof_bin_width, local_tof_sigma, tof_bin_width) : 0.0f);
       tof_plane_weights_sum += tof_plane_weight;
 
       // we only add contribution from valid planes where the ray intersects the image cube
