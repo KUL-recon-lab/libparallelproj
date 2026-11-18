@@ -67,16 +67,21 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(std::size_t i,
                                                            unsigned char is_lor_dependent_tof_sigma,
                                                            unsigned char is_lor_dependent_tof_center_offset)
 {
-  // check whether the sum over TOF of the TOF sinogram to be backprojcted is > 0
-  // if it is 0, we can skip the backprojection of this LOR
+  // skip the backprojection of this LOR if all of its TOF bins are zero.
+  // NOTE: testing the sum over TOF bins is not sufficient, since signed input
+  // (e.g. gradients) can have non-zero bins that sum to zero.
   std::size_t lor_offset = (std::size_t)i * (std::size_t)num_tof_bins;
-  float tof_lor_sum = 0.0f;
+  bool all_tof_bins_zero = true;
   for (short j = 0; j < num_tof_bins; ++j)
   {
-    tof_lor_sum += projection_values[lor_offset + j];
+    if (projection_values[lor_offset + j] != 0.0f)
+    {
+      all_tof_bins_zero = false;
+      break;
+    }
   }
 
-  if (tof_lor_sum == 0)
+  if (all_tof_bins_zero)
   {
     return;
   }
