@@ -22,6 +22,13 @@ Added
 Fixed
 ^^^^^
 
+* **TOF sinogram back projector: LORs whose TOF bins sum to zero are no longer
+  skipped.** The early exit for LORs without data tested the sum over the TOF
+  bins instead of whether all bins are zero. With signed input (e.g. gradients,
+  difference sinograms) a LOR such as ``[..., +1, ..., -1, ...]`` was silently
+  not back projected, breaking the adjointness of the TOF sinogram projector
+  pair. Non-negative data was not affected. (`#33 <https://github.com/KUL-recon-lab/libparallelproj/issues/33>`_)
+
 * **TOF projectors: the TOF center offset now always shifts towards the LOR end
   point.** As documented, a positive ``tof_center_offset`` shifts the central
   TOF bin from the LOR midpoint towards ``lor_end``. The four TOF workers

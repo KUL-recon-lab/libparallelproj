@@ -380,3 +380,60 @@ def test_tof_sino_weight_buffer_clamp(
     innerprod1 = float(xp.sum(p_tof * y))
     innerprod2 = float(xp.sum(img * y_back))
     assert math.isclose(innerprod1, innerprod2, abs_tol=1e-4)
+
+
+def test_tof_sino_back_signed_zero_sum(xp: ModuleType, dev: str):
+    """LORs whose TOF bins are non-zero but sum to zero (signed input, e.g. gradients)
+    must be back projected, and the forward / back projectors must stay adjoint."""
+    num_tofbins = 11
+    tofbin_width = 4.0
+    sigma_tof = 3.0
+    nvox = 41
+    voxsize = (1.0, 1.0, 1.0)
+    img_dim = (nvox, 3, 3)
+    img_origin = (-20.0, -1.0, -1.0)
+
+    xstart = xp.asarray(
+        [[-100.0, 0.0, 0.0], [-100.0, -0.5, 0.3], [100.0, 0.4, -0.2], [-100.0, 0.0, 0.0]],
+        dtype=xp.float32,
+        device=dev,
+    )
+    xend = xp.asarray(
+        [[100.0, 0.0, 0.0], [100.0, 0.5, -0.3], [-100.0, -0.4, 0.2], [100.0, 0.0, 0.0]],
+        dtype=xp.float32,
+        device=dev,
+    )
+
+    # TOF bins of the first three LORs sum to exactly zero, the last LOR is all zero
+    y_rows = [[0.0] * num_tofbins for _ in range(4)]
+    y_rows[0][3], y_rows[0][7] = 1.0, -1.0
+    y_rows[1][2], y_rows[1][5], y_rows[1][6] = 0.5, -0.25, -0.25
+    y_rows[2][4], y_rows[2][6] = -2.0, 2.0
+    y = xp.asarray(y_rows, dtype=xp.float32, device=dev)
+
+    random.seed(1)
+    img = xp.asarray(
+        [[[random.uniform(0.0, 1.0) for _ in range(img_dim[2])] for _ in range(img_dim[1])] for _ in range(img_dim[0])],
+        dtype=xp.float32,
+        device=dev,
+    )
+
+    common = dict(num_sigmas=3.0)
+    sigma = xp.asarray([sigma_tof], dtype=xp.float32, device=dev)
+    offset = xp.asarray([0.0], dtype=xp.float32, device=dev)
+    origin = xp.asarray(img_origin, dtype=xp.float32, device=dev)
+    vsize = xp.asarray(voxsize, dtype=xp.float32, device=dev)
+
+    p = xp.zeros((4, num_tofbins), dtype=xp.float32, device=dev)
+    ppb.joseph3d_tof_sino_fwd(xstart, xend, img, origin, vsize, p, tofbin_width, sigma, offset, num_tofbins, **common)
+
+    y_back = xp.zeros(img_dim, dtype=xp.float32, device=dev)
+    ppb.joseph3d_tof_sino_back(xstart, xend, y_back, origin, vsize, y, tofbin_width, sigma, offset, num_tofbins, **common)
+
+    # the signed LORs must contribute to the back projection
+    assert float(xp.max(xp.abs(y_back))) > 0.1
+
+    innerprod1 = float(xp.sum(p * y))
+    innerprod2 = float(xp.sum(img * y_back))
+    assert abs(innerprod1) > 0.01
+    assert math.isclose(innerprod1, innerprod2, rel_tol=1e-4, abs_tol=1e-5)
