@@ -22,6 +22,19 @@ Added
 Fixed
 ^^^^^
 
+* **TOF listmode projectors: the TOF window now includes the TOF bin width.**
+  The listmode projectors only used image planes within
+  ``num_sigmas * tof_sigma`` of the center of the event's TOF bin, ignoring that
+  the effective TOF kernel (the Gaussian integrated over the bin) extends half a
+  bin further. For TOF kernels that are narrow compared to the bin width, the
+  listmode projectors therefore sampled the image near the bin center instead of
+  integrating over the bin (e.g. 26 % difference to the TOF sinogram projector
+  for sigma = 0.1 mm and 4 mm bins). The listmode projectors now use the same
+  (plane, TOF bin) pairs as the TOF sinogram projectors
+  (``|it_f - it| < num_sigmas * tof_sigma / tof_bin_width + 1``). Results change
+  slightly (~0.1 %) also for wider kernels.
+  (`#37 <https://github.com/KUL-recon-lab/libparallelproj/issues/37>`_)
+
 * **TOF listmode projectors: no more NaN when no image plane has a non-zero TOF
   weight.** The event normalization divided by the sum of the TOF weights of
   the image planes without checking that it is non-zero. With voxels larger

@@ -543,3 +543,61 @@ def test_tof_lm_no_plane_in_tof_window(xp: ModuleType, dev: str, direction: int)
     innerprod1 = float(xp.sum(p * y))
     innerprod2 = float(xp.sum(img * y_back))
     assert math.isclose(innerprod1, innerprod2, rel_tol=1e-5)
+
+
+@pytest.mark.parametrize("sigma_tof", [12.0, 4.0, 1.0, 0.5, 0.1])
+@pytest.mark.parametrize("oblique", [False, True])
+def test_tof_lm_vs_sino_narrow_kernels(xp: ModuleType, dev: str, sigma_tof: float, oblique: bool):
+    """Listmode and sinogram TOF projections of all TOF bins of a LOR must agree,
+    also for TOF kernels that are narrow compared to the TOF bin width
+    (the listmode TOF window has to include the bin width)."""
+    nvox = 41
+    num_tofbins = 21
+    tofbin_width = 4.0
+    num_sigmas = 3.0
+    img_dim = (nvox, 9, 9)
+    vox = (1.0, 1.1, 0.9)
+    img_origin = xp.asarray(
+        [(-(n / 2) + 0.5) * v for n, v in zip(img_dim, vox)], dtype=xp.float32, device=dev
+    )
+    voxel_size = xp.asarray(vox, dtype=xp.float32, device=dev)
+
+    random.seed(7)
+    img = xp.asarray(
+        [[[random.uniform(0.0, 1.0) for _ in range(img_dim[2])] for _ in range(img_dim[1])] for _ in range(img_dim[0])],
+        dtype=xp.float32,
+        device=dev,
+    )
+
+    if oblique:
+        start, end = [-100.0, -1.3, 0.7], [100.0, 1.9, -1.1]
+    else:
+        start, end = [-100.0, 0.2, -0.3], [100.0, 0.2, -0.3]
+    sigma = xp.asarray([sigma_tof], dtype=xp.float32, device=dev)
+    offset = xp.asarray([0.0], dtype=xp.float32, device=dev)
+
+    p_sino = xp.zeros((1, num_tofbins), dtype=xp.float32, device=dev)
+    ppb.joseph3d_tof_sino_fwd(
+        xp.asarray([start], dtype=xp.float32, device=dev),
+        xp.asarray([end], dtype=xp.float32, device=dev),
+        img, img_origin, voxel_size, p_sino, tofbin_width, sigma, offset, num_tofbins, num_sigmas=num_sigmas,
+    )
+
+    p_lm = xp.zeros(num_tofbins, dtype=xp.float32, device=dev)
+    ppb.joseph3d_tof_lm_fwd(
+        xp.asarray([start] * num_tofbins, dtype=xp.float32, device=dev),
+        xp.asarray([end] * num_tofbins, dtype=xp.float32, device=dev),
+        img, img_origin, voxel_size, p_lm, tofbin_width, sigma, offset,
+        xp.asarray(list(range(num_tofbins)), dtype=xp.int16, device=dev), num_tofbins, num_sigmas=num_sigmas,
+    )
+
+    # Both projectors use the same (plane, TOF bin) pairs. A small difference remains
+    # for TOF kernels much narrower than the voxels: listmode normalizes the TOF weights
+    # of an event over the planes, the sinogram projector those of a plane over the TOF
+    # bins, which differ slightly when the kernel is sampled by only a few planes.
+    # (Before the listmode window included the TOF bin width, the difference was >= 1e-3
+    # for all sigmas here and ~1e-1 for sigma = 0.1.)
+    rel_tol = 1e-3 if sigma_tof < min(vox) else 3e-4
+    max_sino = float(xp.max(p_sino))
+    assert max_sino > 0
+    assert float(xp.max(xp.abs(p_lm - p_sino[0, :]))) < rel_tol * max_sino
