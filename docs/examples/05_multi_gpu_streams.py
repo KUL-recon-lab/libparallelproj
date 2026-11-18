@@ -145,8 +145,7 @@ def project_batch(chunks, use_streams):
 #
 # Alternatives are CUDA events (``torch.cuda.Event(enable_timing=True)``) or
 # ``torch.utils.benchmark.Timer``, which take care of synchronization and warm-up.
-
-
+#
 # ``best_time(fn, devices)`` from ``gpu_utils`` does exactly that:
 #
 # .. code-block:: python
