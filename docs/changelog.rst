@@ -22,6 +22,15 @@ Added
 Fixed
 ^^^^^
 
+* **TOF listmode projectors: no more NaN when no image plane has a non-zero TOF
+  weight.** The event normalization divided by the sum of the TOF weights of
+  the image planes without checking that it is non-zero. With voxels larger
+  than the TOF bins and a very narrow TOF kernel, some TOF bins contain no
+  voxel-center plane: the forward projection returned NaN and the back
+  projection added NaN to every voxel along the LOR. Such events now have no
+  contribution (forward: 0, back: skipped), as in the TOF sinogram projectors.
+  (`#35 <https://github.com/KUL-recon-lab/libparallelproj/issues/35>`_)
+
 * **TOF sinogram back projector: LORs whose TOF bins sum to zero are no longer
   skipped.** The early exit for LORs without data tested the sum over the TOF
   bins instead of whether all bins are zero. With signed input (e.g. gradients,

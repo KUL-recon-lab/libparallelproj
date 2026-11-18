@@ -490,3 +490,56 @@ def test_tof_lm_degenerate_params(
         num_sigmas=3.0,
     )
     assert bool(xp.all(y_back == 0.0))
+
+
+@pytest.mark.parametrize("direction", [0, 1, 2])
+def test_tof_lm_no_plane_in_tof_window(xp: ModuleType, dev: str, direction: int):
+    """Voxels much larger than the TOF bins and a very narrow TOF kernel: many TOF
+    bins contain no voxel-center plane, so the sum of the TOF plane weights is 0.
+    Such events must not contribute (forward: 0, back: skipped) instead of
+    producing NaN, and the projectors must stay adjoint."""
+    nvox = 21
+    vsize = 4.0
+    num_tofbins = 41
+    tofbin_width = 1.0
+    sigma_tof = 0.05
+
+    img_dim = tuple(nvox if k == direction else 1 for k in range(3))
+    img_origin = xp.asarray(
+        [-(nvox // 2) * vsize if k == direction else 0.0 for k in range(3)], dtype=xp.float32, device=dev
+    )
+    voxel_size = xp.asarray([vsize, vsize, vsize], dtype=xp.float32, device=dev)
+
+    start = [[-100.0 if k == direction else 0.0 for k in range(3)] for _ in range(num_tofbins)]
+    end = [[100.0 if k == direction else 0.0 for k in range(3)] for _ in range(num_tofbins)]
+    xstart = xp.asarray(start, dtype=xp.float32, device=dev)
+    xend = xp.asarray(end, dtype=xp.float32, device=dev)
+    tofbin = xp.asarray(list(range(num_tofbins)), dtype=xp.int16, device=dev)
+    sigma = xp.asarray([sigma_tof], dtype=xp.float32, device=dev)
+    offset = xp.asarray([0.0], dtype=xp.float32, device=dev)
+
+    random.seed(3)
+    img = xp.reshape(
+        xp.asarray([random.uniform(0.5, 1.5) for _ in range(nvox)], dtype=xp.float32, device=dev), img_dim
+    )
+    y = xp.asarray([random.uniform(0.5, 1.5) for _ in range(num_tofbins)], dtype=xp.float32, device=dev)
+
+    p = xp.zeros(num_tofbins, dtype=xp.float32, device=dev)
+    ppb.joseph3d_tof_lm_fwd(
+        xstart, xend, img, img_origin, voxel_size, p, tofbin_width, sigma, offset, tofbin, num_tofbins, num_sigmas=3.0
+    )
+
+    y_back = xp.zeros(img_dim, dtype=xp.float32, device=dev)
+    ppb.joseph3d_tof_lm_back(
+        xstart, xend, y_back, img_origin, voxel_size, y, tofbin_width, sigma, offset, tofbin, num_tofbins, num_sigmas=3.0
+    )
+
+    assert bool(xp.all(xp.isfinite(p)))
+    assert bool(xp.all(xp.isfinite(y_back)))
+    # some TOF bins contain a voxel-center plane and do contribute, others do not
+    assert int(xp.sum(xp.astype(p > 0, xp.int32))) > 0
+    assert int(xp.sum(xp.astype(p == 0, xp.int32))) > 0
+
+    innerprod1 = float(xp.sum(p * y))
+    innerprod2 = float(xp.sum(img * y_back))
+    assert math.isclose(innerprod1, innerprod2, rel_tol=1e-5)
