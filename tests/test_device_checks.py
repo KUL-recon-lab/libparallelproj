@@ -317,6 +317,17 @@ def _to_gpu(x, device_id):
         return cupy.asarray(x)
 
 
+def _current_cuda_device():
+    """current CUDA device of the process (as seen by the CUDA runtime)"""
+    if _gpu_xp() == "torch":
+        import torch
+
+        return torch.cuda.current_device()
+    import cupy
+
+    return cupy.cuda.runtime.getDevice()
+
+
 def _to_numpy(x):
     if _gpu_xp() == "torch":
         return x.cpu().numpy()
@@ -362,7 +373,9 @@ def test_gpu_arrays_with_host_parameter_arrays():
 
 @pytest.mark.skipif(not cuda_build or _num_cuda_devices() < 2, reason="needs a CUDA build and >= 2 CUDA devices")
 def test_arrays_on_second_gpu():
-    """Arrays on GPU 1 with the default device_id must be processed on GPU 1."""
+    """Arrays on GPU 1 with the default device_id must be processed on GPU 1, and the
+    projectors must not change the caller's current CUDA device."""
+    current_device = _current_cuda_device()
     img, org, vs, xs, xe, tb = _random_problem(2)
     to1 = lambda x: _to_gpu(x, 1)
     sig, off = to1(np.array([3.0], np.float32)), to1(np.array([0.5], np.float32))
@@ -376,3 +389,20 @@ def test_arrays_on_second_gpu():
     _fwd_and_back(xs, xe, img, org, vs, tb, sig, off, to1, img.shape, device_id=1)
     with pytest.raises(ValueError):
         _fwd_and_back(xs, xe, img, org, vs, tb, sig, off, to1, img.shape, device_id=0)
+
+    assert _current_cuda_device() == current_device
+
+
+@pytest.mark.skipif(not cuda_build or _num_cuda_devices() < 2, reason="needs a CUDA build and >= 2 CUDA devices")
+def test_host_arrays_on_other_device_id():
+    """Host arrays with an explicit device_id that is not the current device: same result,
+    and the caller's current CUDA device is unchanged afterwards."""
+    current_device = _current_cuda_device()
+    other_device = (current_device + 1) % _num_cuda_devices()
+    img, org, vs, xs, xe, tb = _random_problem(3)
+    sig, off = np.array([3.0], np.float32), np.array([0.5], np.float32)
+    p_ref, b_ref = _fwd_and_back(xs, xe, img, org, vs, tb, sig, off, lambda x: x, img.shape)
+    p, b = _fwd_and_back(xs, xe, img, org, vs, tb, sig, off, lambda x: x, img.shape, device_id=other_device)
+    assert np.allclose(p, p_ref, rtol=1e-4, atol=1e-5)
+    assert np.allclose(b, b_ref, rtol=1e-4, atol=1e-5)
+    assert _current_cuda_device() == current_device

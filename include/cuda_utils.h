@@ -73,6 +73,52 @@ struct CudaDevicePtr {
 };
 
 // Checked device-to-host copy. Throws std::runtime_error on failure.
+// Makes device_id the current CUDA device for the lifetime of the guard and restores the
+// caller's current device afterwards (also if an exception is thrown). A library call must
+// not change the current device of the caller (e.g. CuPy / PyTorch create new arrays on it).
+// device_id < 0: keep the current device.
+// Declare the guard before any CudaDevicePtr, so that buffers are freed while device_id is
+// still current (destruction in reverse order of declaration).
+class CudaDeviceGuard
+{
+public:
+    explicit CudaDeviceGuard(int device_id)
+    {
+        if (device_id < 0)
+            return;
+
+        cudaError_t err = cudaGetDevice(&previous_device_);
+        if (err != cudaSuccess)
+        {
+            cudaGetLastError(); // clear last-error state before throwing
+            throw std::runtime_error(std::string("cudaGetDevice failed: ") + cudaGetErrorString(err));
+        }
+        if (previous_device_ == device_id)
+            return;
+
+        err = cudaSetDevice(device_id);
+        if (err != cudaSuccess)
+        {
+            cudaGetLastError(); // clear last-error state before throwing
+            throw std::runtime_error(std::string("cudaSetDevice failed: ") + cudaGetErrorString(err));
+        }
+        restore_ = true;
+    }
+
+    ~CudaDeviceGuard()
+    {
+        if (restore_ && cudaSetDevice(previous_device_) != cudaSuccess)
+            cudaGetLastError(); // never throw from a destructor
+    }
+
+    CudaDeviceGuard(const CudaDeviceGuard &) = delete;
+    CudaDeviceGuard &operator=(const CudaDeviceGuard &) = delete;
+
+private:
+    int previous_device_ = 0;
+    bool restore_ = false;
+};
+
 inline void cuda_memcpy_d2h(void* dst, const void* src, std::size_t size)
 {
     cudaError_t err = cudaMemcpy(dst, src, size, cudaMemcpyDeviceToHost);

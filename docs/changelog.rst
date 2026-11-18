@@ -39,6 +39,9 @@ Fixed
   kernel on the wrong GPU. ``tof_sigma`` and ``tof_center_offset`` were not
   part of the device checks; they can now be CPU arrays or arrays on the GPU of
   the other input arrays. All projector bindings use one shared check.
+  The CUDA projectors now also restore the caller's current CUDA device after
+  switching to ``device_id`` (previously the current device of the process was
+  left changed, so e.g. new CuPy arrays were created on that device).
   (`#39 <https://github.com/KUL-recon-lab/libparallelproj/issues/39>`_)
 
 * **TOF listmode projectors: the TOF window now includes the TOF bin width.**
