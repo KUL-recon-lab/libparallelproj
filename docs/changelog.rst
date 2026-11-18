@@ -1,8 +1,23 @@
 Changelog
 =========
 
-v2.0.8 (unreleased)
+v2.1.0 (unreleased)
 -------------------
+
+Added
+^^^^^
+
+* **TOF listmode "point" projector:** new ``tof_lm_point_fwd`` /
+  ``tof_lm_point_back`` (C API and Python bindings, CPU/OpenMP and CUDA).
+  Every event is reduced to a single point, the center of its TOF bin (same
+  bin placement and center-offset convention as the TOF listmode Joseph
+  projectors). The forward projector trilinearly interpolates the image at
+  that point, the back projector is its exact adjoint (trilinear splatting
+  with atomic adds). Back projecting events with value 1 gives a TOF
+  "histo-image". No ray tracing and no TOF kernel are involved, which makes
+  this pair much faster than ``joseph3d_tof_lm_*`` -- intended for quick
+  looks, motion detection on short frames, inputs for neural networks, and as
+  an approximate TOF projector in iterative methods.
 
 Fixed
 ^^^^^

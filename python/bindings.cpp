@@ -1,6 +1,8 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 #include "parallelproj.h"
+#include <cmath>
+#include <stdexcept>
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -663,6 +665,156 @@ void joseph3d_tof_lm_back_py(ConstFloatNDArray event_start,
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
+// Shared input validation for tof_lm_point_fwd / tof_lm_point_back.
+// Returns whether the TOF center offset is event dependent.
+template <typename ImageArray, typename ValueArray>
+static bool check_tof_lm_point_args(const ConstFloatNDArray &event_start,
+                                    const ConstFloatNDArray &event_end,
+                                    const ImageArray &image,
+                                    const ConstFloat1D3ELArray &image_origin,
+                                    const ConstFloat1D3ELArray &voxel_size,
+                                    const ValueArray &projection_values,
+                                    float tof_bin_width,
+                                    const ConstFloatNDArray &tof_center_offset,
+                                    const ConstShortNDArray &tof_bin_index,
+                                    short num_tof_bins)
+{
+  if (event_start.ndim() != 2 || event_end.ndim() != 2)
+    throw std::invalid_argument("event_start and event_end must have 2 dimensions");
+  if (event_start.shape(1) != 3 || event_end.shape(1) != 3)
+    throw std::invalid_argument("event_start and event_end must have shape (..., 3)");
+  if (event_start.shape(0) != event_end.shape(0))
+    throw std::invalid_argument("event_start and event_end must have the same number of events (shape[0])");
+
+  std::size_t num_events = event_start.shape(0);
+
+  if (projection_values.ndim() != 1)
+    throw std::invalid_argument("projection_values.ndim must be 1");
+  if (projection_values.shape(0) != num_events)
+    throw std::invalid_argument("projection_values.shape[0] must match event_start.shape[0]");
+
+  if (tof_bin_index.ndim() != 1)
+    throw std::invalid_argument("tof_bin_index.ndim must be 1");
+  if (tof_bin_index.shape(0) != num_events)
+    throw std::invalid_argument("tof_bin_index.shape[0] must match event_start.shape[0]");
+
+  if (!(tof_bin_width > 0.0f) || !std::isfinite(tof_bin_width))
+    throw std::invalid_argument("tof_bin_width must be finite and > 0");
+  if (num_tof_bins < 1)
+    throw std::invalid_argument("num_tof_bins must be >= 1");
+
+  if (event_start.device_type() != event_end.device_type() ||
+      event_start.device_type() != image.device_type() ||
+      event_start.device_type() != image_origin.device_type() ||
+      event_start.device_type() != voxel_size.device_type() ||
+      event_start.device_type() != projection_values.device_type() ||
+      event_start.device_type() != tof_center_offset.device_type() ||
+      event_start.device_type() != tof_bin_index.device_type())
+  {
+    throw std::invalid_argument("All input arrays must be on the same device type");
+  }
+
+  if (event_start.device_id() != event_end.device_id() ||
+      event_start.device_id() != image.device_id() ||
+      event_start.device_id() != image_origin.device_id() ||
+      event_start.device_id() != voxel_size.device_id() ||
+      event_start.device_id() != projection_values.device_id() ||
+      event_start.device_id() != tof_center_offset.device_id() ||
+      event_start.device_id() != tof_bin_index.device_id())
+  {
+    throw std::invalid_argument("All input arrays must be on the same device ID");
+  }
+
+  // the shape of tof_center_offset must be either [1,] or [num_events,]
+  if (tof_center_offset.ndim() == 1 && tof_center_offset.shape(0) == 1)
+    return false;
+  if (tof_center_offset.ndim() == 1 && tof_center_offset.shape(0) == num_events)
+    return true;
+  throw std::invalid_argument("shape of tof_center_offset must be [1,] or [num_events,]");
+}
+
+// Wrapper for tof_lm_point_fwd
+void tof_lm_point_fwd_py(ConstFloatNDArray event_start,
+                         ConstFloatNDArray event_end,
+                         ConstFloat3DArray image,
+                         ConstFloat1D3ELArray image_origin,
+                         ConstFloat1D3ELArray voxel_size,
+                         FloatNDArray projection_values,
+                         float tof_bin_width,
+                         ConstFloatNDArray tof_center_offset,
+                         ConstShortNDArray tof_bin_index,
+                         short num_tof_bins,
+                         int device_id = 0,
+                         int threads_per_block = 64)
+{
+  bool is_lor_dependent_tof_center_offset = check_tof_lm_point_args(
+      event_start, event_end, image, image_origin, voxel_size, projection_values,
+      tof_bin_width, tof_center_offset, tof_bin_index, num_tof_bins);
+
+  int image_dim[3] = {static_cast<int>(image.shape(0)),
+                      static_cast<int>(image.shape(1)),
+                      static_cast<int>(image.shape(2))};
+
+  tof_lm_point_fwd(event_start.data(),
+                   event_end.data(),
+                   image.data(),
+                   image_origin.data(),
+                   voxel_size.data(),
+                   projection_values.data(),
+                   event_start.shape(0),
+                   image_dim,
+                   tof_bin_width,
+                   tof_center_offset.data(),
+                   tof_bin_index.data(),
+                   num_tof_bins,
+                   static_cast<unsigned char>(is_lor_dependent_tof_center_offset ? 1 : 0),
+                   device_id,
+                   threads_per_block);
+}
+
+// Wrapper for tof_lm_point_back
+void tof_lm_point_back_py(ConstFloatNDArray event_start,
+                          ConstFloatNDArray event_end,
+                          Float3DArray image,
+                          ConstFloat1D3ELArray image_origin,
+                          ConstFloat1D3ELArray voxel_size,
+                          ConstFloatNDArray projection_values,
+                          float tof_bin_width,
+                          ConstFloatNDArray tof_center_offset,
+                          ConstShortNDArray tof_bin_index,
+                          short num_tof_bins,
+                          int device_id = 0,
+                          int threads_per_block = 64)
+{
+  bool is_lor_dependent_tof_center_offset = check_tof_lm_point_args(
+      event_start, event_end, image, image_origin, voxel_size, projection_values,
+      tof_bin_width, tof_center_offset, tof_bin_index, num_tof_bins);
+
+  int image_dim[3] = {static_cast<int>(image.shape(0)),
+                      static_cast<int>(image.shape(1)),
+                      static_cast<int>(image.shape(2))};
+
+  tof_lm_point_back(event_start.data(),
+                    event_end.data(),
+                    image.data(),
+                    image_origin.data(),
+                    voxel_size.data(),
+                    projection_values.data(),
+                    event_start.shape(0),
+                    image_dim,
+                    tof_bin_width,
+                    tof_center_offset.data(),
+                    tof_bin_index.data(),
+                    num_tof_bins,
+                    static_cast<unsigned char>(is_lor_dependent_tof_center_offset ? 1 : 0),
+                    device_id,
+                    threads_per_block);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
 NB_MODULE(parallelproj_core, m)
 {
   m.doc() = R"pbdoc(
@@ -929,6 +1081,109 @@ NB_MODULE(parallelproj_core, m)
             Number of TOF bins.
         num_sigmas : float, optional
             Number of sigmas for TOF kernel calculation (default: 3.0).
+        device_id : int, optional
+            Device ID for computation (default: 0).
+        threads_per_block : int, optional
+            Number of threads per block for GPU (default: 64).
+
+        Notes
+        -----
+        Values are accumulated into the existing image array (not overwritten).
+        )pbdoc");
+
+  m.def("tof_lm_point_fwd", &tof_lm_point_fwd_py,
+        "event_start"_a.noconvert(), "event_end"_a.noconvert(), "image"_a.noconvert(),
+        "image_origin"_a.noconvert(), "voxel_size"_a.noconvert(), "projection_values"_a.noconvert(),
+        "tof_bin_width"_a,
+        "tof_center_offset"_a.noconvert(),
+        "tof_bin_index"_a.noconvert(),
+        "num_tof_bins"_a,
+        "device_id"_a = 0, "threads_per_block"_a = 64,
+        R"pbdoc(
+        TOF listmode "point" forward projection.
+
+        Fast, approximate TOF listmode projector: every event is reduced to
+        a single point, the center of its TOF bin, and the image is
+        trilinearly interpolated there (zero outside of the image).
+
+        TOF bin ``i`` of an event is centered at a distance
+        ``(i - (num_tof_bins - 1) / 2) * tof_bin_width + tof_center_offset``
+        from the LOR midpoint, measured along the LOR towards ``event_end``
+        (same bin placement as :func:`joseph3d_tof_lm_fwd`).
+
+        Parameters
+        ----------
+        event_start : ndarray
+          Array of shape (num_events, 3) with coordinates of event LOR start points.
+        event_end : ndarray
+          Array of shape (num_events, 3) with coordinates of event LOR end points.
+        image : ndarray
+            3D image array of shape (n0, n1, n2) to be projected.
+        image_origin : ndarray
+            Array of shape (3,) with coordinates of [0,0,0] voxel center.
+        voxel_size : ndarray
+            Array of shape (3,) with voxel sizes.
+        projection_values : ndarray
+            Output array of shape (num_events,). Overwritten with the projections.
+        tof_bin_width : float
+            Width of TOF bins in spatial units (finite, > 0).
+        tof_center_offset : ndarray
+            Offset of the central TOF bin from the LOR midpoint towards the LOR
+            end point, in spatial units. Shape (1,) or (num_events,).
+        tof_bin_index : ndarray
+            TOF bin indices for each event (int16), shape (num_events,).
+        num_tof_bins : int
+            Number of TOF bins.
+        device_id : int, optional
+            Device ID for computation (default: 0).
+        threads_per_block : int, optional
+            Number of threads per block for GPU (default: 64).
+        )pbdoc");
+
+  m.def("tof_lm_point_back", &tof_lm_point_back_py,
+        "event_start"_a.noconvert(), "event_end"_a.noconvert(), "image"_a.noconvert(),
+        "image_origin"_a.noconvert(), "voxel_size"_a.noconvert(), "projection_values"_a.noconvert(),
+        "tof_bin_width"_a,
+        "tof_center_offset"_a.noconvert(),
+        "tof_bin_index"_a.noconvert(),
+        "num_tof_bins"_a,
+        "device_id"_a = 0, "threads_per_block"_a = 64,
+        R"pbdoc(
+        TOF listmode "point" back projection (adjoint of :func:`tof_lm_point_fwd`).
+
+        Adds the value of every event, distributed with trilinear
+        interpolation weights, to the (up to 8) voxels around the center of
+        its TOF bin. Back projecting events with value 1 creates a TOF
+        "histo-image".
+
+        TOF bin ``i`` of an event is centered at a distance
+        ``(i - (num_tof_bins - 1) / 2) * tof_bin_width + tof_center_offset``
+        from the LOR midpoint, measured along the LOR towards ``event_end``
+        (same bin placement as :func:`joseph3d_tof_lm_fwd`).
+
+        Parameters
+        ----------
+        event_start : ndarray
+          Array of shape (num_events, 3) with coordinates of event LOR start points.
+        event_end : ndarray
+          Array of shape (num_events, 3) with coordinates of event LOR end points.
+        image : ndarray
+            3D image array of shape (n0, n1, n2) to accumulate the back projection into.
+        image_origin : ndarray
+            Array of shape (3,) with coordinates of [0,0,0] voxel center.
+        voxel_size : ndarray
+            Array of shape (3,) with voxel sizes.
+        projection_values : ndarray
+            Event values to be back projected, shape (num_events,).
+        tof_bin_width : float
+            Width of TOF bins in spatial units (finite, > 0).
+        tof_center_offset : ndarray
+            Offset of the central TOF bin from the LOR midpoint towards the LOR
+            end point, in spatial units. Shape (1,) or (num_events,).
+        tof_bin_index : ndarray
+            TOF bin indices for each event (int16), shape (num_events,).
+        num_tof_bins : int
+            Number of TOF bins.
         device_id : int, optional
             Device ID for computation (default: 0).
         threads_per_block : int, optional
