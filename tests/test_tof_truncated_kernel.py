@@ -36,6 +36,13 @@ CASES = {
     "lor_dependent_sigma": (2.0, (1.0, 13.0), 70),
     # window wider than 64 bins: truncated to 64 bins and renormalized
     "wide_window": (0.4, 5.0, 300),
+    # window of 64 or 65 bins (2 m = 63.2): truncated for some planes only
+    "partial_truncation": (0.4, 4.2133, 300),
+    # very narrow kernel and TOF bins: the window jumps past the whole accumulator
+    # between two planes (>= 7.5 bins per plane, accumulator of 8 bins)
+    "jumps": (0.2, 0.08, 500),
+    # few TOF bins: the windows of many planes lie completely outside the TOF bins
+    "few_bins": (6.0, 3.0, 5),
 }
 
 

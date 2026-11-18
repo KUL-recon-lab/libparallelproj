@@ -174,8 +174,9 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
       base = it_min - (((it_min - phase) % V) + V) % V;
       first = base;
     }
-    if (it_min < base) // only possible if the window is truncated for some planes only
-      it_min = base;
+    // defensive: the window start never decreases along the traversal (also not where
+    // the 64-bin truncation applies to some planes only); never move the accumulator back
+    it_min = (it_min < base) ? base : it_min;
     if (it_min - base >= W)
     {
       // the window jumped past the whole accumulator: write it, zeros up to the new start
