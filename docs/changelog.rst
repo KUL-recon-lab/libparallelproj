@@ -37,6 +37,29 @@ Breaking changes
 Added
 ^^^^^
 
+* **TOF projectors with a tabulated (non-Gaussian, possibly asymmetric) TOF kernel:**
+  ``joseph3d_tof_sino_fwd_tab``, ``joseph3d_tof_sino_back_tab``,
+  ``joseph3d_tof_lm_fwd_tab`` and ``joseph3d_tof_lm_back_tab`` (C API and Python). The
+  kernel is given as a table of its cumulative distribution F(u) on a uniform grid from
+  ``u_min`` to ``u_max`` in spatial units (u positive towards the LOR end point; from a
+  measured arrival time difference dt = t(start) - t(end): u = c dt / 2), and can be
+  stretched per LOR / event with ``tof_kernel_scale``. The TOF bin width is not part of
+  the table (the projectors integrate the kernel over each TOF bin). Speed: on CPUs
+  ~1.6x faster than the Gaussian kernel (table lookup instead of erf), on GPUs about the
+  same. See the theory section and the new gallery example.
+  (`#46 <https://github.com/KUL-recon-lab/libparallelproj/issues/46>`_)
+
+* **TOF window limit of 64 bins only applies with more than 64 TOF bins; Python
+  warning.** The TOF window of an image plane now contains only existing TOF bins, so it
+  has at most ``min(floor(support) + 2, num_tof_bins)`` bins: with at most 64 TOF bins,
+  all TOF projections are exact, however wide the kernel (previously, kernels wider than
+  ~62 TOF bins were always truncated). The accumulator size of the TOF sinogram
+  projectors is chosen from the same bound (smaller for few TOF bins). If a call needs
+  windows of more than 64 bins, the Python functions issue a ``UserWarning`` (checked if
+  sigma / the kernel scale are CPU arrays). New: ``PARALLELPROJ_TOF_MAX_WINDOW_BINS``
+  (C) and ``parallelproj_core.tof_max_window_bins`` (Python).
+  (`#46 <https://github.com/KUL-recon-lab/libparallelproj/issues/46>`_)
+
 * **CUDA stream support.** All projector functions take an optional CUDA stream
   (C API: ``void *stream = nullptr``; Python: ``stream=None``, an integer handle
   such as ``torch.cuda.current_stream(dev).cuda_stream`` or
@@ -120,6 +143,13 @@ Changed
   on GPUs, a sinogram order with the planes fastest together with the axial direction
   as the last image axis is up to ~20x faster than unfavorable combinations.
   (`#44 <https://github.com/KUL-recon-lab/libparallelproj/issues/44>`_)
+
+* **TOF projectors: one code base for all kernels.** The four TOF workers (sinogram /
+  listmode, forward / back) are templates in the TOF kernel type and share the LOR geometry
+  (``src/joseph3d_lor_geometry.h``); the listmode workers were rewritten on it. TOF
+  sinogram and listmode projectors with degenerate TOF parameters (e.g. sigma <= 0) now
+  give zero TOF contributions (previously NaN for the sinogram projectors).
+  (`#46 <https://github.com/KUL-recon-lab/libparallelproj/issues/46>`_)
 
 * **Truncated TOF kernel in all TOF projectors.** The weight of a TOF bin is the
   integral of the Gaussian TOF kernel truncated at ``num_sigmas`` sigma over the

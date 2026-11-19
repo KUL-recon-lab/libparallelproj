@@ -236,7 +236,125 @@ Implementation-wise, this means that
 
   1. The choice of :math:`n_\sigma` is a trade-off between accuracy and speed. A smaller :math:`n_\sigma` leads to faster computations but changes the shape of the kernel (the truncated tails are missing). The default value :math:`n_\sigma=3` (99.7 % of the Gaussian mass) is typically sufficient for most applications.
 
-  2. In sinogram mode, TOF windows of more than 64 TOF bins (:math:`2 n_\sigma \sigma_\text{TOF} / \Delta \gtrsim 62`) are additionally truncated to the 64 bins centered on the ray sample and renormalized. Use wider TOF bins (or a smaller :math:`n_\sigma`) in that case.
+  2. The 64-bin limit, see :ref:`tof-window-limit` below.
+
+
+.. _tof-window-limit:
+
+The 64-bin limit of the TOF window
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For every ray sample :math:`s_k`, the projectors compute the weights of the TOF bins that
+overlap the kernel support (the "TOF window"). The TOF sinogram projectors keep these bins in
+a small array of fixed size (registers on the GPU), with room for at most 64 TOF bins
+(``parallelproj_core.tof_max_window_bins``, ``PARALLELPROJ_TOF_MAX_WINDOW_BINS`` in C).
+The listmode projectors use exactly the same windows, so that a listmode event always gets
+the value of its sinogram bin.
+
+A window only contains TOF bins that exist, so with a support of :math:`w_\text{s}` TOF bins
+(Gaussian: :math:`w_\text{s} = 2 n_\sigma \sigma_\text{TOF} / \Delta`) and
+:math:`N_\text{TOF}` TOF bins, a window has at most
+
+.. math::
+
+   \min\left(\lfloor w_\text{s} \rfloor + 2, \; N_\text{TOF}\right)
+
+bins (:math:`\lfloor w_\text{s} \rfloor + 2`: a support of :math:`w_\text{s}` bins can
+partially overlap two more bins at its ends). Consequences:
+
+- **With at most 64 TOF bins, the projections are always exact**, however wide the kernel
+  is. (TOF bins are usually chosen as wide as possible while still sampling the kernel well,
+  and e.g. a 70 cm field of view with 76 ps TOF bins already has about 61 bins.)
+- With more than 64 TOF bins and :math:`w_\text{s} \geq 63`, some windows would need more
+  than 64 bins. They are truncated to the 64 bins around the center of the support and the
+  weights are renormalized over these 64 bins: the tails of the kernel are cut off (the TOF
+  profile of a point source shows a kink), so the projection is an approximation. The
+  projection stays exactly adjoint and the TOF weights of every ray sample still sum to 1.
+- The Python interface issues a ``UserWarning`` in this case, with the parameters to change
+  (wider TOF bins, a smaller :math:`n_\sigma`, or a shorter tabulated kernel). The check
+  needs the values of :math:`\sigma_\text{TOF}` (or the kernel scale) and is therefore only
+  done if they are CPU arrays: reading GPU arrays would force the CPU to wait for the GPU,
+  which the projectors avoid on purpose. For GPU arrays, check
+  :math:`\min(\lfloor w_\text{s} \rfloor + 2, N_\text{TOF}) \leq 64` yourself
+  (e.g. once with a CPU copy of :math:`\sigma_\text{TOF}`).
+
+Why 64? The array must fit into the registers of a GPU thread; larger arrays are much slower.
+For the double-Gaussian TOF kernels of BGO detectors with Cherenkov light (a fast and a slow
+component, FWHM of about 200 ps and 700-900 ps), sampled with TOF bins of the size of the
+fast component's sigma, the support is about 20-46 TOF bins, well within the limit.
+
+
+Tabulated (non-Gaussian) TOF kernels
+------------------------------------
+
+The projectors with the suffix ``_tab`` (e.g. ``joseph3d_tof_sino_fwd_tab``) use an arbitrary,
+possibly asymmetric TOF kernel instead of the Gaussian, e.g. a kernel measured for a detector
+pair. The kernel is given as a table of its **cumulative distribution**
+
+.. math::
+
+   F(u) = \int_{-\infty}^{u} f(u') \, du' ,
+
+where :math:`f(u)` is the probability density that the TOF measurement places an annihilation
+at distance :math:`u` from its true position on the LOR. :math:`u` is measured **in spatial
+units** (the units of ``lor_start`` and ``lor_end``, e.g. mm) and is **positive towards the end
+point of the LOR**.
+
+The table holds :math:`F` at :math:`n` uniformly spaced points from :math:`u_\text{min}` to
+:math:`u_\text{max}`:
+
+.. math::
+
+   \texttt{tof_kernel_cdf}[k] = F\!\left(u_\text{min} + k \, \frac{u_\text{max} - u_\text{min}}{n - 1}\right), \quad k = 0, \dots, n - 1 ,
+
+and :math:`F` is interpolated linearly between the table points (which corresponds to a
+piecewise constant kernel :math:`f`). :math:`[u_\text{min}, u_\text{max}]` is the support of the
+kernel: :math:`F` is held constant outside. :math:`F` must not decrease; it does not need to
+start at 0 or end at 1, since the weights are normalized by :math:`F(u_\text{max}) - F(u_\text{min})`.
+
+**From arrival time differences to u.** Timing measurements give the difference of the arrival
+times of the two photons. With :math:`\Delta t = t_\text{start} - t_\text{end}` (arrival time at
+the detector at ``lor_start`` minus arrival time at the detector at ``lor_end``),
+
+.. math::
+
+   u = \frac{c \, \Delta t}{2} \approx 0.1499 \, \frac{\text{mm}}{\text{ps}} \, \Delta t .
+
+An annihilation closer to the end detector reaches it earlier, so :math:`\Delta t > 0` and
+:math:`u > 0`. If a LOR is stored with start and end swapped, the same detector pair needs the
+mirrored kernel :math:`F'(u) = 1 - F(-u)` (for a normalized :math:`F`), on the grid from
+:math:`-u_\text{max}` to :math:`-u_\text{min}`.
+
+**From a measured histogram to the table.** For a histogram of :math:`\Delta t` (e.g. of a point
+source at a known position), the cumulative sum of the counts is :math:`F` at the histogram bin
+edges (starting with 0 at the first edge); converting the edges to :math:`u` gives
+:math:`u_\text{min}`, :math:`u_\text{max}` and the table directly. Linear interpolation of this
+table is exactly the histogram as density. See the gallery example
+"TOF Projections with a Tabulated (Non-Gaussian) TOF Kernel".
+
+**Bin weights.** As for the Gaussian, the weight of a TOF bin with edges :math:`e_k, e_{k+1}`
+(along the LOR) for a ray sample at position :math:`p` is the integral of the kernel over the bin:
+
+.. math::
+
+   w_k = \frac{F_s(e_{k+1} - p - o) - F_s(e_k - p - o)}{F(u_\text{max}) - F(u_\text{min})}, \qquad F_s(u) = F(u / s),
+
+where :math:`o` is the TOF center offset of the LOR. The **TOF bin width is not part of the
+table** - the projector integrates over each bin - so the same table works for every TOF binning.
+
+**Kernel scale.** ``tof_kernel_scale`` :math:`s > 0` (one value, or one per LOR / event)
+stretches the kernel around :math:`u = 0` (the true position): :math:`s = 1` uses the kernel as
+tabulated, :math:`s = 1.5` the same shape 50 % wider, with support
+:math:`[s \, u_\text{min}, s \, u_\text{max}]`. The TOF center offset is a separate shift and is
+not scaled. (For an asymmetric kernel whose mean is not 0, the mean moves with :math:`s`.)
+
+.. important::
+
+  The 64-bin limit (:ref:`tof-window-limit`) also applies to tabulated kernels, with the
+  support :math:`w_\text{s} = s \, (u_\text{max} - u_\text{min}) / \Delta` TOF bins. With at
+  most 64 TOF bins the projection is always exact; otherwise the support must be shorter than
+  63 TOF bin widths (a ``UserWarning`` is issued if it is not). Trim empty tails of a
+  measured kernel from the table.
 
 
 Math symbols vs C API variable names
@@ -252,3 +370,6 @@ Math symbols vs C API variable names
    ":math:`\Delta`", "TOF bin width", "``tof_bin_width``"
    ":math:`\sigma_{\mathrm{TOF}}`", "TOF standard deviation", "``tof_sigma``"
    ":math:`n_\sigma`", "Truncation width in units of :math:`\sigma_{\mathrm{TOF}}`", "``num_sigmas``"
+   ":math:`F(u)`", "Cumulative TOF kernel (table, ``_tab`` projectors)", "``tof_kernel_cdf``"
+   ":math:`u_\text{min}, u_\text{max}`", "Support of the tabulated kernel (spatial units)", "``tof_kernel_u_min``, ``tof_kernel_u_max``"
+   ":math:`s`", "Scale of the tabulated kernel", "``tof_kernel_scale``"

@@ -56,18 +56,26 @@
 //
 // 4. Implementation details
 // --------------------------
-//  - The code works with cdf2(u) = 2 F(u) - 1 = erf(...) to save operations; the factor
-//    0.5 is part of the normalization constant inv_norm = 0.5 / erf(m * scale).
+//  - For the Gaussian, the code works with cdf(u) = 2 F(u) - 1 = erf(...) to save
+//    operations; the factor 0.5 is part of the normalization constant
+//    inv_norm = 0.5 / erf(m * scale).
 //  - Neighbouring bins share an edge (the upper edge of bin t is the lower edge of bin
 //    t + 1), so a window of n bins needs n + 1 evaluations of F, not 2 n.
-//  - Windows wider than TOF_MAX_WINDOW_BINS (64) bins are truncated further (64 bins
-//    centered on it_f) and normalized over these 64 bins. This only happens for very
-//    narrow TOF bins (2 num_sigmas sigma > ~62 bin widths).
+//  - A window only contains TOF bins that exist (0 .. num_tof_bins - 1), so it never has
+//    more bins than the sinogram. Windows that still have more than TOF_MAX_WINDOW_BINS
+//    (64) bins are truncated further (64 bins around the center of the support) and
+//    normalized over these 64 bins. This can only happen if BOTH the support of the
+//    kernel is wider than ~62 TOF bins (Gaussian: 2 num_sigmas sigma > ~62 bin widths)
+//    AND the sinogram has more than 64 TOF bins. With at most 64 TOF bins the projection
+//    is always exact (no truncation), whatever the width of the kernel. The Python
+//    interface warns if truncation can happen.
 //  - The sinogram projectors keep the TOF bins of the current window in registers (see
 //    joseph3d_tof_sino_fwd_worker.h); the second half of this file decides how many
 //    ("accumulator size") and whether they are written in groups of 4.
-//  - A future tabulated (non-Gaussian) kernel (issue #46) only needs to provide another
-//    struct with the same members as TOFKernelGauss (half_width_bins, cdf2, inv_norm).
+//  - Two kernel types implement this model with the same interface (see "Kernel
+//    interface" below): TOFKernelGauss (Gaussian, erf) and TOFKernelTable (an arbitrary,
+//    possibly asymmetric kernel given as a table of F, issue #46). The projectors are
+//    templates in the kernel type, so all code below works for both.
 #include "cuda_compat.h"
 #include "utils.h"
 
@@ -78,40 +86,183 @@
 #define TOF_HOST_DEVICE
 #endif
 
-// maximum number of TOF bins a TOF window can have; wider windows are truncated to
-// this many bins centered on the TOF position and renormalized
+// maximum number of TOF bins a TOF window can have; wider windows (only possible with
+// more than 64 TOF bins) are truncated to this many bins centered on the center of the
+// support and renormalized
 #define TOF_MAX_WINDOW_BINS 64
+
+// =====================================================================================
+// Kernel interface
+// =====================================================================================
+//
+// A TOF kernel of one LOR (or event) provides, in units of TOF bins:
+//   u_lo, u_hi  support of the kernel relative to the TOF position: [it_f + u_lo, it_f + u_hi]
+//               (Gaussian: [-m, m]; a table can be asymmetric)
+//   cdf(u)      a version of the cumulative kernel, held constant outside [u_lo, u_hi]
+//               (any a * F(u) + b works, since only differences are used)
+//   inv_norm    factor that turns cdf differences into weights summing to 1 over the support:
+//               weight of bin t = (cdf(t + 0.5 - it_f) - cdf(t - 0.5 - it_f)) * inv_norm
+//   valid()     false for degenerate parameters (e.g. sigma <= 0); such LORs / events get
+//               no TOF contribution
+// and the per-call parameter structs (TOFGaussParams, TOFTableParams below) build the
+// kernel of LOR / event i (kernel(i)) and give the width of its support in TOF bins
+// (support_bins(i), used to choose the accumulator size without building the kernel).
 
 /// Truncated Gaussian TOF kernel of one LOR (or event), see the explanation above.
 /// All lengths are in units of TOF bins.
 struct TOFKernelGauss
 {
   float half_width_bins; ///< m = num_sigmas * sigma / tof_bin_width: half width of the support
+  float u_lo;            ///< -m: start of the support relative to the TOF position
+  float u_hi;            ///< +m: end of the support relative to the TOF position
   float scale;           ///< tof_bin_width / (sqrt(2) * sigma): erf argument per TOF bin
-  float e_support;       ///< erf(m * scale) = erf(num_sigmas / sqrt(2)): cdf2 at the end of the support
-  float inv_norm;        ///< 0.5 / e_support: turns cdf2 differences into weights that sum to 1
+  float e_support;       ///< erf(m * scale) = erf(num_sigmas / sqrt(2)): cdf at the end of the support
+  float inv_norm;        ///< 0.5 / e_support: turns cdf differences into weights that sum to 1
+  bool ok;               ///< parameters valid (sigma, bin width, num_sigmas > 0 and finite)
 
   WORKER_QUALIFIER TOFKernelGauss(float sigma, float tof_bin_width, float num_sigmas)
   {
+    ok = (sigma > 0.0f) && isfinite(sigma) && (tof_bin_width > 0.0f) && isfinite(tof_bin_width) &&
+         (num_sigmas > 0.0f) && isfinite(num_sigmas);
     half_width_bins = num_sigmas * sigma / tof_bin_width;
+    u_lo = -half_width_bins;
+    u_hi = half_width_bins;
     scale = tof_bin_width / (1.414213562373095f * sigma);
     // the mass of the Gaussian inside the support, F(m) - F(-m), is
     // 0.5 * (erf(m scale) - erf(-m scale)) = erf(m scale) = e_support; the weight of a bin
-    // is 0.5 * (cdf2 difference) / e_support = (cdf2 difference) * inv_norm
+    // is 0.5 * (cdf difference) / e_support = (cdf difference) * inv_norm
     e_support = erff(half_width_bins * scale);
     inv_norm = (e_support > 0.0f) ? 0.5f / e_support : 0.0f;
   }
 
-  /// cdf2(u) = 2 F_trunc(u) - 1, u = distance from the point in TOF bins (held constant
-  /// outside the support [-m, m]). The weight of TOF bin t for a point at it_f is
-  /// (cdf2(t + 0.5 - it_f) - cdf2(t - 0.5 - it_f)) * inv_norm.
-  WORKER_QUALIFIER float cdf2(float u) const
+  WORKER_QUALIFIER bool valid() const { return ok; }
+
+  /// cdf(u) = 2 F_trunc(u) - 1 = erf(u * scale), u = distance from the point in TOF bins
+  /// (held constant outside the support [-m, m]). The weight of TOF bin t for a point at
+  /// it_f is (cdf(t + 0.5 - it_f) - cdf(t - 0.5 - it_f)) * inv_norm.
+  WORKER_QUALIFIER float cdf(float u) const
   {
     if (u <= -half_width_bins)
       return -e_support;
     if (u >= half_width_bins)
       return e_support;
     return erff(u * scale);
+  }
+};
+
+/// Per-call parameters of the Gaussian TOF kernel (as passed to the projectors).
+struct TOFGaussParams
+{
+  const float *tof_sigma;      ///< TOF resolution sigma (spatial units), 1 or one per LOR / event
+  unsigned char lor_dependent; ///< 1: one sigma per LOR / event
+  float num_sigmas;            ///< truncation of the kernel in units of sigma
+  float tof_bin_width;         ///< TOF bin width (spatial units)
+
+  /// kernel of LOR / event i
+  WORKER_QUALIFIER TOFKernelGauss kernel(std::size_t i) const
+  {
+    return TOFKernelGauss(lor_dependent ? tof_sigma[i] : tof_sigma[0], tof_bin_width, num_sigmas);
+  }
+  /// width of the support of kernel(i) in TOF bins (u_hi - u_lo, same float operations)
+  WORKER_QUALIFIER float support_bins(std::size_t i) const
+  {
+    const float m = num_sigmas * (lor_dependent ? tof_sigma[i] : tof_sigma[0]) / tof_bin_width;
+    return m - (-m);
+  }
+};
+
+// =====================================================================================
+// Tabulated TOF kernel (issue #46)
+// =====================================================================================
+//
+// For TOF kernels that are not Gaussian (e.g. measured kernels, asymmetric kernels of
+// detectors with fast and slow components), the cumulative kernel F is given as a table:
+//
+//   table[k] = F(u_min + k * h),  k = 0 .. n - 1,  h = (u_max - u_min) / (n - 1)
+//
+// with u in *spatial units* (the units of lor_start / lor_end, e.g. mm): the distance along
+// the LOR between the TOF position and the true annihilation point, positive towards
+// lor_end. [u_min, u_max] is the support of the kernel (F is held constant outside). F
+// must not decrease; it does not need to start at 0 or end at 1 (the weights are
+// normalized by F(u_max) - F(u_min)). Between the table points, F is interpolated
+// linearly (i.e. the kernel is piecewise constant).
+//
+// Hardware convention: with the arrival time difference dt = t(lor_start detector) -
+// t(lor_end detector), the TOF position is u = c dt / 2 (about 0.1499 mm per ps): an
+// annihilation closer to the lor_end detector arrives there earlier, so dt > 0 and u > 0.
+//
+// Per LOR / event, the kernel can be stretched by a scale s > 0 (same shape, s times
+// wider): F_s(u) = F(u / s), support [s u_min, s u_max]. The TOF center offset is a pure
+// shift and is not scaled. In TOF bins (what the projectors use), u_bins = u / tof_bin_width.
+
+/// Tabulated TOF kernel of one LOR (or event), all lengths in TOF bins (see above).
+struct TOFKernelTable
+{
+  const float *table; ///< F at the n table points
+  int n;              ///< number of table points (>= 2)
+  float u_lo;         ///< s * u_min / tof_bin_width: start of the support in TOF bins
+  float u_hi;         ///< s * u_max / tof_bin_width: end of the support in TOF bins
+  float a, b;         ///< table index of u (TOF bins): f = u * a + b
+  float t_first;      ///< table[0] = F at the start of the support
+  float t_last;       ///< table[n - 1] = F at the end of the support
+  float inv_norm;     ///< 1 / (t_last - t_first): weights sum to 1 over the support
+  bool ok;            ///< parameters valid (scale, bin width > 0, F increases over the table)
+
+  WORKER_QUALIFIER TOFKernelTable(const float *table_, int n_, float u_min, float u_max, float s, float tof_bin_width)
+  {
+    table = table_;
+    n = n_;
+    u_lo = s * u_min / tof_bin_width;
+    u_hi = s * u_max / tof_bin_width;
+    // table spacing h in spatial units; a point at u TOF bins is at u * tof_bin_width / s in
+    // units of the unscaled table, i.e. at table index (u * tof_bin_width / s - u_min) / h
+    const float h = (u_max - u_min) / static_cast<float>(n - 1);
+    a = tof_bin_width / (s * h);
+    b = -u_min / h;
+    t_first = table[0];
+    t_last = table[n - 1];
+    inv_norm = (t_last > t_first) ? 1.0f / (t_last - t_first) : 0.0f;
+    ok = (s > 0.0f) && isfinite(s) && (tof_bin_width > 0.0f) && isfinite(tof_bin_width) && (t_last > t_first);
+  }
+
+  WORKER_QUALIFIER bool valid() const { return ok; }
+
+  /// F_s(u) (linear interpolation of the table), u in TOF bins relative to the TOF
+  /// position, held constant outside the support [u_lo, u_hi]
+  WORKER_QUALIFIER float cdf(float u) const
+  {
+    if (u <= u_lo)
+      return t_first;
+    if (u >= u_hi)
+      return t_last;
+    // continuous table index f (in (0, n - 1), clamped against rounding), table interval
+    // k .. k + 1 (k <= n - 2) and position t in [0, 1] within it
+    const float f = fminf(fmaxf(u * a + b, 0.0f), static_cast<float>(n - 1));
+    const int k = (static_cast<int>(f) < n - 2) ? static_cast<int>(f) : n - 2;
+    const float t = f - static_cast<float>(k);
+    return table[k] + t * (table[k + 1] - table[k]);
+  }
+};
+
+/// Per-call parameters of the tabulated TOF kernel (as passed to the *_tab projectors).
+struct TOFTableParams
+{
+  const float *table;          ///< F at n uniformly spaced points from u_min to u_max
+  int n;                       ///< number of table points
+  float u_min, u_max;          ///< support of the unscaled kernel (spatial units)
+  const float *scale;          ///< kernel scale s, 1 or one per LOR / event
+  unsigned char lor_dependent; ///< 1: one scale per LOR / event
+  float tof_bin_width;         ///< TOF bin width (spatial units)
+
+  WORKER_QUALIFIER TOFKernelTable kernel(std::size_t i) const
+  {
+    return TOFKernelTable(table, n, u_min, u_max, lor_dependent ? scale[i] : scale[0], tof_bin_width);
+  }
+  /// width of the support of kernel(i) in TOF bins (u_hi - u_lo, same float operations)
+  WORKER_QUALIFIER float support_bins(std::size_t i) const
+  {
+    const float s = lor_dependent ? scale[i] : scale[0];
+    return s * u_max / tof_bin_width - s * u_min / tof_bin_width;
   }
 };
 
@@ -132,58 +283,85 @@ WORKER_QUALIFIER inline float tof_plane_position(int ip, float at, float bt)
 }
 
 /// TOF window of a point at TOF coordinate it_f: the TOF bins it_min .. it_min + n - 1
-/// that overlap the support [it_f - m, it_f + m].
+/// of the sinogram (0 .. num_tof_bins - 1) that overlap the support
+/// [it_f + u_lo, it_f + u_hi] of the kernel.
 ///
-/// Bin t overlaps the support if t + 0.5 > it_f - m and t - 0.5 < it_f + m, so the first
-/// bin is floor(it_f - m + 0.5) and the last bin is floor(it_f + m + 0.5). A window has at
-/// most floor(2 m) + 2 bins. (Bins that only touch the support boundary get weight 0,
-/// which is harmless.)
+/// Step 1 (support): bin t overlaps the support if t + 0.5 > it_f + u_lo and
+/// t - 0.5 < it_f + u_hi, so the first bin is floor(it_f + u_lo + 0.5) and the last bin is
+/// floor(it_f + u_hi + 0.5). These are at most floor(u_hi - u_lo) + 2 bins. (Bins that only
+/// touch the support boundary get weight 0, which is harmless.)
 ///
-/// Example: it_f = 7.3, m = 3 -> support [4.3, 10.3], bins 4 .. 10 (n = 7).
+/// Step 2 (clip to the sinogram): bins outside 0 .. num_tof_bins - 1 do not exist, so
+/// they are removed from the window. The window can become empty (n <= 0): the point is
+/// so far outside the TOF range that none of the TOF bins sees it. So a window never has
+/// more than num_tof_bins bins - even if the support of the kernel is much wider.
 ///
-/// If the window has more than max_bins bins, it is truncated to max_bins bins centered
-/// on it_f (truncated = true; the weights are then normalized over the window instead of
-/// the support, see tof_window_inv_norm).
-WORKER_QUALIFIER inline void tof_window(float it_f, float half_width_bins, int max_bins,
+/// Step 3 (64-bin limit): if the clipped window still has more than max_bins bins (only
+/// possible if the support is wider than ~max_bins TOF bins AND num_tof_bins > max_bins),
+/// it is truncated to max_bins bins centered on the center of the support,
+/// it_f + (u_lo + u_hi) / 2, shifted (if needed) to stay inside the clipped window
+/// (truncated = true; the weights are then normalized over the window instead of the
+/// support, see tof_window_inv_norm). This is an approximation of the kernel; the Python
+/// interface warns when it can happen (see python/bindings.cpp).
+///
+/// Example (Gaussian): it_f = 7.3, m = 3 -> support [4.3, 10.3], bins 4 .. 10 (n = 7);
+/// with num_tof_bins = 9: bins 4 .. 8 (n = 5).
+///
+/// All three steps give it_min (and it_min + n) that never decrease with increasing it_f.
+/// The TOF sinogram projectors rely on this (their accumulator only moves forward).
+template <typename Kernel>
+WORKER_QUALIFIER inline void tof_window(float it_f, const Kernel &kernel, int max_bins, int num_tof_bins,
                                         int &it_min, int &n, bool &truncated)
 {
-  it_min = static_cast<int>(floorf(it_f - half_width_bins + 0.5f));
-  n = static_cast<int>(floorf(it_f + half_width_bins + 0.5f)) - it_min + 1;
+  // step 1: bins overlapping the support
+  int lo = static_cast<int>(floorf(it_f + kernel.u_lo + 0.5f));
+  int hi = static_cast<int>(floorf(it_f + kernel.u_hi + 0.5f));
+  // step 2: clip to the existing TOF bins
+  lo = (lo < 0) ? 0 : lo;
+  hi = (hi > num_tof_bins - 1) ? num_tof_bins - 1 : hi;
+  it_min = lo;
+  n = hi - lo + 1; // <= 0 if the window is empty
   truncated = false;
+  // step 3: truncate to max_bins bins around the center of the support
   if (n > max_bins)
   {
-    it_min = static_cast<int>(lroundf(it_f)) - max_bins / 2;
+    int s = static_cast<int>(lroundf(it_f + 0.5f * (kernel.u_lo + kernel.u_hi))) - max_bins / 2;
+    s = (s < lo) ? lo : s;
+    s = (s > hi - max_bins + 1) ? hi - max_bins + 1 : s;
+    it_min = s;
     n = max_bins;
     truncated = true;
   }
 }
 
-/// Factor that turns the cdf2 differences of the window bins into weights:
-/// inv_norm of the kernel (weights sum to 1 over the support), or - if the window was
-/// truncated - 0.5 / (mass inside the truncated window), so that the weights of the
-/// window still sum to 1.
-WORKER_QUALIFIER inline float tof_window_inv_norm(const TOFKernelGauss &kernel, float it_f, int it_min, int n,
+/// Factor that turns the cdf differences of the window bins into weights: inv_norm of
+/// the kernel (weights sum to 1 over the support), or - if the window was truncated -
+/// 1 / (cdf difference over the truncated window), so that the weights of the window still
+/// sum to 1.
+template <typename Kernel>
+WORKER_QUALIFIER inline float tof_window_inv_norm(const Kernel &kernel, float it_f, int it_min, int n,
                                                   bool truncated)
 {
   if (!truncated)
     return kernel.inv_norm;
-  // mass inside the window = F(upper edge of the last bin) - F(lower edge of the first bin)
-  const float sum = 0.5f * (kernel.cdf2(it_min + n - 0.5f - it_f) - kernel.cdf2(it_min - 0.5f - it_f));
-  return (sum > 0.0f) ? 0.5f / sum : 0.0f;
+  // cdf(upper edge of the last bin) - cdf(lower edge of the first bin)
+  const float d = kernel.cdf(it_min + n - 0.5f - it_f) - kernel.cdf(it_min - 0.5f - it_f);
+  return (d > 0.0f) ? 1.0f / d : 0.0f;
 }
 
 /// Weight of the single TOF bin t for a point at TOF coordinate it_f. Used by the TOF
 /// listmode projectors (an event has one TOF bin); gives exactly the same value as the
 /// weight of bin t in the TOF sinogram projections.
-WORKER_QUALIFIER inline float tof_bin_weight(const TOFKernelGauss &kernel, float it_f, int t)
+template <typename Kernel>
+WORKER_QUALIFIER inline float tof_bin_weight(const Kernel &kernel, float it_f, int t, int num_tof_bins)
 {
   int it_min, n;
   bool truncated;
-  tof_window(it_f, kernel.half_width_bins, TOF_MAX_WINDOW_BINS, it_min, n, truncated);
+  tof_window(it_f, kernel, TOF_MAX_WINDOW_BINS, num_tof_bins, it_min, n, truncated);
   if (t < it_min || t >= it_min + n)
     return 0.0f;
   const float inv = tof_window_inv_norm(kernel, it_f, it_min, n, truncated);
-  return (kernel.cdf2(t + 0.5f - it_f) - kernel.cdf2(t - 0.5f - it_f)) * inv;
+  return (kernel.cdf(t + 0.5f - it_f) - kernel.cdf(t - 0.5f - it_f)) * inv;
 }
 
 // =====================================================================================
@@ -208,22 +386,35 @@ TOF_HOST_DEVICE inline int tof_acc_size(int k)
   return (k == 0) ? 8 : (k == 1) ? 12 : (k == 2) ? 16 : (k == 3) ? 20 : (k == 4) ? 24 : (k == 5) ? 32 : (k == 6) ? 40 : (k == 7) ? 48 : 64;
 }
 
-/// Number of accumulator slots needed for the TOF windows of a kernel with half width m
-/// (in TOF bins) and stores of V bins: a window has at most floor(2 m) + 2 bins (see
-/// tof_window); with groups of V = 4 bins, the accumulator start is rounded down to a
-/// multiple of 4 (alignment), which can cost up to V - 1 = 3 extra slots.
-TOF_HOST_DEVICE inline int tof_acc_slots_needed(float half_width_bins, int V)
+/// Largest number of TOF bins a TOF window of a LOR can have (see tof_window): at most
+/// floor(support_bins) + 2 bins overlap the support of the kernel (support_bins =
+/// u_hi - u_lo in TOF bins; Gaussian: 2 m), and the window never has more bins than the
+/// sinogram (num_tof_bins). The second limit matters for wide kernels: e.g. a kernel with
+/// a support of 100 TOF bins in a sinogram with 41 TOF bins needs a window of only 41
+/// bins (and is projected exactly, no truncation).
+/// (The comparison is done in float, so that huge support_bins cannot overflow an int.)
+TOF_HOST_DEVICE inline int tof_max_window_bins(float support_bins, int num_tof_bins)
 {
-  return static_cast<int>(floorf(2.0f * half_width_bins)) + 2 + (V - 1);
+  const float n_support = floorf(support_bins) + 2.0f;
+  return (n_support < static_cast<float>(num_tof_bins)) ? static_cast<int>(n_support) : num_tof_bins;
+}
+
+/// Number of accumulator slots needed for the TOF windows of a LOR (see
+/// tof_max_window_bins) with stores of V bins: with groups of V = 4 bins, the accumulator
+/// start is rounded down to a multiple of 4 (alignment), which can cost up to V - 1 = 3
+/// extra slots.
+TOF_HOST_DEVICE inline int tof_acc_slots_needed(float support_bins, int V, int num_tof_bins)
+{
+  return tof_max_window_bins(support_bins, num_tof_bins) + (V - 1);
 }
 
 /// Size class of a LOR: the smallest supported accumulator size >= the slots needed.
 /// If none is large enough, 64 (the window is then truncated to fit, see tof_window).
-/// Example: sigma = 25.5 mm, bin width 25.3 mm, num_sigmas 3: m = 3.02, needed slots
-/// floor(6.04) + 2 = 8 (V = 1) -> W = 8.
-TOF_HOST_DEVICE inline int tof_acc_size_class(float half_width_bins, int V)
+/// Example: sigma = 25.5 mm, bin width 25.3 mm, num_sigmas 3, 27 TOF bins: support
+/// 2 m = 6.04 bins, needed slots min(floor(6.04) + 2, 27) = 8 (V = 1) -> W = 8.
+TOF_HOST_DEVICE inline int tof_acc_size_class(float support_bins, int V, int num_tof_bins)
 {
-  const int needed = tof_acc_slots_needed(half_width_bins, V);
+  const int needed = tof_acc_slots_needed(support_bins, V, num_tof_bins);
   for (int k = 0; k < TOF_NUM_ACC_SIZES - 1; ++k)
     if (tof_acc_size(k) >= needed)
       return tof_acc_size(k);
@@ -257,11 +448,12 @@ TOF_HOST_DEVICE inline int tof_acc_size_class(float half_width_bins, int V)
 
 /// store / load width (1 or 4 TOF bins) of the TOF bins of a LOR (also 1 if the larger
 /// accumulator needed for groups of 4 would exceed 64 bins)
-WORKER_QUALIFIER inline int tof_store_width(float half_width_bins, const float *voxel_size, float tof_bin_width)
+WORKER_QUALIFIER inline int tof_store_width(float support_bins, const float *voxel_size, float tof_bin_width,
+                                            int num_tof_bins)
 {
   const float vmin = fminf(voxel_size[0], fminf(voxel_size[1], voxel_size[2]));
   return (vmin >= TOF_STORE4_MIN_VOXEL_PER_BIN * tof_bin_width &&
-          tof_acc_slots_needed(half_width_bins, 4) <= TOF_MAX_WINDOW_BINS)
+          tof_acc_slots_needed(support_bins, 4, num_tof_bins) <= TOF_MAX_WINDOW_BINS)
              ? 4
              : 1;
 }

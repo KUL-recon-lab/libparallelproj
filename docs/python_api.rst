@@ -33,6 +33,17 @@ TOF Listmode Projections
 
 .. autofunction:: parallelproj_core.joseph3d_tof_lm_back
 
+TOF Projections with a Tabulated TOF Kernel
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: parallelproj_core.joseph3d_tof_sino_fwd_tab
+
+.. autofunction:: parallelproj_core.joseph3d_tof_sino_back_tab
+
+.. autofunction:: parallelproj_core.joseph3d_tof_lm_fwd_tab
+
+.. autofunction:: parallelproj_core.joseph3d_tof_lm_back_tab
+
 TOF Listmode Point Projections
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

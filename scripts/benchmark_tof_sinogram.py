@@ -104,6 +104,8 @@ def main():
     p.add_argument("--num_sigmas", type=float, default=3.0)
     p.add_argument("--lor_order", default="RVP",
                    help="memory order of the sinogram LORs, slowest to fastest: P planes, V views, R radial (PVR, RVP, VRP, ...)")
+    p.add_argument("--tof_kernel", default="gauss", choices=["gauss", "table"],
+                   help="TOF kernel: built-in Gaussian, or the same Gaussian as a table (*_tab projectors)")
     p.add_argument("--axial_axis", type=int, default=2, choices=[0, 2],
                    help="image axis along the scanner axis (2: axial fastest in memory, 0: slowest)")
     args = p.parse_args()
@@ -147,18 +149,30 @@ def main():
         x.zero_()
         pc.joseph3d_back(ls, le, x, origin, vs, y_nt)
 
+    # the same Gaussian as a table of its cumulative distribution (2001 points over the support)
+    u = torch.linspace(-args.num_sigmas * sig, args.num_sigmas * sig, 2001, dtype=torch.float64)
+    cdf = (0.5 * (1 + torch.erf(u / (math.sqrt(2) * sig)))).float().to(dev)
+    u_min, u_max = float(u[0]), float(u[-1])
+    scale = torch.ones(1, device=dev)
+
     def tof_fwd():
-        pc.joseph3d_tof_sino_fwd(ls, le, img, origin, vs, y, w, sigma, offset, nb, num_sigmas=args.num_sigmas)
+        if args.tof_kernel == "table":
+            pc.joseph3d_tof_sino_fwd_tab(ls, le, img, origin, vs, y, w, offset, nb, cdf, u_min, u_max, scale)
+        else:
+            pc.joseph3d_tof_sino_fwd(ls, le, img, origin, vs, y, w, sigma, offset, nb, num_sigmas=args.num_sigmas)
 
     def tof_back():
         x.zero_()
-        pc.joseph3d_tof_sino_back(ls, le, x, origin, vs, y, w, sigma, offset, nb, num_sigmas=args.num_sigmas)
+        if args.tof_kernel == "table":
+            pc.joseph3d_tof_sino_back_tab(ls, le, x, origin, vs, y, w, offset, nb, cdf, u_min, u_max, scale)
+        else:
+            pc.joseph3d_tof_sino_back(ls, le, x, origin, vs, y, w, sigma, offset, nb, num_sigmas=args.num_sigmas)
 
     print(f"parallelproj_core {pc.__version__}, device {dev}")
     print(f"preset {args.preset}: {num_lors / 1e6:.2f} M LORs (order {args.lor_order}), image {img_shape} "
           f"(axial axis {args.axial_axis}), voxel {vox} mm")
     print(f"TOF: {nb} bins of {w:.2f} mm, FWHM {cfg['fwhm']:.2f} mm (sigma {sig:.2f} mm = {sig / w:.2f} bins), "
-          f"{args.num_sigmas:g} sigma, TOF sinogram {num_lors * nb * 4 / 1e9:.2f} GB")
+          f"{args.num_sigmas:g} sigma, TOF sinogram {num_lors * nb * 4 / 1e9:.2f} GB, TOF kernel: {args.tof_kernel}")
     t_nf, t_tf = best_time(nontof_fwd), best_time(tof_fwd)
     t_nb, t_tb = best_time(nontof_back), best_time(tof_back)
     print(f"  forward:  TOF {t_tf:8.4f} s   non-TOF {t_nf:8.4f} s   TOF / non-TOF {t_tf / t_nf:6.2f}")

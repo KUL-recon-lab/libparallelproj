@@ -101,7 +101,7 @@ struct TOFSinoLoad<4>
 /// TOF sinogram back projection of LOR i: adds the back projection of the
 /// num_tof_bins values projection_values[i * num_tof_bins ...] to the image (atomic
 /// additions). See the explanation at the top of this file.
-template <int W, int V>
+template <int W, int V, typename KP>
 WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(std::size_t i,
                                                            const float *lor_start,
                                                            const float *lor_end,
@@ -111,12 +111,10 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(std::size_t i,
                                                            const float *projection_values,
                                                            const int *image_dim,
                                                            float tof_bin_width,
-                                                           const float *tof_sigma,
-                                                           const float *tof_center_offset,
-                                                           float num_sigmas,
-                                                           short num_tof_bins,
-                                                           unsigned char is_lor_dependent_tof_sigma,
-                                                           unsigned char is_lor_dependent_tof_center_offset)
+                                                            const float *tof_center_offset,
+                                                            short num_tof_bins,
+                                                            unsigned char is_lor_dependent_tof_center_offset,
+                                                           const KP &kp)
 {
   const float *row = projection_values + i * num_tof_bins; // the TOF bins of this LOR
 
@@ -146,9 +144,12 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(std::size_t i,
   // ---------------------------------------------------------------------------------
   // TOF parameters: truncated kernel of this LOR and the TOF bin coordinate of plane ip,
   // it_f = ip * at + bt (identical to the forward projection)
-  const float local_tof_sigma = is_lor_dependent_tof_sigma ? tof_sigma[i] : tof_sigma[0];
   const float local_tof_center_offset = is_lor_dependent_tof_center_offset ? tof_center_offset[i] : tof_center_offset[0];
-  const TOFKernelGauss kernel(local_tof_sigma, tof_bin_width, num_sigmas);
+  // TOF kernel of this LOR (Gaussian or table, see tof_kernel.h): built by the per-call
+  // kernel parameters kp from the LOR's sigma or kernel scale
+  const auto kernel = kp.kernel(i);
+  if (!kernel.valid())
+    return; // degenerate TOF parameters (e.g. sigma <= 0): no TOF contribution
   float at, bt;
   lor.tof_line(p0, p1, tof_bin_width, num_tof_bins, local_tof_center_offset, image_origin, voxel_size, at, bt);
 
@@ -165,7 +166,8 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(std::size_t i,
 
   // the buffer: buf[k] holds the TOF value of bin base + k (filled at the first plane)
   float buf[W];
-  int base = 0; // TOF bin of buf[0]
+  int base = 0;         // TOF bin of buf[0]
+  bool started = false; // true once a plane with a non-empty TOF window was found
 
   // ---------------------------------------------------------------------------------
   // Loop over the planes, in the order of increasing TOF position
@@ -174,14 +176,20 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(std::size_t i,
     const int ip = forward ? (lor.istart + n) : (lor.iend - n);
     const float it_f = tof_plane_position(ip, at, bt);
 
-    // TOF window of this plane: bins it_min .. it_min + n_tof_weights - 1
+    // TOF window of this plane: bins it_min .. it_min + n_tof_weights - 1, only bins that
+    // exist (0 .. num_tof_bins - 1), see tof_window
     int it_min, n_tof_weights;
     bool truncated;
-    tof_window(it_f, kernel.half_width_bins, max_window, it_min, n_tof_weights, truncated);
+    tof_window(it_f, kernel, max_window, num_tof_bins, it_min, n_tof_weights, truncated);
+
+    // a plane whose window is empty (far outside the TOF range) gets nothing: skip it
+    if (n_tof_weights <= 0)
+      continue;
 
     // --- move the buffer such that base <= it_min < base + V
-    if (n == 0 || it_min - base >= W)
+    if (!started || it_min - base >= W)
     {
+      started = true;
       // first plane, or (rare) the window jumped past the whole buffer: start the buffer
       // at it_min, rounded down to an aligned bin, and load all W bins
       base = it_min - (((it_min - phase) % V) + V) % V;
@@ -219,7 +227,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(std::size_t i,
     // forward projection; bin base + k is buf[k]; the loop runs over all W slots
     // (compile-time indices) and only uses the slots k_lo <= k < k_hi of the window.
     const float inv_norm = tof_window_inv_norm(kernel, it_f, it_min, n_tof_weights, truncated);
-    float e_lo = kernel.cdf2(it_min - 0.5f - it_f);
+    float e_lo = kernel.cdf(it_min - 0.5f - it_f);
     const int k_lo = it_min - base;
     const int k_hi = k_lo + n_tof_weights;
     float val = 0.0f;
@@ -228,7 +236,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(std::size_t i,
     {
       if (k >= k_lo && k < k_hi)
       {
-        const float e_hi = kernel.cdf2(base + k + 0.5f - it_f);
+        const float e_hi = kernel.cdf(base + k + 0.5f - it_f);
         val += (e_hi - e_lo) * buf[k];
         e_lo = e_hi;
       }
