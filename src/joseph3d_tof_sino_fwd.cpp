@@ -1,6 +1,9 @@
 #include "parallelproj.h"
 #include "joseph3d_tof_sino_fwd_worker.h"
 
+// the internal limit (tof_kernel.h) must equal the documented public constant
+static_assert(TOF_MAX_WINDOW_BINS == PARALLELPROJ_TOF_MAX_WINDOW_BINS, "TOF window limit mismatch");
+
 // Implementation shared by joseph3d_tof_sino_fwd (Gaussian kernel) and joseph3d_tof_sino_fwd_tab (tabulated
 // kernel), CPU / OpenMP: one loop iteration per LOR. KP is TOFGaussParams or TOFTableParams.
 template <typename KP>
@@ -19,8 +22,8 @@ static void joseph3d_tof_sino_fwd_impl(const float *lor_start, const float *lor_
   for (long long i = 0; i < static_cast<long long>(num_lors); ++i)
   {
     const float support_bins = kp.support_bins(i);
-    const int V = tof_store_width(support_bins, voxel_size, tof_bin_width);
-    const int W = tof_acc_size_class(support_bins, V);
+    const int V = tof_store_width(support_bins, voxel_size, tof_bin_width, num_tof_bins);
+    const int W = tof_acc_size_class(support_bins, V, num_tof_bins);
 #define TOF_CALL(W_, V_)                                                                                    \
   joseph3d_tof_sino_fwd_worker<W_, V_>(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, image_dim, \
                         tof_bin_width, tof_center_offset, num_tof_bins, is_lor_dependent_tof_center_offset, kp)

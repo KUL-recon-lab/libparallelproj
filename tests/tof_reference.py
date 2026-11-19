@@ -3,7 +3,8 @@
 Same conventions as joseph3d_tof_sino_fwd: Joseph plane range (computed in float32 as in
 the library, since an edge plane can carry a large part of a TOF bin for narrow kernels),
 bilinear interpolation, TOF bin positions incl. center offset, truncated TOF kernel
-(src/tof_kernel.h) with windows wider than max_window_bins truncated and renormalized.
+(src/tof_kernel.h): windows clipped to the existing TOF bins, windows that are still wider
+than max_window_bins truncated and renormalized.
 """
 
 import math
@@ -107,11 +108,18 @@ def tof_sino_fwd_reference(xs, xe, img, origin, vs, tof_bin_width, sigma, offset
         fb = (xs[bx] + t * d[bx] - origin[bx]) / vs[bx]
         val = cf * _bilinear(img, direction, ip, fa, fb)
         it_f = (x_dir - tof_origin) / (sign * tof_bin_width * costheta)
-        it_min = math.floor(it_f + lo + 0.5)
-        n = math.floor(it_f + hi + 0.5) - it_min + 1
+        # window: bins overlapping the support, clipped to the existing TOF bins,
+        # truncated to max_window_bins around the support center (shifted into the
+        # clipped window) if still too wide (see tof_window in src/tof_kernel.h)
+        b_lo = max(math.floor(it_f + lo + 0.5), 0)
+        b_hi = min(math.floor(it_f + hi + 0.5), num_tof_bins - 1)
+        it_min, n = b_lo, b_hi - b_lo + 1
+        if n <= 0:
+            continue
         truncated = n > max_window_bins
         if truncated:
-            it_min, n = math.floor(it_f + 0.5 * (lo + hi) + 0.5) - max_window_bins // 2, max_window_bins
+            s = math.floor(it_f + 0.5 * (lo + hi) + 0.5) - max_window_bins // 2
+            it_min, n = min(max(s, b_lo), b_hi - max_window_bins + 1), max_window_bins
         bins = it_min + np.arange(n)
         e = cdf(np.arange(n + 1) + it_min - 0.5 - it_f)
         wgt = (e[1:] - e[:-1]) / ((e[-1] - e[0]) if truncated else norm)

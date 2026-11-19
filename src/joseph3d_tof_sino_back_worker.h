@@ -166,7 +166,8 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(std::size_t i,
 
   // the buffer: buf[k] holds the TOF value of bin base + k (filled at the first plane)
   float buf[W];
-  int base = 0; // TOF bin of buf[0]
+  int base = 0;         // TOF bin of buf[0]
+  bool started = false; // true once a plane with a non-empty TOF window was found
 
   // ---------------------------------------------------------------------------------
   // Loop over the planes, in the order of increasing TOF position
@@ -175,14 +176,20 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_back_worker(std::size_t i,
     const int ip = forward ? (lor.istart + n) : (lor.iend - n);
     const float it_f = tof_plane_position(ip, at, bt);
 
-    // TOF window of this plane: bins it_min .. it_min + n_tof_weights - 1
+    // TOF window of this plane: bins it_min .. it_min + n_tof_weights - 1, only bins that
+    // exist (0 .. num_tof_bins - 1), see tof_window
     int it_min, n_tof_weights;
     bool truncated;
-    tof_window(it_f, kernel, max_window, it_min, n_tof_weights, truncated);
+    tof_window(it_f, kernel, max_window, num_tof_bins, it_min, n_tof_weights, truncated);
+
+    // a plane whose window is empty (far outside the TOF range) gets nothing: skip it
+    if (n_tof_weights <= 0)
+      continue;
 
     // --- move the buffer such that base <= it_min < base + V
-    if (n == 0 || it_min - base >= W)
+    if (!started || it_min - base >= W)
     {
+      started = true;
       // first plane, or (rare) the window jumped past the whole buffer: start the buffer
       // at it_min, rounded down to an aligned bin, and load all W bins
       base = it_min - (((it_min - phase) % V) + V) % V;

@@ -62,7 +62,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_back_worker(std::size_t i,
 
   for (int ip = istart; ip <= iend; ++ip)
   {
-    const float w = tof_bin_weight(kernel, tof_plane_position(ip, at, bt), it);
+    const float w = tof_bin_weight(kernel, tof_plane_position(ip, at, bt), it, num_tof_bins);
     if (w != 0.0f)
       lor.interp_adjoint(image, ip, w * value);
   }

@@ -20,8 +20,8 @@ static void joseph3d_tof_sino_back_impl(const float *lor_start, const float *lor
   for (long long i = 0; i < static_cast<long long>(num_lors); ++i)
   {
     const float support_bins = kp.support_bins(i);
-    const int V = tof_store_width(support_bins, voxel_size, tof_bin_width);
-    const int W = tof_acc_size_class(support_bins, V);
+    const int V = tof_store_width(support_bins, voxel_size, tof_bin_width, num_tof_bins);
+    const int W = tof_acc_size_class(support_bins, V, num_tof_bins);
 #define TOF_CALL(W_, V_)                                                                                    \
   joseph3d_tof_sino_back_worker<W_, V_>(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, image_dim, \
                         tof_bin_width, tof_center_offset, num_tof_bins, is_lor_dependent_tof_center_offset, kp)

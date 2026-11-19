@@ -194,12 +194,15 @@ print(f"sum over TOF bins: Gaussian {float(xp.sum(p_gauss)):.4f}, table {profile
 # - **Table resolution:** use table points that are finer than the TOF bins (e.g. at most a
 #   tenth of the TOF bin width); details of the kernel finer than the table spacing are
 #   smoothed out. Here: 5 ps = 0.75 mm vs. 5 mm TOF bins.
-# - **Width of the support (64-bin limit):** the projectors handle TOF windows of up to 64
-#   TOF bins. If the support [s * u_min, s * u_max] is wider than ~62 TOF bins, the window
-#   is truncated to 64 bins around the center of the support and renormalized, which cuts
-#   off parts of the kernel (visible as a kink in the profile). Trim empty tails of a
-#   measured kernel from the table, and keep (u_max - u_min) * scale below ~60 TOF bin
-#   widths. Here: 202 mm * 1.5 = 303 mm = 61 bins of 5 mm.
+# - **Width of the support (64-bin limit):** the projectors handle TOF windows (the TOF
+#   bins of one image plane) of up to 64 TOF bins. A window has at most
+#   min(floor(s * (u_max - u_min) / tof_bin_width) + 2, num_tof_bins) bins, so with at most
+#   64 TOF bins the projection is always exact. With more TOF bins (as here: 161), the
+#   support s * (u_max - u_min) must be shorter than 63 TOF bin widths; otherwise the
+#   window is truncated to 64 bins around the center of the support and renormalized,
+#   which cuts off parts of the kernel (visible as a kink in the profile), and the
+#   projectors issue a ``UserWarning``. Trim empty tails of a measured kernel from the
+#   table. Here: 202 mm * 1.5 = 303 mm = 61 bins of 5 mm.
 # - **Mirrored LORs:** if ``lor_start`` and ``lor_end`` of a LOR are swapped, u changes its
 #   sign: the same detector pair then needs the mirrored kernel
 #   (F'(u) = 1 - F(-u), on the grid from -u_max to -u_min).

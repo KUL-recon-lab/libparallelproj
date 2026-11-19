@@ -17,6 +17,10 @@ from types import ModuleType
 from .config import pytestmark
 from .tof_reference import tof_sino_fwd_reference
 
+# "asymmetric_wide" deliberately needs TOF windows of more than 64 bins (truncation), for
+# which the Python interface issues a UserWarning (tested in test_tof_window_limit.py)
+pytestmark = [pytestmark, pytest.mark.filterwarnings("ignore:.*at most 64 TOF bins per window:UserWarning")]
+
 IMG_SHAPE = (23, 31, 17)
 VOXEL_SIZE = (2.0, 1.5, 2.5)
 NUM_LORS = 120
@@ -59,6 +63,8 @@ CASES = {
     "asymmetric_narrow_bins": (0.8, asymmetric_table, 1.0, 140),
     # support wider than 64 bins: window truncated to 64 bins
     "asymmetric_wide": (0.4, asymmetric_table, 1.0, 300),
+    # support of 95 bins, but only 50 TOF bins: no truncation (windows clipped to 50 bins)
+    "asymmetric_wide_few_bins": (0.4, asymmetric_table, 1.0, 50),
 }
 
 

@@ -236,7 +236,52 @@ Implementation-wise, this means that
 
   1. The choice of :math:`n_\sigma` is a trade-off between accuracy and speed. A smaller :math:`n_\sigma` leads to faster computations but changes the shape of the kernel (the truncated tails are missing). The default value :math:`n_\sigma=3` (99.7 % of the Gaussian mass) is typically sufficient for most applications.
 
-  2. In sinogram mode, TOF windows of more than 64 TOF bins (:math:`2 n_\sigma \sigma_\text{TOF} / \Delta \gtrsim 62`) are additionally truncated to the 64 bins centered on the ray sample and renormalized. Use wider TOF bins (or a smaller :math:`n_\sigma`) in that case.
+  2. The 64-bin limit, see :ref:`tof-window-limit` below.
+
+
+.. _tof-window-limit:
+
+The 64-bin limit of the TOF window
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For every ray sample :math:`s_k`, the projectors compute the weights of the TOF bins that
+overlap the kernel support (the "TOF window"). The TOF sinogram projectors keep these bins in
+a small array of fixed size (registers on the GPU), with room for at most 64 TOF bins
+(``parallelproj_core.tof_max_window_bins``, ``PARALLELPROJ_TOF_MAX_WINDOW_BINS`` in C).
+The listmode projectors use exactly the same windows, so that a listmode event always gets
+the value of its sinogram bin.
+
+A window only contains TOF bins that exist, so with a support of :math:`w_\text{s}` TOF bins
+(Gaussian: :math:`w_\text{s} = 2 n_\sigma \sigma_\text{TOF} / \Delta`) and
+:math:`N_\text{TOF}` TOF bins, a window has at most
+
+.. math::
+
+   \min\left(\lfloor w_\text{s} \rfloor + 2, \; N_\text{TOF}\right)
+
+bins (:math:`\lfloor w_\text{s} \rfloor + 2`: a support of :math:`w_\text{s}` bins can
+partially overlap two more bins at its ends). Consequences:
+
+- **With at most 64 TOF bins, the projections are always exact**, however wide the kernel
+  is. (TOF bins are usually chosen as wide as possible while still sampling the kernel well,
+  and e.g. a 70 cm field of view with 76 ps TOF bins already has about 61 bins.)
+- With more than 64 TOF bins and :math:`w_\text{s} \geq 63`, some windows would need more
+  than 64 bins. They are truncated to the 64 bins around the center of the support and the
+  weights are renormalized over these 64 bins: the tails of the kernel are cut off (the TOF
+  profile of a point source shows a kink), so the projection is an approximation. The
+  projection stays exactly adjoint and the TOF weights of every ray sample still sum to 1.
+- The Python interface issues a ``UserWarning`` in this case, with the parameters to change
+  (wider TOF bins, a smaller :math:`n_\sigma`, or a shorter tabulated kernel). The check
+  needs the values of :math:`\sigma_\text{TOF}` (or the kernel scale) and is therefore only
+  done if they are CPU arrays: reading GPU arrays would force the CPU to wait for the GPU,
+  which the projectors avoid on purpose. For GPU arrays, check
+  :math:`\min(\lfloor w_\text{s} \rfloor + 2, N_\text{TOF}) \leq 64` yourself
+  (e.g. once with a CPU copy of :math:`\sigma_\text{TOF}`).
+
+Why 64? The array must fit into the registers of a GPU thread; larger arrays are much slower.
+For the double-Gaussian TOF kernels of BGO detectors with Cherenkov light (a fast and a slow
+component, FWHM of about 200 ps and 700-900 ps), sampled with TOF bins of the size of the
+fast component's sigma, the support is about 20-46 TOF bins, well within the limit.
 
 
 Tabulated (non-Gaussian) TOF kernels
@@ -305,10 +350,11 @@ not scaled. (For an asymmetric kernel whose mean is not 0, the mean moves with :
 
 .. important::
 
-  The projectors handle TOF windows of up to 64 TOF bins. If the support
-  :math:`s \, (u_\text{max} - u_\text{min})` is wider than about 62 TOF bin widths, the window
-  is truncated to 64 bins around the center of the support and renormalized, which cuts off
-  parts of the kernel. Trim empty tails of a measured kernel from the table.
+  The 64-bin limit (:ref:`tof-window-limit`) also applies to tabulated kernels, with the
+  support :math:`w_\text{s} = s \, (u_\text{max} - u_\text{min}) / \Delta` TOF bins. With at
+  most 64 TOF bins the projection is always exact; otherwise the support must be shorter than
+  63 TOF bin widths (a ``UserWarning`` is issued if it is not). Trim empty tails of a
+  measured kernel from the table.
 
 
 Math symbols vs C API variable names

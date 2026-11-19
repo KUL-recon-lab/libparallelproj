@@ -22,9 +22,9 @@ __global__ void joseph3d_tof_sino_back_kernel(const float *lor_start, const floa
 
     // class (W, V) of this LOR; return if it belongs to another launch
     const float support_bins = kp.support_bins(i);
-    if (tof_acc_size_class(support_bins, V) != W)
+    if (tof_acc_size_class(support_bins, V, num_tof_bins) != W)
         return;
-    if (tof_store_width(support_bins, voxel_size, tof_bin_width) != V)
+    if (tof_store_width(support_bins, voxel_size, tof_bin_width, num_tof_bins) != V)
         return;
 
     joseph3d_tof_sino_back_worker<W, V>(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, image_dim.d,

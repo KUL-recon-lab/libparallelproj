@@ -73,9 +73,11 @@
 // decides when this pays off. On the CPU, V = 4 uses 4 normal stores (same results).
 //
 // Template parameters:
-//   W: accumulator size (TOF bins), at least the number of bins overlapping the kernel
-//      support plus V - 1 (see tof_acc_size_class); wider windows are truncated to
-//      W - V + 1 bins centered on the TOF position.
+//   W: accumulator size (TOF bins), at least the largest window size plus V - 1 (see
+//      tof_acc_size_class). The largest window size is the number of bins overlapping the
+//      kernel support, but never more than num_tof_bins (windows only contain existing
+//      bins, see tof_window). Only if this is more than 64 (wide kernel AND more than 64
+//      TOF bins), windows are truncated to W - V + 1 = 64 bins around the support center.
 //   V: store width: 1 (one bin at a time) or 4 (address-aligned groups of 4 bins).
 #include "cuda_compat.h"
 #include "utils.h"
@@ -195,8 +197,9 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
   for (int k = 0; k < W; ++k)
     acc[k] = 0.0f;
 
-  int base = 0;  // TOF bin of acc[0]
-  int first = 0; // first TOF bin covered by the accumulator (bins below are zero)
+  int base = 0;          // TOF bin of acc[0]
+  int first = 0;         // first TOF bin covered by the accumulator (bins below are zero)
+  bool started = false;  // true once a plane with a non-empty TOF window was found
 
   // ---------------------------------------------------------------------------------
   // Loop over the planes, in the order of increasing TOF position
@@ -205,18 +208,26 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
     const int ip = forward ? (istart + n) : (iend - n);
     const float it_f = tof_plane_position(ip, at, bt);
 
-    // TOF window of this plane: bins it_min .. it_min + n_tof_weights - 1
+    // TOF window of this plane: bins it_min .. it_min + n_tof_weights - 1, only bins that
+    // exist (0 .. num_tof_bins - 1), see tof_window
     int it_min, n_tof_weights;
     bool truncated;
-    tof_window(it_f, kernel, max_window, it_min, n_tof_weights, truncated);
+    tof_window(it_f, kernel, max_window, num_tof_bins, it_min, n_tof_weights, truncated);
+
+    // A plane whose window is empty is so far outside the TOF range that it contributes
+    // to none of the TOF bins: skip it. (Such planes are at the beginning or at the end of
+    // the traversal, since the window only moves forward.)
+    if (n_tof_weights <= 0)
+      continue;
 
     // --- move the accumulator such that base <= it_min < base + V
-    if (n == 0)
+    if (!started)
     {
       // first plane: start the accumulator at it_min, rounded down to an aligned bin
       // ((x % V + V) % V is the mathematical modulo, also for negative x)
       base = it_min - (((it_min - phase) % V) + V) % V;
       first = base;
+      started = true;
     }
     // defensive: the window start never decreases along the traversal (also not where
     // the 64-bin truncation applies to some planes only); never move the accumulator back
@@ -291,6 +302,15 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
   }
 
   // ---------------------------------------------------------------------------------
+  // No plane had a non-empty window (the LOR crosses the image only outside the TOF
+  // range): all TOF bins are zero.
+  if (!started)
+  {
+    for (short it = 0; it < num_tof_bins; ++it)
+      row[it] = 0.0f;
+    return;
+  }
+
   // After the last plane: write the remaining W bins of the accumulator (bins outside
   // [0, num_tof_bins) are skipped by the store)
 #pragma unroll

@@ -6,6 +6,7 @@
 #include <nanobind/stl/optional.h>
 #include "parallelproj.h"
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <initializer_list>
 #include <optional>
@@ -284,6 +285,105 @@ void joseph3d_back_py(ConstFloatNDArray lor_start,
 ////////////////////////////////////////////////////////////////////////////////
 
 // Wrapper for joseph3d_tof_sino_fwd
+////////////////////////////////////////////////////////////////////////////////
+// Warning if the TOF window of some LORs must be truncated to 64 TOF bins
+////////////////////////////////////////////////////////////////////////////////
+//
+// Background (see src/tof_kernel.h, "tof_window"): for every image plane along a LOR,
+// the TOF projectors compute the weights of the TOF bins that overlap the support of the
+// TOF kernel ("TOF window"). The window only contains TOF bins that exist, so it has at
+// most min(floor(support_bins) + 2, num_tof_bins) bins, where support_bins is the width
+// of the kernel support in TOF bins:
+//   Gaussian kernel: 2 * num_sigmas * sigma / tof_bin_width
+//   table kernel:    scale * (u_max - u_min) / tof_bin_width
+// The TOF sinogram projectors keep the window in a fixed-size array of at most 64 TOF
+// bins (registers on the GPU). If a window would have more than 64 bins, it is truncated
+// to 64 bins around the center of the kernel and the weights are renormalized: the tails
+// of the kernel are then cut off, and the projection is only an approximation (the TOF
+// profile of a point shows a kink). This can only happen with more than 64 TOF bins and
+// a kernel that is wider than ~62 TOF bins - e.g. very narrow TOF bins compared to the
+// kernel, a large num_sigmas, or a table with long (empty) tails.
+//
+// The functions below warn the user (Python UserWarning) in this case. The check needs
+// the values of sigma / the kernel scale. These are only read if they are CPU arrays:
+// reading a GPU array would force the CPU to wait for the GPU, which the projectors avoid
+// on purpose. For GPU arrays, the check is skipped (documented in the docstrings).
+
+namespace
+{
+  // Largest value of a float array if it is in CPU memory, otherwise no value.
+  std::optional<float> max_value_if_on_cpu(const ConstFloatNDArray &a)
+  {
+    std::optional<float> result; // no value for GPU (or empty) arrays
+    const float *v = a.data();
+    for (std::size_t k = 0; a.device_type() == nb::device::cpu::value && k < a.size(); ++k)
+      result = (result && *result >= v[k]) ? *result : v[k];
+    return result;
+  }
+
+  // float -> string with a fixed number of decimals
+  std::string format_float(float x, int decimals)
+  {
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%.*f", decimals, static_cast<double>(x));
+    return buf;
+  }
+
+  // Issue a Python UserWarning if the widest kernel support (support_bins, in TOF bins)
+  // leads to TOF windows of more than 64 bins (same formula as tof_max_window_bins in
+  // src/tof_kernel.h, also computed in float). `how_to_fix` names the parameters the user
+  // can change. Must be called while the GIL is held (before gil_scoped_release).
+  void warn_if_tof_window_truncated(float support_bins, short num_tof_bins, const char *function_name,
+                                    const char *how_to_fix)
+  {
+    if (!std::isfinite(support_bins))
+      return; // degenerate parameters (e.g. sigma = inf): handled by the projector itself
+    const float n_support = std::floor(support_bins) + 2.0f;
+    const float window = (n_support < static_cast<float>(num_tof_bins)) ? n_support : static_cast<float>(num_tof_bins);
+    if (window <= static_cast<float>(PARALLELPROJ_TOF_MAX_WINDOW_BINS))
+      return;
+    const std::string msg =
+        std::string(function_name) + ": the TOF kernel support is " + format_float(support_bins, 1) +
+        " TOF bins wide, so TOF windows of up to " + std::to_string(static_cast<int>(window)) +
+        " TOF bins would be needed, but the TOF projectors support at most " +
+        std::to_string(PARALLELPROJ_TOF_MAX_WINDOW_BINS) +
+        " TOF bins per window. The TOF kernel is truncated to " + std::to_string(PARALLELPROJ_TOF_MAX_WINDOW_BINS) +
+        " TOF bins around its center (and renormalized), so the projection is only an approximation. " +
+        "To avoid this, " + how_to_fix + " (or use at most " + std::to_string(PARALLELPROJ_TOF_MAX_WINDOW_BINS) +
+        " TOF bins).";
+    if (PyErr_WarnEx(PyExc_UserWarning, msg.c_str(), 1) != 0)
+      throw nb::python_error(); // the warning was turned into an exception (e.g. -W error)
+  }
+
+  // Check for the Gaussian TOF projectors (only if tof_sigma is a CPU array)
+  void warn_if_tof_window_truncated_gauss(const ConstFloatNDArray &tof_sigma, float num_sigmas, float tof_bin_width,
+                                          short num_tof_bins, const char *function_name)
+  {
+    const std::optional<float> sigma_max = max_value_if_on_cpu(tof_sigma);
+    if (!sigma_max || !(*sigma_max > 0.0f) || !(tof_bin_width > 0.0f))
+      return;
+    const float m = num_sigmas * (*sigma_max) / tof_bin_width; // as TOFGaussParams::support_bins
+    warn_if_tof_window_truncated(m - (-m), num_tof_bins, function_name,
+                                 "use wider TOF bins or a smaller num_sigmas such that 2 * num_sigmas * "
+                                 "max(tof_sigma) / tof_bin_width < 63");
+  }
+
+  // Check for the tabulated TOF projectors (only if tof_kernel_scale is a CPU array)
+  void warn_if_tof_window_truncated_table(const ConstFloatNDArray &tof_kernel_scale, float u_min, float u_max,
+                                          float tof_bin_width, short num_tof_bins, const char *function_name)
+  {
+    // (the scales are > 0 and finite: checked before, see check_tof_kernel_scale)
+    const std::optional<float> s = max_value_if_on_cpu(tof_kernel_scale);
+    if (s && tof_bin_width > 0.0f)
+      // as TOFTableParams::support_bins
+      warn_if_tof_window_truncated((*s) * u_max / tof_bin_width - (*s) * u_min / tof_bin_width, num_tof_bins,
+                                 function_name,
+                                 "trim the (empty) tails of the table (smaller tof_kernel_u_max - tof_kernel_u_min), "
+                                 "use wider TOF bins or a smaller tof_kernel_scale such that max(tof_kernel_scale) * "
+                                 "(tof_kernel_u_max - tof_kernel_u_min) / tof_bin_width < 63");
+  }
+} // namespace
+
 void joseph3d_tof_sino_fwd_py(ConstFloatNDArray lor_start,
                               ConstFloatNDArray lor_end,
                               ConstFloat3DArray image,
@@ -380,6 +480,10 @@ void joseph3d_tof_sino_fwd_py(ConstFloatNDArray lor_start,
   {
     throw std::invalid_argument("shape of tof_center_offset must match shape of lor_start[:-1] or be scalar");
   }
+
+  // warn if the TOF windows must be truncated to 64 TOF bins (needs the GIL, see
+  // warn_if_tof_window_truncated)
+  warn_if_tof_window_truncated_gauss(tof_sigma, num_sigmas, tof_bin_width, num_tof_bins, "joseph3d_tof_sino_fwd");
 
   // release the GIL while the projector runs (other Python threads, e.g.
   // one thread per GPU, can run in the meantime)
@@ -508,6 +612,10 @@ void joseph3d_tof_back_fwd_py(ConstFloatNDArray lor_start,
     throw std::invalid_argument("shape of tof_center_offset must match shape of lor_start[:-1] or be scalar");
   }
 
+  // warn if the TOF windows must be truncated to 64 TOF bins (needs the GIL, see
+  // warn_if_tof_window_truncated)
+  warn_if_tof_window_truncated_gauss(tof_sigma, num_sigmas, tof_bin_width, num_tof_bins, "joseph3d_tof_sino_back");
+
   // release the GIL while the projector runs (other Python threads, e.g.
   // one thread per GPU, can run in the meantime)
   {
@@ -612,6 +720,10 @@ void joseph3d_tof_lm_fwd_py(ConstFloatNDArray event_start,
   {
     throw std::invalid_argument("shape of tof_center_offset must be [1,] or [num_events,]");
   }
+
+  // warn if the TOF windows must be truncated to 64 TOF bins (needs the GIL, see
+  // warn_if_tof_window_truncated)
+  warn_if_tof_window_truncated_gauss(tof_sigma, num_sigmas, tof_bin_width, num_tof_bins, "joseph3d_tof_lm_fwd");
 
   // release the GIL while the projector runs (other Python threads, e.g.
   // one thread per GPU, can run in the meantime)
@@ -719,6 +831,10 @@ void joseph3d_tof_lm_back_py(ConstFloatNDArray event_start,
   {
     throw std::invalid_argument("shape of tof_center_offset must be [1,] or [num_events,]");
   }
+
+  // warn if the TOF windows must be truncated to 64 TOF bins (needs the GIL, see
+  // warn_if_tof_window_truncated)
+  warn_if_tof_window_truncated_gauss(tof_sigma, num_sigmas, tof_bin_width, num_tof_bins, "joseph3d_tof_lm_back");
 
   // release the GIL while the projector runs (other Python threads, e.g.
   // one thread per GPU, can run in the meantime)
@@ -996,6 +1112,9 @@ void joseph3d_tof_sino_tab_py(ConstFloatNDArray lor_start, ConstFloatNDArray lor
   const bool dep_offset = one_or_per_lor(tof_center_offset, lor_start, "tof_center_offset");
   const bool dep_scale = one_or_per_lor(tof_kernel_scale, lor_start, "tof_kernel_scale");
   const int n = static_cast<int>(tof_kernel_cdf.shape(0));
+  // warn if the TOF windows must be truncated to 64 TOF bins (needs the GIL)
+  warn_if_tof_window_truncated_table(tof_kernel_scale, tof_kernel_u_min, tof_kernel_u_max, tof_bin_width, num_tof_bins,
+                                     FWD ? "joseph3d_tof_sino_fwd_tab" : "joseph3d_tof_sino_back_tab");
 
   // release the GIL while the projector runs
   nb::gil_scoped_release release;
@@ -1044,7 +1163,11 @@ void joseph3d_tof_lm_tab_py(ConstFloatNDArray event_start, ConstFloatNDArray eve
   const bool dep_offset = one_or_per_lor(tof_center_offset, event_start, "tof_center_offset");
   const bool dep_scale = one_or_per_lor(tof_kernel_scale, event_start, "tof_kernel_scale");
   const int n = static_cast<int>(tof_kernel_cdf.shape(0));
+  // warn if the TOF windows must be truncated to 64 TOF bins (needs the GIL)
+  warn_if_tof_window_truncated_table(tof_kernel_scale, tof_kernel_u_min, tof_kernel_u_max, tof_bin_width, num_tof_bins,
+                                     FWD ? "joseph3d_tof_lm_fwd_tab" : "joseph3d_tof_lm_back_tab");
 
+  // release the GIL while the projector runs
   nb::gil_scoped_release release;
   if constexpr (FWD)
     joseph3d_tof_lm_fwd_tab(event_start.data(), event_end.data(), image.data(), image_origin.data(), voxel_size.data(),
@@ -1090,6 +1213,10 @@ NB_MODULE(parallelproj_core, m)
   m.attr("version_patch") = parallelproj_version_patch();
 
   m.attr("cuda_enabled") = parallelproj_cuda_enabled();
+  // maximum number of TOF bins in the TOF window of an image plane (see
+  // PARALLELPROJ_TOF_MAX_WINDOW_BINS in parallelproj.h); a UserWarning is issued if a
+  // call needs wider windows (they are then truncated)
+  m.attr("tof_max_window_bins") = PARALLELPROJ_TOF_MAX_WINDOW_BINS;
 
   // internal: the stream pointer passed to the C API for a given stream argument
   // (exposed for testing)
@@ -1250,7 +1377,12 @@ NB_MODULE(parallelproj_core, m)
         num_sigmas : float, optional
             Half width of the truncated Gaussian TOF kernel in units of sigma
             (default: 3.0). The weights of the TOF bins overlapping the kernel support
-            sum to 1; windows wider than 64 TOF bins are truncated and renormalized.
+            sum to 1. A TOF window (the TOF bins of one image plane) has at most
+            min(floor(2 * num_sigmas * sigma / tof_bin_width) + 2, num_tof_bins) bins;
+            windows of more than 64 bins (``tof_max_window_bins``) are truncated to 64
+            bins and renormalized (approximation), and a ``UserWarning`` is issued
+            (checked only if tof_sigma is a CPU array). With at most 64 TOF bins, the
+            projection is always exact.
         device_id : int, optional
             CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
             input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
@@ -1309,7 +1441,12 @@ NB_MODULE(parallelproj_core, m)
         num_sigmas : float, optional
             Half width of the truncated Gaussian TOF kernel in units of sigma
             (default: 3.0). The weights of the TOF bins overlapping the kernel support
-            sum to 1; windows wider than 64 TOF bins are truncated and renormalized.
+            sum to 1. A TOF window (the TOF bins of one image plane) has at most
+            min(floor(2 * num_sigmas * sigma / tof_bin_width) + 2, num_tof_bins) bins;
+            windows of more than 64 bins (``tof_max_window_bins``) are truncated to 64
+            bins and renormalized (approximation), and a ``UserWarning`` is issued
+            (checked only if tof_sigma is a CPU array). With at most 64 TOF bins, the
+            projection is always exact.
         device_id : int, optional
             CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
             input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
@@ -1375,7 +1512,12 @@ NB_MODULE(parallelproj_core, m)
         num_sigmas : float, optional
             Half width of the truncated Gaussian TOF kernel in units of sigma
             (default: 3.0). The weights of the TOF bins overlapping the kernel support
-            sum to 1; windows wider than 64 TOF bins are truncated and renormalized.
+            sum to 1. A TOF window (the TOF bins of one image plane) has at most
+            min(floor(2 * num_sigmas * sigma / tof_bin_width) + 2, num_tof_bins) bins;
+            windows of more than 64 bins (``tof_max_window_bins``) are truncated to 64
+            bins and renormalized (approximation), and a ``UserWarning`` is issued
+            (checked only if tof_sigma is a CPU array). With at most 64 TOF bins, the
+            projection is always exact.
         device_id : int, optional
             CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
             input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
@@ -1437,7 +1579,12 @@ NB_MODULE(parallelproj_core, m)
         num_sigmas : float, optional
             Half width of the truncated Gaussian TOF kernel in units of sigma
             (default: 3.0). The weights of the TOF bins overlapping the kernel support
-            sum to 1; windows wider than 64 TOF bins are truncated and renormalized.
+            sum to 1. A TOF window (the TOF bins of one image plane) has at most
+            min(floor(2 * num_sigmas * sigma / tof_bin_width) + 2, num_tof_bins) bins;
+            windows of more than 64 bins (``tof_max_window_bins``) are truncated to 64
+            bins and renormalized (approximation), and a ``UserWarning`` is issued
+            (checked only if tof_sigma is a CPU array). With at most 64 TOF bins, the
+            projection is always exact.
         device_id : int, optional
             CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
             input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
@@ -1485,6 +1632,13 @@ NB_MODULE(parallelproj_core, m)
         - ``tof_kernel_scale`` s stretches the kernel: ``F_s(u) = F(u / s)`` (s = 1: as
           tabulated, s = 1.5: same shape, 50 % wider), around u = 0. The TOF center offset
           is a separate shift and is not scaled.
+        - 64-bin limit: a TOF window (the TOF bins of one image plane) has at most
+          ``min(floor(s * (u_max - u_min) / tof_bin_width) + 2, num_tof_bins)`` bins.
+          Windows of more than 64 bins (``tof_max_window_bins``) are truncated to 64 bins
+          around the center of the support and renormalized (approximation), and a
+          ``UserWarning`` is issued (checked only if tof_kernel_scale is a CPU array).
+          With at most 64 TOF bins, the projection is always exact. Trim empty tails of
+          a measured kernel to keep the support small.
 
         Parameters
         ----------
@@ -1546,6 +1700,13 @@ NB_MODULE(parallelproj_core, m)
         - ``tof_kernel_scale`` s stretches the kernel: ``F_s(u) = F(u / s)`` (s = 1: as
           tabulated, s = 1.5: same shape, 50 % wider), around u = 0. The TOF center offset
           is a separate shift and is not scaled.
+        - 64-bin limit: a TOF window (the TOF bins of one image plane) has at most
+          ``min(floor(s * (u_max - u_min) / tof_bin_width) + 2, num_tof_bins)`` bins.
+          Windows of more than 64 bins (``tof_max_window_bins``) are truncated to 64 bins
+          around the center of the support and renormalized (approximation), and a
+          ``UserWarning`` is issued (checked only if tof_kernel_scale is a CPU array).
+          With at most 64 TOF bins, the projection is always exact. Trim empty tails of
+          a measured kernel to keep the support small.
 
         Parameters
         ----------
@@ -1607,6 +1768,13 @@ NB_MODULE(parallelproj_core, m)
         - ``tof_kernel_scale`` s stretches the kernel: ``F_s(u) = F(u / s)`` (s = 1: as
           tabulated, s = 1.5: same shape, 50 % wider), around u = 0. The TOF center offset
           is a separate shift and is not scaled.
+        - 64-bin limit: a TOF window (the TOF bins of one image plane) has at most
+          ``min(floor(s * (u_max - u_min) / tof_bin_width) + 2, num_tof_bins)`` bins.
+          Windows of more than 64 bins (``tof_max_window_bins``) are truncated to 64 bins
+          around the center of the support and renormalized (approximation), and a
+          ``UserWarning`` is issued (checked only if tof_kernel_scale is a CPU array).
+          With at most 64 TOF bins, the projection is always exact. Trim empty tails of
+          a measured kernel to keep the support small.
 
         Parameters
         ----------
@@ -1670,6 +1838,13 @@ NB_MODULE(parallelproj_core, m)
         - ``tof_kernel_scale`` s stretches the kernel: ``F_s(u) = F(u / s)`` (s = 1: as
           tabulated, s = 1.5: same shape, 50 % wider), around u = 0. The TOF center offset
           is a separate shift and is not scaled.
+        - 64-bin limit: a TOF window (the TOF bins of one image plane) has at most
+          ``min(floor(s * (u_max - u_min) / tof_bin_width) + 2, num_tof_bins)`` bins.
+          Windows of more than 64 bins (``tof_max_window_bins``) are truncated to 64 bins
+          around the center of the support and renormalized (approximation), and a
+          ``UserWarning`` is issued (checked only if tof_kernel_scale is a CPU array).
+          With at most 64 TOF bins, the projection is always exact. Trim empty tails of
+          a measured kernel to keep the support small.
 
         Parameters
         ----------

@@ -3,7 +3,8 @@ projector (see src/tof_kernel.h and src/joseph3d_tof_sino_fwd_worker.h).
 
 The cases cover the different code paths of the forward projector: accumulator sizes from
 8 to 64 TOF bins (also mixed within one call via LOR-dependent TOF sigma), TOF windows
-wider than 64 bins (truncation), and - on the GPU - TOF bins written one at a time or in
+wider than 64 bins (truncation; or no truncation since there are at most 64 TOF bins),
+and - on the GPU - TOF bins written one at a time or in
 aligned groups of 4 (smallest voxel >= 0.4 TOF bins).
 """
 
@@ -18,6 +19,11 @@ import parallelproj_core as ppb
 from types import ModuleType
 from .config import pytestmark
 from .tof_reference import tof_sino_fwd_reference
+
+# Some cases deliberately need TOF windows of more than 64 bins (truncation), for which the
+# Python interface issues a UserWarning; the warning itself is tested in
+# test_tof_window_limit.py.
+pytestmark = [pytestmark, pytest.mark.filterwarnings("ignore:.*at most 64 TOF bins per window:UserWarning")]
 
 IMG_SHAPE = (23, 31, 17)
 VOXEL_SIZE = (2.0, 1.5, 2.5)
@@ -37,6 +43,12 @@ CASES = {
     "wide_window": (0.4, 5.0, 300),
     # window of 64 or 65 bins (2 m = 63.2): truncated for some planes only
     "partial_truncation": (0.4, 4.2133, 300),
+    # kernel support of 75 bins, but only 60 TOF bins: windows are clipped to the existing
+    # bins (<= 60), so there is no truncation (exact projection)
+    "wide_kernel_few_bins": (0.4, 5.0, 60),
+    # kernel support of 75 bins, 70 TOF bins: clipped windows of up to 70 bins, truncated
+    # to 64 bins; the truncated window is shifted to stay inside the existing bins
+    "wide_kernel_70_bins": (0.4, 5.0, 70),
     # very narrow kernel and TOF bins: the window jumps past the whole accumulator
     # between two planes (>= 7.5 bins per plane, accumulator of 8 bins)
     "jumps": (0.2, 0.08, 500),

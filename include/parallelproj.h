@@ -9,6 +9,23 @@
 // This is needed for Windows to export the functions in the DLL
 #include "parallelproj_export.h"
 
+/*! @brief Maximum number of TOF bins in the TOF window of an image plane.
+
+For every image plane along a LOR, the TOF projectors compute the weights of the TOF bins
+that overlap the support of the TOF kernel (the "TOF window"). A window only contains TOF
+bins that exist, so it has at most min(floor(support_bins) + 2, num_tof_bins) bins, where
+support_bins is the width of the kernel support in TOF bins
+(Gaussian: 2 num_sigmas sigma / tof_bin_width;
+tabulated kernel: scale (u_max - u_min) / tof_bin_width).
+
+If this is more than PARALLELPROJ_TOF_MAX_WINDOW_BINS (only possible with more than 64 TOF
+bins), the window is truncated to PARALLELPROJ_TOF_MAX_WINDOW_BINS bins around the center
+of the kernel support and the weights are renormalized over these bins (the projection is
+then an approximation). With at most 64 TOF bins, the projections are always exact. The
+Python interface issues a warning if truncation can occur.
+*/
+#define PARALLELPROJ_TOF_MAX_WINDOW_BINS 64
+
 #ifdef __cplusplus
 extern "C"
 {

@@ -49,6 +49,17 @@ Added
   same. See the theory section and the new gallery example.
   (`#46 <https://github.com/KUL-recon-lab/libparallelproj/issues/46>`_)
 
+* **TOF window limit of 64 bins only applies with more than 64 TOF bins; Python
+  warning.** The TOF window of an image plane now contains only existing TOF bins, so it
+  has at most ``min(floor(support) + 2, num_tof_bins)`` bins: with at most 64 TOF bins,
+  all TOF projections are exact, however wide the kernel (previously, kernels wider than
+  ~62 TOF bins were always truncated). The accumulator size of the TOF sinogram
+  projectors is chosen from the same bound (smaller for few TOF bins). If a call needs
+  windows of more than 64 bins, the Python functions issue a ``UserWarning`` (checked if
+  sigma / the kernel scale are CPU arrays). New: ``PARALLELPROJ_TOF_MAX_WINDOW_BINS``
+  (C) and ``parallelproj_core.tof_max_window_bins`` (Python).
+  (`#46 <https://github.com/KUL-recon-lab/libparallelproj/issues/46>`_)
+
 * **CUDA stream support.** All projector functions take an optional CUDA stream
   (C API: ``void *stream = nullptr``; Python: ``stream=None``, an integer handle
   such as ``torch.cuda.current_stream(dev).cuda_stream`` or

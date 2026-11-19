@@ -316,6 +316,8 @@ def test_tof_sino_adjointness(
         )
 
 
+# deliberately needs windows of more than 64 TOF bins: the UserWarning is expected
+@pytest.mark.filterwarnings("ignore:.*at most 64 TOF bins per window:UserWarning")
 def test_tof_sino_weight_buffer_clamp(
     xp: ModuleType,
     dev: str,

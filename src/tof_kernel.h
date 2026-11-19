@@ -61,9 +61,14 @@
 //    inv_norm = 0.5 / erf(m * scale).
 //  - Neighbouring bins share an edge (the upper edge of bin t is the lower edge of bin
 //    t + 1), so a window of n bins needs n + 1 evaluations of F, not 2 n.
-//  - Windows wider than TOF_MAX_WINDOW_BINS (64) bins are truncated further (64 bins
-//    centered on it_f) and normalized over these 64 bins. This only happens for very
-//    narrow TOF bins (2 num_sigmas sigma > ~62 bin widths).
+//  - A window only contains TOF bins that exist (0 .. num_tof_bins - 1), so it never has
+//    more bins than the sinogram. Windows that still have more than TOF_MAX_WINDOW_BINS
+//    (64) bins are truncated further (64 bins around the center of the support) and
+//    normalized over these 64 bins. This can only happen if BOTH the support of the
+//    kernel is wider than ~62 TOF bins (Gaussian: 2 num_sigmas sigma > ~62 bin widths)
+//    AND the sinogram has more than 64 TOF bins. With at most 64 TOF bins the projection
+//    is always exact (no truncation), whatever the width of the kernel. The Python
+//    interface warns if truncation can happen.
 //  - The sinogram projectors keep the TOF bins of the current window in registers (see
 //    joseph3d_tof_sino_fwd_worker.h); the second half of this file decides how many
 //    ("accumulator size") and whether they are written in groups of 4.
@@ -81,8 +86,9 @@
 #define TOF_HOST_DEVICE
 #endif
 
-// maximum number of TOF bins a TOF window can have; wider windows are truncated to
-// this many bins centered on the TOF position and renormalized
+// maximum number of TOF bins a TOF window can have; wider windows (only possible with
+// more than 64 TOF bins) are truncated to this many bins centered on the center of the
+// support and renormalized
 #define TOF_MAX_WINDOW_BINS 64
 
 // =====================================================================================
@@ -277,28 +283,52 @@ WORKER_QUALIFIER inline float tof_plane_position(int ip, float at, float bt)
 }
 
 /// TOF window of a point at TOF coordinate it_f: the TOF bins it_min .. it_min + n - 1
-/// that overlap the support [it_f + u_lo, it_f + u_hi] of the kernel.
+/// of the sinogram (0 .. num_tof_bins - 1) that overlap the support
+/// [it_f + u_lo, it_f + u_hi] of the kernel.
 ///
-/// Bin t overlaps the support if t + 0.5 > it_f + u_lo and t - 0.5 < it_f + u_hi, so the
-/// first bin is floor(it_f + u_lo + 0.5) and the last bin is floor(it_f + u_hi + 0.5). A
-/// window has at most floor(u_hi - u_lo) + 2 bins. (Bins that only touch the support
-/// boundary get weight 0, which is harmless.)
+/// Step 1 (support): bin t overlaps the support if t + 0.5 > it_f + u_lo and
+/// t - 0.5 < it_f + u_hi, so the first bin is floor(it_f + u_lo + 0.5) and the last bin is
+/// floor(it_f + u_hi + 0.5). These are at most floor(u_hi - u_lo) + 2 bins. (Bins that only
+/// touch the support boundary get weight 0, which is harmless.)
 ///
-/// Example (Gaussian): it_f = 7.3, m = 3 -> support [4.3, 10.3], bins 4 .. 10 (n = 7).
+/// Step 2 (clip to the sinogram): bins outside 0 .. num_tof_bins - 1 do not exist, so
+/// they are removed from the window. The window can become empty (n <= 0): the point is
+/// so far outside the TOF range that none of the TOF bins sees it. So a window never has
+/// more than num_tof_bins bins - even if the support of the kernel is much wider.
 ///
-/// If the window has more than max_bins bins, it is truncated to max_bins bins centered
-/// on the center of the support, it_f + (u_lo + u_hi) / 2 (truncated = true; the weights
-/// are then normalized over the window instead of the support, see tof_window_inv_norm).
+/// Step 3 (64-bin limit): if the clipped window still has more than max_bins bins (only
+/// possible if the support is wider than ~max_bins TOF bins AND num_tof_bins > max_bins),
+/// it is truncated to max_bins bins centered on the center of the support,
+/// it_f + (u_lo + u_hi) / 2, shifted (if needed) to stay inside the clipped window
+/// (truncated = true; the weights are then normalized over the window instead of the
+/// support, see tof_window_inv_norm). This is an approximation of the kernel; the Python
+/// interface warns when it can happen (see python/bindings.cpp).
+///
+/// Example (Gaussian): it_f = 7.3, m = 3 -> support [4.3, 10.3], bins 4 .. 10 (n = 7);
+/// with num_tof_bins = 9: bins 4 .. 8 (n = 5).
+///
+/// All three steps give it_min (and it_min + n) that never decrease with increasing it_f.
+/// The TOF sinogram projectors rely on this (their accumulator only moves forward).
 template <typename Kernel>
-WORKER_QUALIFIER inline void tof_window(float it_f, const Kernel &kernel, int max_bins,
+WORKER_QUALIFIER inline void tof_window(float it_f, const Kernel &kernel, int max_bins, int num_tof_bins,
                                         int &it_min, int &n, bool &truncated)
 {
-  it_min = static_cast<int>(floorf(it_f + kernel.u_lo + 0.5f));
-  n = static_cast<int>(floorf(it_f + kernel.u_hi + 0.5f)) - it_min + 1;
+  // step 1: bins overlapping the support
+  int lo = static_cast<int>(floorf(it_f + kernel.u_lo + 0.5f));
+  int hi = static_cast<int>(floorf(it_f + kernel.u_hi + 0.5f));
+  // step 2: clip to the existing TOF bins
+  lo = (lo < 0) ? 0 : lo;
+  hi = (hi > num_tof_bins - 1) ? num_tof_bins - 1 : hi;
+  it_min = lo;
+  n = hi - lo + 1; // <= 0 if the window is empty
   truncated = false;
+  // step 3: truncate to max_bins bins around the center of the support
   if (n > max_bins)
   {
-    it_min = static_cast<int>(lroundf(it_f + 0.5f * (kernel.u_lo + kernel.u_hi))) - max_bins / 2;
+    int s = static_cast<int>(lroundf(it_f + 0.5f * (kernel.u_lo + kernel.u_hi))) - max_bins / 2;
+    s = (s < lo) ? lo : s;
+    s = (s > hi - max_bins + 1) ? hi - max_bins + 1 : s;
+    it_min = s;
     n = max_bins;
     truncated = true;
   }
@@ -323,11 +353,11 @@ WORKER_QUALIFIER inline float tof_window_inv_norm(const Kernel &kernel, float it
 /// listmode projectors (an event has one TOF bin); gives exactly the same value as the
 /// weight of bin t in the TOF sinogram projections.
 template <typename Kernel>
-WORKER_QUALIFIER inline float tof_bin_weight(const Kernel &kernel, float it_f, int t)
+WORKER_QUALIFIER inline float tof_bin_weight(const Kernel &kernel, float it_f, int t, int num_tof_bins)
 {
   int it_min, n;
   bool truncated;
-  tof_window(it_f, kernel, TOF_MAX_WINDOW_BINS, it_min, n, truncated);
+  tof_window(it_f, kernel, TOF_MAX_WINDOW_BINS, num_tof_bins, it_min, n, truncated);
   if (t < it_min || t >= it_min + n)
     return 0.0f;
   const float inv = tof_window_inv_norm(kernel, it_f, it_min, n, truncated);
@@ -356,23 +386,35 @@ TOF_HOST_DEVICE inline int tof_acc_size(int k)
   return (k == 0) ? 8 : (k == 1) ? 12 : (k == 2) ? 16 : (k == 3) ? 20 : (k == 4) ? 24 : (k == 5) ? 32 : (k == 6) ? 40 : (k == 7) ? 48 : 64;
 }
 
-/// Number of accumulator slots needed for the TOF windows of a kernel whose support is
-/// support_bins TOF bins wide (u_hi - u_lo; Gaussian: 2 m) and stores of V bins: a window
-/// has at most floor(support_bins) + 2 bins (see tof_window); with groups of V = 4 bins,
-/// the accumulator start is rounded down to a multiple of 4 (alignment), which can cost up
-/// to V - 1 = 3 extra slots.
-TOF_HOST_DEVICE inline int tof_acc_slots_needed(float support_bins, int V)
+/// Largest number of TOF bins a TOF window of a LOR can have (see tof_window): at most
+/// floor(support_bins) + 2 bins overlap the support of the kernel (support_bins =
+/// u_hi - u_lo in TOF bins; Gaussian: 2 m), and the window never has more bins than the
+/// sinogram (num_tof_bins). The second limit matters for wide kernels: e.g. a kernel with
+/// a support of 100 TOF bins in a sinogram with 41 TOF bins needs a window of only 41
+/// bins (and is projected exactly, no truncation).
+/// (The comparison is done in float, so that huge support_bins cannot overflow an int.)
+TOF_HOST_DEVICE inline int tof_max_window_bins(float support_bins, int num_tof_bins)
 {
-  return static_cast<int>(floorf(support_bins)) + 2 + (V - 1);
+  const float n_support = floorf(support_bins) + 2.0f;
+  return (n_support < static_cast<float>(num_tof_bins)) ? static_cast<int>(n_support) : num_tof_bins;
+}
+
+/// Number of accumulator slots needed for the TOF windows of a LOR (see
+/// tof_max_window_bins) with stores of V bins: with groups of V = 4 bins, the accumulator
+/// start is rounded down to a multiple of 4 (alignment), which can cost up to V - 1 = 3
+/// extra slots.
+TOF_HOST_DEVICE inline int tof_acc_slots_needed(float support_bins, int V, int num_tof_bins)
+{
+  return tof_max_window_bins(support_bins, num_tof_bins) + (V - 1);
 }
 
 /// Size class of a LOR: the smallest supported accumulator size >= the slots needed.
 /// If none is large enough, 64 (the window is then truncated to fit, see tof_window).
-/// Example: sigma = 25.5 mm, bin width 25.3 mm, num_sigmas 3: support 2 m = 6.04 bins,
-/// needed slots floor(6.04) + 2 = 8 (V = 1) -> W = 8.
-TOF_HOST_DEVICE inline int tof_acc_size_class(float support_bins, int V)
+/// Example: sigma = 25.5 mm, bin width 25.3 mm, num_sigmas 3, 27 TOF bins: support
+/// 2 m = 6.04 bins, needed slots min(floor(6.04) + 2, 27) = 8 (V = 1) -> W = 8.
+TOF_HOST_DEVICE inline int tof_acc_size_class(float support_bins, int V, int num_tof_bins)
 {
-  const int needed = tof_acc_slots_needed(support_bins, V);
+  const int needed = tof_acc_slots_needed(support_bins, V, num_tof_bins);
   for (int k = 0; k < TOF_NUM_ACC_SIZES - 1; ++k)
     if (tof_acc_size(k) >= needed)
       return tof_acc_size(k);
@@ -406,11 +448,12 @@ TOF_HOST_DEVICE inline int tof_acc_size_class(float support_bins, int V)
 
 /// store / load width (1 or 4 TOF bins) of the TOF bins of a LOR (also 1 if the larger
 /// accumulator needed for groups of 4 would exceed 64 bins)
-WORKER_QUALIFIER inline int tof_store_width(float support_bins, const float *voxel_size, float tof_bin_width)
+WORKER_QUALIFIER inline int tof_store_width(float support_bins, const float *voxel_size, float tof_bin_width,
+                                            int num_tof_bins)
 {
   const float vmin = fminf(voxel_size[0], fminf(voxel_size[1], voxel_size[2]));
   return (vmin >= TOF_STORE4_MIN_VOXEL_PER_BIN * tof_bin_width &&
-          tof_acc_slots_needed(support_bins, 4) <= TOF_MAX_WINDOW_BINS)
+          tof_acc_slots_needed(support_bins, 4, num_tof_bins) <= TOF_MAX_WINDOW_BINS)
              ? 4
              : 1;
 }
