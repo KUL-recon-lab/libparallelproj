@@ -10,6 +10,10 @@ Presets (--preset):
   ctr50       CTR 50 ps, TOF bin width = sigma (215 bins)
   small       a small geometry for quick CPU runs
 
+Sinogram order (--lor_order, default RVP: planes fastest) and image layout
+(--axial_axis, default 2: axial direction fastest in memory) have a large effect on GPUs,
+see the "Performance" section of the documentation.
+
 usage:
   python scripts/benchmark_tof_sinogram.py --device cuda:0 --preset signa
   python scripts/benchmark_tof_sinogram.py --device cpu --preset small
@@ -44,8 +48,16 @@ PRESETS = {
 }
 
 
-def sinogram_lors(cfg):
-    """LOR end points of a cylindrical scanner: views x radial bins x ring pairs"""
+def sinogram_lors(cfg, lor_order="RVP", axial_axis=2):
+    """LOR end points of a cylindrical scanner (views x radial bins x ring pairs)
+
+    lor_order: memory order of the LORs, axes from slowest to fastest varying:
+               P = planes (ring pairs), V = views, R = radial bins (e.g. "RVP": planes
+               fastest, the fastest order on GPUs with axial_axis = 2; "PVR": radial bins
+               fastest)
+    axial_axis: image axis (0 or 2) along the scanner axis; the axial coordinate is
+                stored in this component of the LOR end points
+    """
     radius = cfg["radius"]
     phi = torch.arange(cfg["n_views"], dtype=torch.float64) * math.pi / cfg["n_views"]
     rad = torch.linspace(-cfg["rad_half"], cfg["rad_half"], cfg["n_rad"], dtype=torch.float64)
@@ -54,16 +66,34 @@ def sinogram_lors(cfg):
                    key=lambda q: (abs(q[0] - q[1]), q[0]))  # direct planes first
     step = len(pairs) / cfg["n_ring_pairs"]
     pairs = [pairs[int(k * step)] for k in range(cfg["n_ring_pairs"])]
-    P, R = torch.meshgrid(phi, rad, indexing="ij")
-    P, R = P.reshape(-1), R.reshape(-1)
-    h = torch.sqrt(radius**2 - R**2)
-    c, s = torch.cos(P), torch.sin(P)
-    nl, npairs = P.numel(), len(pairs)
-    z0 = torch.tensor([zr[a] for a, _ in pairs], dtype=torch.float64).repeat_interleave(nl)
-    z1 = torch.tensor([zr[b] for _, b in pairs], dtype=torch.float64).repeat_interleave(nl)
-    start = torch.stack([(R * c - h * s).repeat(npairs), (R * s + h * c).repeat(npairs), z0], -1)
-    end = torch.stack([(R * c + h * s).repeat(npairs), (R * s - h * c).repeat(npairs), z1], -1)
+    z0 = torch.tensor([zr[a] for a, _ in pairs], dtype=torch.float64)
+    z1 = torch.tensor([zr[b] for _, b in pairs], dtype=torch.float64)
+
+    # arrays of shape (planes, views, radial bins)
+    P, V, R = len(pairs), phi.numel(), rad.numel()
+    ph = phi[None, :, None].expand(P, V, R)
+    r = rad[None, None, :].expand(P, V, R)
+    h = torch.sqrt(radius**2 - r**2)
+    c, s = torch.cos(ph), torch.sin(ph)
+    za = z0[:, None, None].expand(P, V, R)
+    zb = z1[:, None, None].expand(P, V, R)
+    start = torch.stack([r * c - h * s, r * s + h * c, za], -1)
+    end = torch.stack([r * c + h * s, r * s - h * c, zb], -1)
+
+    perm = ["PVR".index(a) for a in lor_order.upper()] + [3]
+    start = start.permute(*perm).reshape(-1, 3)
+    end = end.permute(*perm).reshape(-1, 3)
+    if axial_axis == 0:  # (x, y, z) -> (z, x, y)
+        start, end = start[:, [2, 0, 1]], end[:, [2, 0, 1]]
     return start.float().contiguous(), end.float().contiguous()
+
+
+def image_geometry(cfg, axial_axis=2):
+    """image shape and voxel size (preset: axial axis last) for the given axial axis"""
+    shape, vox = tuple(cfg["img"]), tuple(cfg["vox"])
+    if axial_axis == 0:
+        shape, vox = (shape[2], shape[0], shape[1]), (vox[2], vox[0], vox[1])
+    return shape, vox
 
 
 def main():
@@ -72,14 +102,18 @@ def main():
     p.add_argument("--preset", default="signa", choices=sorted(PRESETS))
     p.add_argument("--repeats", type=int, default=3)
     p.add_argument("--num_sigmas", type=float, default=3.0)
+    p.add_argument("--lor_order", default="RVP",
+                   help="memory order of the sinogram LORs, slowest to fastest: P planes, V views, R radial (PVR, RVP, VRP, ...)")
+    p.add_argument("--axial_axis", type=int, default=2, choices=[0, 2],
+                   help="image axis along the scanner axis (2: axial fastest in memory, 0: slowest)")
     args = p.parse_args()
 
     cfg = PRESETS[args.preset]
     dev = torch.device(args.device)
-    img_shape = tuple(cfg["img"])
-    vs = torch.tensor(cfg["vox"], dtype=torch.float32)
+    img_shape, vox = image_geometry(cfg, args.axial_axis)
+    vs = torch.tensor(vox, dtype=torch.float32)
     origin = -0.5 * (torch.tensor(img_shape, dtype=torch.float32) - 1) * vs
-    ls, le = sinogram_lors(cfg)
+    ls, le = sinogram_lors(cfg, args.lor_order, args.axial_axis)
     num_lors = ls.shape[0]
     nb, w = cfg["num_tof_bins"], cfg["tof_bin_width"]
     sig = cfg["fwhm"] * FWHM_TO_SIGMA
@@ -121,7 +155,8 @@ def main():
         pc.joseph3d_tof_sino_back(ls, le, x, origin, vs, y, w, sigma, offset, nb, num_sigmas=args.num_sigmas)
 
     print(f"parallelproj_core {pc.__version__}, device {dev}")
-    print(f"preset {args.preset}: {num_lors / 1e6:.2f} M LORs, image {img_shape}, voxel {cfg['vox']} mm")
+    print(f"preset {args.preset}: {num_lors / 1e6:.2f} M LORs (order {args.lor_order}), image {img_shape} "
+          f"(axial axis {args.axial_axis}), voxel {vox} mm")
     print(f"TOF: {nb} bins of {w:.2f} mm, FWHM {cfg['fwhm']:.2f} mm (sigma {sig:.2f} mm = {sig / w:.2f} bins), "
           f"{args.num_sigmas:g} sigma, TOF sinogram {num_lors * nb * 4 / 1e9:.2f} GB")
     t_nf, t_tf = best_time(nontof_fwd), best_time(tof_fwd)

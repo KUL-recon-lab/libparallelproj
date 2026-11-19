@@ -1,10 +1,16 @@
 #include "parallelproj.h"
 #include "joseph3d_tof_sino_back_worker.h"
+#include "joseph3d_tof_sino_fwd_worker.h" // TOF_SINO_FWD_DISPATCH
 #include "cuda_utils.h"
 #include <cuda_runtime.h>
 #include <iostream>
 #include <stdexcept>
 
+// One kernel per (buffer size W, load width V), as for the forward projection: every
+// launch runs over all LORs and a thread only back projects its LOR if the LOR's class
+// is (W, V), so that every LOR is back projected exactly once without host
+// synchronization. The buffer size is checked first (from the TOF sigma only).
+template <int W, int V>
 __global__ void joseph3d_tof_sino_back_kernel(const float *lor_start,
                                               const float *lor_end,
                                               float *image,
@@ -22,12 +28,20 @@ __global__ void joseph3d_tof_sino_back_kernel(const float *lor_start,
                                               unsigned char is_lor_dependent_tof_center_offset)
 {
     std::size_t i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-    if (i < num_lors)
-    {
-        joseph3d_tof_sino_back_worker(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, image_dim.d,
-                                      tof_bin_width, tof_sigma, tof_center_offset, num_sigmas,
-                                      num_tof_bins, is_lor_dependent_tof_sigma, is_lor_dependent_tof_center_offset);
-    }
+    if (i >= num_lors)
+        return;
+
+    const float sigma = is_lor_dependent_tof_sigma ? tof_sigma[i] : tof_sigma[0];
+    const float half_width_bins = num_sigmas * sigma / tof_bin_width;
+    if (tof_acc_size_class(half_width_bins, V) != W)
+        return;
+    const int v_lor = tof_store_width(half_width_bins, tof_bins_per_plane(lor_start + 3 * i, lor_end + 3 * i, voxel_size, tof_bin_width));
+    if (v_lor != V)
+        return;
+
+    joseph3d_tof_sino_back_worker<W, V>(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, image_dim.d,
+                                        tof_bin_width, tof_sigma, tof_center_offset, num_sigmas, num_tof_bins,
+                                        is_lor_dependent_tof_sigma, is_lor_dependent_tof_center_offset);
 }
 
 //////////////////////////////////////////////////////////////////
@@ -115,12 +129,24 @@ void joseph3d_tof_sino_back(const float *lor_start,
     // when it is read, so without this flush the launch check below would
     // misattribute such a stale error to this kernel launch.
     cudaGetLastError();
-    joseph3d_tof_sino_back_kernel<<<num_blocks, threads_per_block, 0, call_stream.stream>>>(
-        d_lor_start.ptr, d_lor_end.ptr, d_image.ptr, d_image_origin.ptr, d_voxel_size.ptr,
-        d_projection_values.ptr, num_lors, h_image_dim,
-        tof_bin_width, d_tof_sigma.ptr, d_tof_center_offset.ptr, num_sigmas, num_tof_bins,
-        is_lor_dependent_tof_sigma, is_lor_dependent_tof_center_offset);
-    cuda_check_launch();
+    if (num_lors > 0)
+    {
+        // one launch per (buffer size, load width), all on the call's stream
+#define TOF_SINO_BACK_LAUNCH(W_, V_)                                                                   \
+    joseph3d_tof_sino_back_kernel<W_, V_><<<num_blocks, threads_per_block, 0, call_stream.stream>>>( \
+        d_lor_start.ptr, d_lor_end.ptr, d_image.ptr, d_image_origin.ptr, d_voxel_size.ptr,           \
+        d_projection_values.ptr, num_lors, h_image_dim,                                              \
+        tof_bin_width, d_tof_sigma.ptr, d_tof_center_offset.ptr, num_sigmas, num_tof_bins,           \
+        is_lor_dependent_tof_sigma, is_lor_dependent_tof_center_offset)
+        for (int k = 0; k < TOF_NUM_ACC_SIZES; ++k)
+        {
+            TOF_SINO_FWD_DISPATCH(tof_acc_size(k), 1, TOF_SINO_BACK_LAUNCH);
+            cuda_check_launch();
+            TOF_SINO_FWD_DISPATCH(tof_acc_size(k), 4, TOF_SINO_BACK_LAUNCH);
+            cuda_check_launch();
+        }
+#undef TOF_SINO_BACK_LAUNCH
+    }
 
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////

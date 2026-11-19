@@ -95,31 +95,8 @@ WORKER_QUALIFIER inline float tof_window_inv_norm(const TOFKernelGauss &kernel, 
   return (sum > 0.0f) ? 0.5f / sum : 0.0f;
 }
 
-/// Call f(t, weight) for every TOF bin t of the window of a point at it_f that lies in
-/// [0, num_tof_bins) (shared edges: one evaluation of F per bin).
-template <typename Func>
-WORKER_QUALIFIER inline void tof_for_each_weight(const TOFKernelGauss &kernel, float it_f, short num_tof_bins,
-                                                 Func f)
-{
-  int it_min, n;
-  bool truncated;
-  tof_window(it_f, kernel.half_width_bins, TOF_MAX_WINDOW_BINS, it_min, n, truncated);
-  const float inv = tof_window_inv_norm(kernel, it_f, it_min, n, truncated);
-  const int k_start = (it_min < 0) ? -it_min : 0;
-  const int k_end = ((it_min + n) > num_tof_bins) ? (num_tof_bins - it_min) : n;
-  if (k_start >= k_end)
-    return;
-  float e_lo = kernel.cdf2(it_min + k_start - 0.5f - it_f);
-  for (int k = k_start; k < k_end; ++k)
-  {
-    const float e_hi = kernel.cdf2(it_min + k + 0.5f - it_f);
-    f(it_min + k, (e_hi - e_lo) * inv);
-    e_lo = e_hi;
-  }
-}
-
 /// Weight of the single TOF bin t for a point at TOF coordinate it_f (same value as the
-/// weight of bin t in tof_for_each_weight and in the TOF sinogram forward projection).
+/// weight of bin t in the TOF sinogram projections).
 WORKER_QUALIFIER inline float tof_bin_weight(const TOFKernelGauss &kernel, float it_f, int t)
 {
   int it_min, n;

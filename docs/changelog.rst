@@ -104,6 +104,23 @@ Changed
   sigma / 5, 8.7x for a 50 ps CTR; about 2x on CPUs.
   (`#43 <https://github.com/KUL-recon-lab/libparallelproj/issues/43>`_)
 
+* **Faster TOF sinogram back projection.** The TOF values of a LOR are read once
+  into a sliding window in registers (the mirror of the forward projection), instead
+  of reading all bins of the TOF window for every image plane; buffer size and load
+  width (single bins or aligned groups of 4) are chosen per LOR on the device, as for
+  the forward projection. Measured on a desktop GPU (5.5 M LORs, image 256x256x89,
+  planes fastest / axial image axis last): 1.2x faster for TOF bins of ~sigma, 4.3x
+  for bins of sigma / 5, 5x for a 50 ps CTR; the TOF back projection then takes about
+  as long as the non-TOF back projection. (With the radial bins fastest and the axial
+  axis last, wide TOF bins are ~20 % slower, narrow bins 1.5-5x faster.)
+  (`#44 <https://github.com/KUL-recon-lab/libparallelproj/issues/44>`_)
+
+* **New documentation section "Performance: sinogram order and image layout"** and
+  options ``--lor_order`` / ``--axial_axis`` of ``scripts/benchmark_tof_sinogram.py``:
+  on GPUs, a sinogram order with the planes fastest together with the axial direction
+  as the last image axis is up to ~20x faster than unfavorable combinations.
+  (`#44 <https://github.com/KUL-recon-lab/libparallelproj/issues/44>`_)
+
 * **Truncated TOF kernel in all TOF projectors.** The weight of a TOF bin is the
   integral of the Gaussian TOF kernel truncated at ``num_sigmas`` sigma over the
   bin, normalized such that the weights of all bins overlapping the kernel support

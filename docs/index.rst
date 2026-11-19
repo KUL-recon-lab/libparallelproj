@@ -37,6 +37,7 @@ Content
    :titlesonly:
 
    Theory and Background <theory_background>
+   Performance <performance>
    Installation <installation>
    C API Reference <c_api>
    Python API Reference <python_api>

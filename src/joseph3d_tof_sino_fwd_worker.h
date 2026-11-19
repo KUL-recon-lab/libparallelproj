@@ -22,6 +22,7 @@
 #include "cuda_compat.h"
 #include "utils.h"
 #include "tof_kernel.h"
+#include "joseph3d_lor_geometry.h"
 
 // write the V bins t .. t+V-1 of a projection row (bins outside [0, num_tof_bins) are skipped)
 template <int V>
@@ -80,67 +81,26 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
                                                           unsigned char is_lor_dependent_tof_sigma,
                                                           unsigned char is_lor_dependent_tof_center_offset)
 {
-  const int n0 = image_dim[0];
-  const int n1 = image_dim[1];
-  const int n2 = image_dim[2];
   float *row = projection_values + i * num_tof_bins;
+  const float *p0 = lor_start + 3 * i;
+  const float *p1 = lor_end + 3 * i;
 
-  // test whether the ray intersects the image cube; if it does, direction is the
-  // principal axis, istart / iend the first / last intersected voxel planes and cf the
-  // correction factor voxel_size[direction] / cos(angle to the principal axis)
-  int direction;
-  float cf;
-  int istart = -1;
-  int iend = -1;
-  ray_cube_intersection_joseph(lor_start + 3 * i, lor_end + 3 * i, image_origin, voxel_size, image_dim,
-                               direction, cf, istart, iend);
-  if (istart == -1)
+  JosephLOR lor;
+  if (!lor.init(p0, p1, image_origin, voxel_size, image_dim))
   {
     for (short it = 0; it < num_tof_bins; ++it)
       row[it] = 0.0f;
     return;
   }
+  const int istart = lor.istart;
+  const int iend = lor.iend;
 
-  // --- geometry: interpolation coordinates of the two other axes in plane ip are
-  // fa = ip * aa + ba (axis ax) and fb = ip * ab + bb (axis bx)
-  const float *p0 = lor_start + 3 * i;
-  const float *p1 = lor_end + 3 * i;
-  const int ax = (direction == 0) ? 1 : 0;
-  const int bx = (direction == 2) ? 1 : 2;
-  const float p0_dir = p0[direction], p0_a = p0[ax], p0_b = p0[bx];
-  const float dr = p1[direction] - p0_dir;
-  const float da = p1[ax] - p0_a;
-  const float db = p1[bx] - p0_b;
-  const float vs_dir = voxel_size[direction], vs_a = voxel_size[ax], vs_b = voxel_size[bx];
-  const float or_dir = image_origin[direction], or_a = image_origin[ax], or_b = image_origin[bx];
-  const float aa = (da * vs_dir) / (vs_a * dr);
-  const float ba = (p0_a - or_a + da * (or_dir - p0_dir) / dr) / vs_a;
-  const float ab = (db * vs_dir) / (vs_b * dr);
-  const float bb = (p0_b - or_b + db * (or_dir - p0_dir) / dr) / vs_b;
-
-  // linear voxel index strides of the plane axis and the two interpolation axes
-  // (selects instead of small arrays indexed by direction, which would go to local memory)
-  const std::size_t s_dir = (direction == 0) ? std::size_t(n1) * n2 : ((direction == 1) ? std::size_t(n2) : 1);
-  const std::size_t s_a = (ax == 0) ? std::size_t(n1) * n2 : std::size_t(n2); // ax is 0 or 1
-  const std::size_t s_b = (bx == 1) ? std::size_t(n2) : 1;                    // bx is 1 or 2
-  const int n_a = (ax == 0) ? n0 : n1;
-  const int n_b = (bx == 1) ? n1 : n2;
-
-  // --- TOF parameters
-  const float costheta = vs_dir / cf; // cosine of the angle between the ray and the principal axis
+  // --- TOF parameters: truncated kernel and TOF bin coordinate it_f = ip * at + bt of plane ip
   const float local_tof_sigma = is_lor_dependent_tof_sigma ? tof_sigma[i] : tof_sigma[0];
   const float local_tof_center_offset = is_lor_dependent_tof_center_offset ? tof_center_offset[i] : tof_center_offset[0];
   const TOFKernelGauss kernel(local_tof_sigma, tof_bin_width, num_sigmas);
-
-  // sign: whether the TOF bin numbers increase or decrease along the principal axis
-  const float sign = (p1[direction] >= p0_dir) ? 1.0f : -1.0f;
-  // center of TOF bin 0 projected onto the principal axis (a positive center offset
-  // shifts the TOF bins towards lor_end)
-  const float tof_origin = 0.5f * (p0_dir + p1[direction]) - sign * (0.5f * num_tof_bins - 0.5f) * (tof_bin_width * costheta) + sign * local_tof_center_offset * costheta;
-  const float tof_slope = sign * tof_bin_width * costheta;
-  // continuous TOF bin coordinate of plane ip: it_f = ip * at + bt
-  const float at = sign * cf / tof_bin_width;
-  const float bt = (or_dir - tof_origin) / tof_slope;
+  float at, bt;
+  lor.tof_line(p0, p1, tof_bin_width, num_tof_bins, local_tof_center_offset, image_origin, voxel_size, at, bt);
 
   // traverse the planes such that it_f increases
   const bool forward = (at >= 0.0f);
@@ -216,22 +176,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
     }
 
     // --- non-TOF contribution of this plane (bilinear interpolation, zero outside the image)
-    const float fa = ip * aa + ba;
-    const float fb = ip * ab + bb;
-    const int ia = static_cast<int>(floorf(fa));
-    const int ib = static_cast<int>(floorf(fb));
-    const float wa = fa - ia;
-    const float wb = fb - ib;
-    float val = 0.0f;
-#pragma unroll
-    for (int q = 0; q < 4; ++q)
-    {
-      const int ja = ia + (q & 1);
-      const int jb = ib + (q >> 1);
-      if ((ja >= 0) && (ja < n_a) && (jb >= 0) && (jb < n_b))
-        val += ((q & 1) ? wa : 1.0f - wa) * ((q >> 1) ? wb : 1.0f - wb) * image[ip * s_dir + ja * s_a + jb * s_b];
-    }
-    val *= cf;
+    const float val = lor.interp(image, ip);
 
     // --- TOF weights of the window bins it_min .. it_min + n - 1 (acc slots it_min - base + k),
     // looped over all W slots (compile-time indices) with a range check; shared edges
