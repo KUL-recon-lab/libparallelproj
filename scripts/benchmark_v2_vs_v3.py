@@ -34,7 +34,7 @@ TOF sinogram forward / back projection and TOF listmode forward / back projectio
 The listmode projectors are timed with --num_events events sampled from a cylindrical
 phantom (random LORs of the sinogram geometry, TOF bin from the emission point).
 
-For the comparison of the results, the projections of the first 200 000 LORs / events and
+For the comparison of the results, the projections of ~200 000 LORs / events (every k-th) and
 the back projections are stored (for the first layout and array location given). Differences
 between 2.x and 3.0 are expected at the level of ~1e-4 - 1e-3 (truncated TOF kernel, see
 the changelog); larger differences in the listmode projections of 2.x for narrow kernels
@@ -62,7 +62,7 @@ TOF_PRESETS = {
     "vision": dict(tof_bin_width=143 * C_MM_PER_PS, num_tof_bins=33, sigma=214 * C_MM_PER_PS * FWHM_TO_SIGMA),
     "fine": dict(tof_bin_width=_SIG400 / 5, num_tof_bins=int(round(_TOF_RANGE / (_SIG400 / 5))), sigma=_SIG400),
 }
-NUM_SAVE = 200_000  # LORs / events whose projections are stored for the comparison
+NUM_SAVE = 200_000  # ~number of LORs / events (every k-th) whose projections are stored
 
 
 def sinogram_lors(torch, lor_order, axial_axis, lor_fraction):
@@ -211,13 +211,13 @@ def run(args):
                     t = {}
                     t["sino_fwd"] = best_time(sino_fwd)
                     if save:
-                        saved[f"{key}/sino_fwd"] = y[:NUM_SAVE].cpu().numpy().copy()
+                        saved[f"{key}/sino_fwd"] = y[::max(1, num_lors // NUM_SAVE)].cpu().numpy().copy()
                     t["sino_back"] = best_time(sino_back)  # back projects y = forward projection
                     if save:
                         saved[f"{key}/sino_back"] = x.cpu().numpy().copy()
                     t["lm_fwd"] = best_time(lm_fwd)
                     if save:
-                        saved[f"{key}/lm_fwd"] = y_lm[:NUM_SAVE].cpu().numpy().copy()
+                        saved[f"{key}/lm_fwd"] = y_lm[::max(1, args.num_events // NUM_SAVE)].cpu().numpy().copy()
                     t["lm_back"] = best_time(lm_back)
                     if save:
                         saved[f"{key}/lm_back"] = x.cpu().numpy().copy()
@@ -253,10 +253,12 @@ def compare(args):
             continue
         va, vb = a[k].astype(np.float64), b[k].astype(np.float64)
         scale = np.abs(va).max()
-        rel = np.abs(vb - va).max() / scale if scale > 0 else float("nan")
         nan = "  NaN in old" if np.isnan(va).any() else ""
         nan += "  NaN in new" if np.isnan(vb).any() else ""
-        print(f"  {k.replace('|', '/'):40s} {rel:9.2e}{nan}")
+        if scale > 0:
+            print(f"  {k.replace('|', '/'):40s} {np.abs(vb - va).max() / scale:9.2e}{nan}")
+        else:
+            print(f"  {k.replace('|', '/'):40s} old all zero, max |new| = {np.abs(vb).max():.2e}{nan}")
 
 
 def main():
