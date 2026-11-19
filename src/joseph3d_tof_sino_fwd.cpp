@@ -29,7 +29,7 @@ void joseph3d_tof_sino_fwd(const float *lor_start,
   {
     const float sigma = is_lor_dependent_tof_sigma ? tof_sigma[i] : tof_sigma[0];
     const float half_width_bins = num_sigmas * sigma / tof_bin_width;
-    const int V = tof_store_width(half_width_bins, tof_bins_per_plane(lor_start + 3 * i, lor_end + 3 * i, voxel_size, tof_bin_width));
+    const int V = tof_store_width(half_width_bins, voxel_size, tof_bin_width);
     const int W = tof_acc_size_class(half_width_bins, V);
 #define TOF_SINO_FWD_CALL(W_, V_)                                                                              \
   joseph3d_tof_sino_fwd_worker<W_, V_>(i, lor_start, lor_end, image, image_origin, voxel_size, projection_values, \

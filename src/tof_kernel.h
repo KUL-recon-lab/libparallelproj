@@ -137,34 +137,22 @@ TOF_HOST_DEVICE inline int tof_acc_size_class(float half_width_bins, int V)
   return TOF_MAX_WINDOW_BINS;
 }
 
-// LORs whose TOF window moves at least this many TOF bins per image plane write the
-// TOF bins in aligned groups of 4 (one 16-byte store); otherwise one bin at a time
-// with a smaller accumulator. Determined with benchmarks on an RTX A6000.
-#define TOF_STORE4_MIN_BINS_PER_PLANE 0.7f
+// Store / load width of the TOF bins of the sinogram projectors: aligned groups of 4
+// bins (one 16-byte access, accumulator 3 bins larger) if the TOF window moves fast along
+// the LORs, single bins otherwise. The decision uses the smallest voxel size relative to
+// the TOF bin width (a lower bound of the TOF bins the window moves per image plane, which
+// is cf / tof_bin_width >= min(voxel_size) / tof_bin_width) and is therefore the same for
+// all LORs of a call: LORs of both kinds within one GPU warp would run at the speed of
+// the slower kind (measured: ~30 % slower than either width alone). Determined with
+// benchmarks on a desktop GPU: single bins are better for min(voxel) / bin width ~0.1,
+// groups of 4 for ~0.75 (2x), both equal for ~0.46.
+#define TOF_STORE4_MIN_VOXEL_PER_BIN 0.4f
 
-/// TOF bins the window moves per image plane (cf / tof_bin_width), from the LOR end
-/// points only (principal axis as in ray_cube_intersection_joseph)
-WORKER_QUALIFIER inline float tof_bins_per_plane(const float *p0, const float *p1, const float *voxel_size,
-                                                 float tof_bin_width)
+/// store / load width (1 or 4 TOF bins) of the TOF bins of a LOR
+WORKER_QUALIFIER inline int tof_store_width(float half_width_bins, const float *voxel_size, float tof_bin_width)
 {
-  const float d0 = p1[0] - p0[0], d1 = p1[1] - p0[1], d2 = p1[2] - p0[2];
-  const float s0 = d0 * d0, s1 = d1 * d1, s2 = d2 * d2;
-  const float sum = s0 + s1 + s2;
-  if (sum == 0.0f)
-    return 0.0f;
-  int dir = 0;
-  if (s1 >= s0 && s1 >= s2)
-    dir = 1;
-  else if (s2 >= s0 && s2 >= s1)
-    dir = 2;
-  const float sdir = (dir == 0) ? s0 : ((dir == 1) ? s1 : s2);
-  return voxel_size[dir] * sqrtf(sum / sdir) / tof_bin_width;
-}
-
-/// store width (1 or 4 TOF bins) of a LOR
-WORKER_QUALIFIER inline int tof_store_width(float half_width_bins, float bins_per_plane)
-{
-  return (bins_per_plane >= TOF_STORE4_MIN_BINS_PER_PLANE &&
+  const float vmin = fminf(voxel_size[0], fminf(voxel_size[1], voxel_size[2]));
+  return (vmin >= TOF_STORE4_MIN_VOXEL_PER_BIN * tof_bin_width &&
           tof_acc_slots_needed(half_width_bins, 4) <= TOF_MAX_WINDOW_BINS)
              ? 4
              : 1;

@@ -35,7 +35,7 @@ __global__ void joseph3d_tof_sino_back_kernel(const float *lor_start,
     const float half_width_bins = num_sigmas * sigma / tof_bin_width;
     if (tof_acc_size_class(half_width_bins, V) != W)
         return;
-    const int v_lor = tof_store_width(half_width_bins, tof_bins_per_plane(lor_start + 3 * i, lor_end + 3 * i, voxel_size, tof_bin_width));
+    const int v_lor = tof_store_width(half_width_bins, voxel_size, tof_bin_width);
     if (v_lor != V)
         return;
 

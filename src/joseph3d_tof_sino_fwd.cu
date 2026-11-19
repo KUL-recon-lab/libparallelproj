@@ -9,9 +9,8 @@
 // a thread only projects its LOR if the LOR's class is (W, V), so that every LOR is
 // projected exactly once without the host knowing the TOF parameters (no host
 // synchronization; LOR-dependent TOF sigma possible). The class depends on the TOF
-// window size (sigma) and, for the store width, on how fast the TOF window moves along
-// the LOR. The accumulator size is checked first, so that most launches skip a LOR
-// after reading only its TOF sigma.
+// window size (sigma) and on the store width (voxel size relative to the TOF bin width,
+// see tof_store_width).
 template <int W, int V>
 __global__ void joseph3d_tof_sino_fwd_kernel(const float *lor_start,
                                              const float *lor_end,
@@ -37,7 +36,7 @@ __global__ void joseph3d_tof_sino_fwd_kernel(const float *lor_start,
     const float half_width_bins = num_sigmas * sigma / tof_bin_width;
     if (tof_acc_size_class(half_width_bins, V) != W)
         return;
-    const int v_lor = tof_store_width(half_width_bins, tof_bins_per_plane(lor_start + 3 * i, lor_end + 3 * i, voxel_size, tof_bin_width));
+    const int v_lor = tof_store_width(half_width_bins, voxel_size, tof_bin_width);
     if (v_lor != V)
         return;
 

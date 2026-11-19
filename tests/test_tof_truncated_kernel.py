@@ -4,7 +4,7 @@ projector (see src/tof_kernel.h and src/joseph3d_tof_sino_fwd_worker.h).
 The cases cover the different code paths of the forward projector: accumulator sizes from
 8 to 64 TOF bins (also mixed within one call via LOR-dependent TOF sigma), TOF windows
 wider than 64 bins (truncation), and - on the GPU - TOF bins written one at a time or in
-aligned groups of 4 (TOF window moving >= 0.7 bins per image plane).
+aligned groups of 4 (smallest voxel >= 0.4 TOF bins).
 """
 
 import functools
@@ -29,8 +29,7 @@ CASES = {
     "w_eq_sigma": (6.0, 6.0, 25),
     # TOF bin width sigma / 5: window ~32 bins
     "w_sigma_5": (1.2, 6.0, 120),
-    # TOF bins narrower than the voxels: the window moves >= 0.7 bins per plane
-    # (groups of 4 on the GPU)
+    # TOF bins narrower than the voxels (groups of 4 TOF bins)
     "narrow_bins": (1.0, 1.0, 140),
     # LOR-dependent sigma: windows from 5 to ~40 bins in one call (several accumulator sizes)
     "lor_dependent_sigma": (2.0, (1.0, 13.0), 70),
