@@ -96,13 +96,30 @@ Changed
 * **Much faster TOF sinogram forward projection, especially on GPUs.** The TOF
   sums of a LOR are kept in a sliding window in registers and every TOF bin is
   written exactly once, instead of adding into all bins of the TOF window in
-  global memory for every image plane. The accumulator size (8 to 64 TOF bins)
-  and, on GPUs, the store width (single bins or aligned groups of 4) are chosen
-  per LOR on the device (no host synchronization, LOR-dependent TOF resolution
-  supported). Measured on an RTX A6000 (5.5 M LORs, image 256x256x89): 8.3x
+  global memory for every image plane. The accumulator size (8 to 64 TOF bins) is
+  chosen per LOR on the device (no host synchronization, LOR-dependent TOF
+  resolution supported); TOF bins narrower than ~2.5 voxels are written in aligned
+  groups of 4 (16-byte stores). Measured on an RTX A6000 (5.5 M LORs, image 256x256x89): 8.3x
   faster for TOF bins of ~sigma (169 ps bins, 400 ps CTR), 21x for bins of
   sigma / 5, 8.7x for a 50 ps CTR; about 2x on CPUs.
   (`#43 <https://github.com/KUL-recon-lab/libparallelproj/issues/43>`_)
+
+* **Faster TOF sinogram back projection.** The TOF values of a LOR are read once
+  into a sliding window in registers (the mirror of the forward projection), instead
+  of reading all bins of the TOF window for every image plane; buffer size and load
+  width are chosen as for the forward projection. Measured on a desktop GPU (5.5 M
+  LORs, image 256x256x89, planes fastest / axial image axis last): 1.26x faster for
+  TOF bins of ~sigma (169 ps bins, 400 ps CTR), 4.6x for bins of sigma / 5, 5.3x for
+  a 50 ps CTR; for wide TOF bins and for the 50 ps CTR, the TOF back projection then
+  takes about as long as the non-TOF back projection. (With the radial bins fastest and the axial
+  axis last, wide TOF bins are ~20 % slower, narrow bins 1.5-5x faster.)
+  (`#44 <https://github.com/KUL-recon-lab/libparallelproj/issues/44>`_)
+
+* **New documentation section "Performance: sinogram order and image layout"** and
+  options ``--lor_order`` / ``--axial_axis`` of ``scripts/benchmark_tof_sinogram.py``:
+  on GPUs, a sinogram order with the planes fastest together with the axial direction
+  as the last image axis is up to ~20x faster than unfavorable combinations.
+  (`#44 <https://github.com/KUL-recon-lab/libparallelproj/issues/44>`_)
 
 * **Truncated TOF kernel in all TOF projectors.** The weight of a TOF bin is the
   integral of the Gaussian TOF kernel truncated at ``num_sigmas`` sigma over the

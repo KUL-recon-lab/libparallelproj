@@ -5,13 +5,26 @@
 #include <iostream>
 #include <stdexcept>
 
-// One kernel per (accumulator size W, store width V). Every launch runs over all LORs;
-// a thread only projects its LOR if the LOR's class is (W, V), so that every LOR is
-// projected exactly once without the host knowing the TOF parameters (no host
-// synchronization; LOR-dependent TOF sigma possible). The class depends on the TOF
-// window size (sigma) and, for the store width, on how fast the TOF window moves along
-// the LOR. The accumulator size is checked first, so that most launches skip a LOR
-// after reading only its TOF sigma.
+// How the GPU kernels are organized
+// ----------------------------------
+// The worker (joseph3d_tof_sino_fwd_worker.h) is a template in the accumulator size W
+// and the store width V, so there is one compiled GPU kernel per combination (W, V)
+// (9 sizes x 2 widths = 18 kernels). Which combination a LOR needs depends on its TOF
+// sigma (window size) and on voxel size / TOF bin width (store width, see tof_kernel.h).
+//
+// The host cannot simply read sigma and choose one kernel: sigma is a GPU array (also
+// when it is a single value), and reading it would force the CPU to wait for the GPU
+// (a synchronization, which we avoid so that calls can run asynchronously on streams).
+// Moreover, sigma can be different for every LOR.
+//
+// Solution: joseph3d_tof_sino_fwd launches all 18 kernels, one after the other on the
+// same stream. Every launch has one thread per LOR. A thread first computes the class
+// (W, V) of its LOR (cheap: one value of sigma) and returns immediately if it is not the
+// class of this launch. So every LOR is projected exactly once, by the launch of its
+// class. The 17 launches that return immediately cost very little (measured: < 1 %).
+//
+// (On the CPU, the loop over the LORs simply calls the right template for each LOR, see
+// joseph3d_tof_sino_fwd.cpp.)
 template <int W, int V>
 __global__ void joseph3d_tof_sino_fwd_kernel(const float *lor_start,
                                              const float *lor_end,
@@ -33,11 +46,12 @@ __global__ void joseph3d_tof_sino_fwd_kernel(const float *lor_start,
     if (i >= num_lors)
         return;
 
+    // class of this LOR; return if it belongs to another launch
     const float sigma = is_lor_dependent_tof_sigma ? tof_sigma[i] : tof_sigma[0];
     const float half_width_bins = num_sigmas * sigma / tof_bin_width;
     if (tof_acc_size_class(half_width_bins, V) != W)
         return;
-    const int v_lor = tof_store_width(half_width_bins, tof_bins_per_plane(lor_start + 3 * i, lor_end + 3 * i, voxel_size, tof_bin_width));
+    const int v_lor = tof_store_width(half_width_bins, voxel_size, tof_bin_width);
     if (v_lor != V)
         return;
 

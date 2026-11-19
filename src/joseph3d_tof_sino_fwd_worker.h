@@ -1,29 +1,89 @@
 #pragma once
-// TOF sinogram forward projection of one LOR (Joseph's method), CPU and CUDA.
+// =====================================================================================
+// TOF sinogram forward projection of one LOR (Joseph's method), CPU and CUDA
+// =====================================================================================
 //
-// TOF kernel: truncated kernel, see tof_kernel.h.
+// Prerequisites: joseph3d_lor_geometry.h (planes, interpolation, TOF position of a plane)
+// and tof_kernel.h (TOF bin coordinates, TOF window, weights).
 //
-// Register accumulator: the image planes are traversed in the direction of increasing
-// TOF position, so the TOF window only moves forward along the LOR. The sums of the W
-// TOF bins starting at bin `base` are kept in acc[0 .. W-1]; all loops over the W slots
-// are fully unrolled (compile-time indices), so that the compiler keeps acc in
-// registers on the GPU. When the window has moved past a bin, the bin is final and is
-// written to the output - every output bin is written exactly once (bins outside the
-// range covered by the window as zeros). This avoids the read-modify-write of all
-// window bins in global memory for every image plane.
+// 1. What is computed
+// -------------------
+// For every image plane ip intersected by the LOR:
+//   val  = cf * (bilinear interpolation of the image in plane ip)  (non-TOF contribution)
+//   it_f = TOF bin coordinate of the intersection point
+//   for every TOF bin t in the TOF window of it_f:  projection[t] += w_t(it_f) * val
+// i.e. the non-TOF contribution of each plane is distributed over the TOF bins near the
+// plane with the TOF weights w_t (which sum to 1).
+//
+// 2. The straightforward implementation, and why it is slow on GPUs
+// ------------------------------------------------------------------
+// Adding w_t * val directly to projection[t] in memory for every plane means that every
+// TOF bin is read, modified and written back many times: with TOF bins of ~10 planes and
+// a window of ~7 bins, ~70 times per bin. Each GPU thread handles one LOR, and the TOF
+// bins of neighbouring LORs (threads) are num_tof_bins floats apart in memory, so these
+// accesses cannot be combined into few memory transactions. This was the main cost of the
+// previous implementation (up to 20x slower than this one).
+//
+// 3. The sliding window ("accumulator")
+// -------------------------------------
+// Key observation: if the planes are visited in the order in which the TOF position it_f
+// increases, the TOF window (bins it_min .. it_min + n - 1) only moves forward. A bin that
+// the window has left behind (t < it_min) will not get any further contribution - it is
+// final. So we
+//   - keep the sums of the bins of the current window in a small array acc[0 .. W-1],
+//     where acc[k] holds bin base + k,
+//   - add the contributions of a plane to acc (fast, in registers),
+//   - when the window moves on (it_min increases), write the finished bins acc[0], ...
+//     to memory and shift the array down, and
+//   - at the end, write the remaining bins.
+// Every TOF bin of the output is written exactly once (also the bins that never get a
+// contribution: they are written as zeros).
+//
+// Example with W = 8, V = 1 (window of n = 5 bins moving forward):
+//
+//   plane 1: it_min = 3  -> base = 3,  acc = [b3 b4 b5 b6 b7 .  .  . ]  (add 5 weights)
+//   plane 2: it_min = 3  -> no shift,  acc = [b3 b4 b5 b6 b7 .  .  . ]
+//   plane 3: it_min = 4  -> bin 3 is final: write b3, shift down by one, base = 4
+//                                      acc = [b4 b5 b6 b7 b8 .  .  . ]
+//   ...
+//   end:     write all W bins of acc (bins base .. base + W - 1), then zeros for the bins
+//            before the first base and after the last bin of acc.
+//
+// 4. Why templates and "#pragma unroll" everywhere
+// -------------------------------------------------
+// On the GPU, acc only lives in (fast) registers if every access acc[k] uses an index k
+// that the compiler knows at compile time. Therefore
+//   - the size W is a template parameter (compile-time constant), and the projector is
+//     compiled for several sizes (tof_acc_size in tof_kernel.h); each LOR uses the
+//     smallest size that fits its TOF window,
+//   - all loops over the W slots are fully unrolled (#pragma unroll) and loop over all W
+//     slots, with an `if` that skips the slots outside the window (instead of looping
+//     from k_lo to k_hi, whose bounds are only known at run time).
+// A version with run-time indices (a ring buffer) was 1.5x slower than the old code,
+// because the array was placed in slow "local" memory.
+//
+// 5. Groups of 4 bins (template parameter V)
+// ------------------------------------------
+// With V = 4, finished bins are written in groups of 4 neighbouring bins with one 16-byte
+// store (float4) instead of 4 single stores, and the array is shifted by 4. A float4 store
+// must start at an address that is a multiple of 16 bytes. The first bin of the row
+// generally is not aligned, so `base` is always kept at a bin number whose address is a
+// multiple of 16 bytes ("phase" below). Because base can then lie up to 3 bins before
+// it_min, the accumulator needs V - 1 = 3 extra slots. tof_store_width (tof_kernel.h)
+// decides when this pays off. On the CPU, V = 4 uses 4 normal stores (same results).
 //
 // Template parameters:
 //   W: accumulator size (TOF bins), at least the number of bins overlapping the kernel
 //      support plus V - 1 (see tof_acc_size_class); wider windows are truncated to
 //      W - V + 1 bins centered on the TOF position.
-//   V: store width: 1 (one bin at a time) or 4 (address-aligned groups of 4 bins, one
-//      16-byte store on the GPU; `base` is then kept aligned). Groups of 4 pay off if
-//      the window moves fast along the LOR (many stores per image plane).
+//   V: store width: 1 (one bin at a time) or 4 (address-aligned groups of 4 bins).
 #include "cuda_compat.h"
 #include "utils.h"
 #include "tof_kernel.h"
+#include "joseph3d_lor_geometry.h"
 
-// write the V bins t .. t+V-1 of a projection row (bins outside [0, num_tof_bins) are skipped)
+// Write the V bins t .. t+V-1 of a projection row (bins outside [0, num_tof_bins) are
+// skipped, they do not exist). Specialized for V = 1 and V = 4.
 template <int V>
 struct TOFSinoStore;
 
@@ -40,12 +100,13 @@ struct TOFSinoStore<1>
 template <>
 struct TOFSinoStore<4>
 {
-  // if all 4 bins are inside the row, row + t is 16-byte aligned (see `phase` below)
+  // if all 4 bins are inside the row, row + t is 16-byte aligned (see `phase` in the worker)
   WORKER_QUALIFIER static inline void store(float *row, int t, const float (&v)[4], int num_tof_bins)
   {
     if (t >= 0 && t + 3 < num_tof_bins)
     {
 #ifdef __CUDA_ARCH__
+      // GPU: one 16-byte store
       *reinterpret_cast<float4 *>(row + t) = make_float4(v[0], v[1], v[2], v[3]);
 #else
       row[t] = v[0];
@@ -56,6 +117,7 @@ struct TOFSinoStore<4>
     }
     else
     {
+      // group at the start or end of the row: only the existing bins
       for (int j = 0; j < 4; ++j)
         if (t + j >= 0 && t + j < num_tof_bins)
           row[t + j] = v[j];
@@ -63,6 +125,8 @@ struct TOFSinoStore<4>
   }
 };
 
+/// TOF sinogram forward projection of LOR i: writes all num_tof_bins values of
+/// projection_values[i * num_tof_bins ...]. See the explanation at the top of this file.
 template <int W, int V>
 WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
                                                           const float *lor_start,
@@ -80,76 +144,46 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
                                                           unsigned char is_lor_dependent_tof_sigma,
                                                           unsigned char is_lor_dependent_tof_center_offset)
 {
-  const int n0 = image_dim[0];
-  const int n1 = image_dim[1];
-  const int n2 = image_dim[2];
-  float *row = projection_values + i * num_tof_bins;
+  float *row = projection_values + i * num_tof_bins; // the TOF bins of this LOR
+  const float *p0 = lor_start + 3 * i;
+  const float *p1 = lor_end + 3 * i;
 
-  // test whether the ray intersects the image cube; if it does, direction is the
-  // principal axis, istart / iend the first / last intersected voxel planes and cf the
-  // correction factor voxel_size[direction] / cos(angle to the principal axis)
-  int direction;
-  float cf;
-  int istart = -1;
-  int iend = -1;
-  ray_cube_intersection_joseph(lor_start + 3 * i, lor_end + 3 * i, image_origin, voxel_size, image_dim,
-                               direction, cf, istart, iend);
-  if (istart == -1)
+  // ---------------------------------------------------------------------------------
+  // Geometry of the LOR (planes, interpolation); LORs that miss the image get zeros
+  JosephLOR lor;
+  if (!lor.init(p0, p1, image_origin, voxel_size, image_dim))
   {
     for (short it = 0; it < num_tof_bins; ++it)
       row[it] = 0.0f;
     return;
   }
+  const int istart = lor.istart;
+  const int iend = lor.iend;
 
-  // --- geometry: interpolation coordinates of the two other axes in plane ip are
-  // fa = ip * aa + ba (axis ax) and fb = ip * ab + bb (axis bx)
-  const float *p0 = lor_start + 3 * i;
-  const float *p1 = lor_end + 3 * i;
-  const int ax = (direction == 0) ? 1 : 0;
-  const int bx = (direction == 2) ? 1 : 2;
-  const float p0_dir = p0[direction], p0_a = p0[ax], p0_b = p0[bx];
-  const float dr = p1[direction] - p0_dir;
-  const float da = p1[ax] - p0_a;
-  const float db = p1[bx] - p0_b;
-  const float vs_dir = voxel_size[direction], vs_a = voxel_size[ax], vs_b = voxel_size[bx];
-  const float or_dir = image_origin[direction], or_a = image_origin[ax], or_b = image_origin[bx];
-  const float aa = (da * vs_dir) / (vs_a * dr);
-  const float ba = (p0_a - or_a + da * (or_dir - p0_dir) / dr) / vs_a;
-  const float ab = (db * vs_dir) / (vs_b * dr);
-  const float bb = (p0_b - or_b + db * (or_dir - p0_dir) / dr) / vs_b;
-
-  // linear voxel index strides of the plane axis and the two interpolation axes
-  // (selects instead of small arrays indexed by direction, which would go to local memory)
-  const std::size_t s_dir = (direction == 0) ? std::size_t(n1) * n2 : ((direction == 1) ? std::size_t(n2) : 1);
-  const std::size_t s_a = (ax == 0) ? std::size_t(n1) * n2 : std::size_t(n2); // ax is 0 or 1
-  const std::size_t s_b = (bx == 1) ? std::size_t(n2) : 1;                    // bx is 1 or 2
-  const int n_a = (ax == 0) ? n0 : n1;
-  const int n_b = (bx == 1) ? n1 : n2;
-
-  // --- TOF parameters
-  const float costheta = vs_dir / cf; // cosine of the angle between the ray and the principal axis
+  // ---------------------------------------------------------------------------------
+  // TOF parameters: truncated kernel of this LOR and the TOF bin coordinate of plane ip,
+  // it_f = ip * at + bt
   const float local_tof_sigma = is_lor_dependent_tof_sigma ? tof_sigma[i] : tof_sigma[0];
   const float local_tof_center_offset = is_lor_dependent_tof_center_offset ? tof_center_offset[i] : tof_center_offset[0];
   const TOFKernelGauss kernel(local_tof_sigma, tof_bin_width, num_sigmas);
+  float at, bt;
+  lor.tof_line(p0, p1, tof_bin_width, num_tof_bins, local_tof_center_offset, image_origin, voxel_size, at, bt);
 
-  // sign: whether the TOF bin numbers increase or decrease along the principal axis
-  const float sign = (p1[direction] >= p0_dir) ? 1.0f : -1.0f;
-  // center of TOF bin 0 projected onto the principal axis (a positive center offset
-  // shifts the TOF bins towards lor_end)
-  const float tof_origin = 0.5f * (p0_dir + p1[direction]) - sign * (0.5f * num_tof_bins - 0.5f) * (tof_bin_width * costheta) + sign * local_tof_center_offset * costheta;
-  const float tof_slope = sign * tof_bin_width * costheta;
-  // continuous TOF bin coordinate of plane ip: it_f = ip * at + bt
-  const float at = sign * cf / tof_bin_width;
-  const float bt = (or_dir - tof_origin) / tof_slope;
-
-  // traverse the planes such that it_f increases
+  // Visit the planes in the order of increasing it_f: in increasing plane order if
+  // at >= 0, in decreasing order otherwise. (The sum of the contributions does not depend
+  // on the order; only the window logic below needs it.)
   const bool forward = (at >= 0.0f);
   const int num_planes = iend - istart + 1;
-  const int max_window = W - (V - 1); // largest window that fits with aligned groups
+  // largest window that fits into the accumulator (with groups of 4, base can be up to 3
+  // bins before it_min, see above)
+  const int max_window = W - (V - 1);
 
-  // aligned groups of V bins: bins t with t = phase (mod V) start at a multiple of 4 * V bytes
+  // Alignment for groups of V bins: the bins t with t = phase (mod V) start at an address
+  // that is a multiple of 4 * V bytes. (row / sizeof(float)) % V is the position of bin 0
+  // within its group of V floats in memory. For V = 1 every bin is "aligned" (phase 0).
   const int phase = (V > 1) ? static_cast<int>((V - (reinterpret_cast<std::size_t>(row) / sizeof(float)) % V) % V) : 0;
 
+  // the accumulator: acc[k] holds the sum of TOF bin base + k
   float acc[W];
 #pragma unroll
   for (int k = 0; k < W; ++k)
@@ -158,19 +192,23 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
   int base = 0;  // TOF bin of acc[0]
   int first = 0; // first TOF bin covered by the accumulator (bins below are zero)
 
+  // ---------------------------------------------------------------------------------
+  // Loop over the planes, in the order of increasing TOF position
   for (int n = 0; n < num_planes; ++n)
   {
     const int ip = forward ? (istart + n) : (iend - n);
     const float it_f = tof_plane_position(ip, at, bt);
 
-    // TOF window of this plane
+    // TOF window of this plane: bins it_min .. it_min + n_tof_weights - 1
     int it_min, n_tof_weights;
     bool truncated;
     tof_window(it_f, kernel.half_width_bins, max_window, it_min, n_tof_weights, truncated);
 
-    // move the accumulator forward such that base <= it_min < base + V
+    // --- move the accumulator such that base <= it_min < base + V
     if (n == 0)
     {
+      // first plane: start the accumulator at it_min, rounded down to an aligned bin
+      // ((x % V + V) % V is the mathematical modulo, also for negative x)
       base = it_min - (((it_min - phase) % V) + V) % V;
       first = base;
     }
@@ -179,7 +217,9 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
     it_min = (it_min < base) ? base : it_min;
     if (it_min - base >= W)
     {
-      // the window jumped past the whole accumulator: write it, zeros up to the new start
+      // Rare case: the window jumped past the whole accumulator (TOF kernel and bins much
+      // narrower than the plane spacing). Write all W bins, write zeros for the skipped
+      // bins between the old accumulator and the new start, and restart at it_min.
 #pragma unroll
       for (int g = 0; g < W / V; ++g)
       {
@@ -200,7 +240,9 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
     }
     while (it_min >= base + V)
     {
-      // the first V bins are final: write them, shift the accumulator down by V
+      // Normal case: the window moved on by one group or more. The first V bins
+      // (base .. base + V - 1) are final: write them and shift the accumulator down by V
+      // (acc[k] = acc[k + V]); the V freed slots at the top start at zero.
       float v[V];
 #pragma unroll
       for (int j = 0; j < V; ++j)
@@ -214,27 +256,18 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
         acc[k] = 0.0f;
       base += V;
     }
+    // now base <= it_min < base + V, and the whole window (at most max_window bins) fits
+    // into acc[it_min - base .. it_min - base + n_tof_weights - 1]
 
-    // --- non-TOF contribution of this plane (bilinear interpolation, zero outside the image)
-    const float fa = ip * aa + ba;
-    const float fb = ip * ab + bb;
-    const int ia = static_cast<int>(floorf(fa));
-    const int ib = static_cast<int>(floorf(fb));
-    const float wa = fa - ia;
-    const float wb = fb - ib;
-    float val = 0.0f;
-#pragma unroll
-    for (int q = 0; q < 4; ++q)
-    {
-      const int ja = ia + (q & 1);
-      const int jb = ib + (q >> 1);
-      if ((ja >= 0) && (ja < n_a) && (jb >= 0) && (jb < n_b))
-        val += ((q & 1) ? wa : 1.0f - wa) * ((q >> 1) ? wb : 1.0f - wb) * image[ip * s_dir + ja * s_a + jb * s_b];
-    }
-    val *= cf;
+    // --- non-TOF contribution of this plane (cf times the bilinear interpolation)
+    const float val = lor.interp(image, ip);
 
-    // --- TOF weights of the window bins it_min .. it_min + n - 1 (acc slots it_min - base + k),
-    // looped over all W slots (compile-time indices) with a range check; shared edges
+    // --- distribute val over the window bins with the TOF weights
+    // weight of bin t: (cdf2(upper edge) - cdf2(lower edge)) * inv_norm, see tof_kernel.h.
+    // Neighbouring bins share an edge: e_lo is the lower edge of the current bin, e_hi its
+    // upper edge, which becomes e_lo of the next bin. Bin base + k is acc[k]; the loop runs
+    // over all W slots (compile-time indices, see above) and only adds to the slots
+    // k_lo <= k < k_hi of the window.
     const float inv_norm = tof_window_inv_norm(kernel, it_f, it_min, n_tof_weights, truncated);
     float e_lo = kernel.cdf2(it_min - 0.5f - it_f);
     const int k_lo = it_min - base;
@@ -251,7 +284,9 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
     }
   }
 
-  // write the remaining bins
+  // ---------------------------------------------------------------------------------
+  // After the last plane: write the remaining W bins of the accumulator (bins outside
+  // [0, num_tof_bins) are skipped by the store)
 #pragma unroll
   for (int g = 0; g < W / V; ++g)
   {
@@ -262,7 +297,9 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
     TOFSinoStore<V>::store(row, base + g * V, v, num_tof_bins);
   }
 
-  // bins outside the range covered by the accumulator
+  // Bins that the accumulator never covered get no contribution: write zeros. Together
+  // with the writes above, the accumulator covered the bins first .. base + W - 1 without
+  // gaps, so these are the bins before `first` and after base + W - 1.
   for (int t = 0; t < first && t < num_tof_bins; ++t)
     row[t] = 0.0f;
   for (int t = (base + W > 0 ? base + W : 0); t < num_tof_bins; ++t)
@@ -270,7 +307,8 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
 }
 
 // Call CALL(W, V) with the compile-time accumulator size W (one of tof_acc_size()) and
-// store width V (1 or 4) given at run time.
+// store width V (1 or 4) that are only known at run time: one branch per compiled
+// combination (18 combinations). Used by the CPU loop and to launch the GPU kernels.
 #define TOF_SINO_FWD_DISPATCH(W_RT, V_RT, CALL)       \
   do                                                  \
   {                                                   \
