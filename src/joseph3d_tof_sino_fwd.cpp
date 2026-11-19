@@ -20,10 +20,11 @@ void joseph3d_tof_sino_fwd(const float *lor_start,
                            int /* threads_per_block */,
                            void * /* stream: ignored without CUDA */)
 {
-  // Same per-LOR choice of accumulator size W and store width V as on the GPU (see
-  // joseph3d_tof_sino_fwd.cu), so that the CPU build runs and tests the same code
-  // paths. On the CPU, a group of 4 bins is written with 4 scalar stores; the results
-  // do not depend on V.
+  // For every LOR: choose the accumulator size W (from the TOF window size) and the store
+  // width V exactly as on the GPU (see joseph3d_tof_sino_fwd.cu and tof_kernel.h), and
+  // call the worker template compiled for (W, V). Using the same choice as on the GPU
+  // means that the CPU build runs and tests the same code paths. On the CPU, a group of 4
+  // bins is written with 4 normal stores; the results do not depend on V.
 #pragma omp parallel for
   for (long long i = 0; i < static_cast<long long>(num_lors); ++i)
   {

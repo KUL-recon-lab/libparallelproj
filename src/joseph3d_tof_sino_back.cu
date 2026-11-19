@@ -6,10 +6,10 @@
 #include <iostream>
 #include <stdexcept>
 
-// One kernel per (buffer size W, load width V), as for the forward projection: every
-// launch runs over all LORs and a thread only back projects its LOR if the LOR's class
-// is (W, V), so that every LOR is back projected exactly once without host
-// synchronization. The buffer size is checked first (from the TOF sigma only).
+// One kernel per (buffer size W, load width V), launched one after the other on the
+// call's stream; every launch runs over all LORs and a thread only back projects its LOR
+// if the LOR's class is (W, V), so that every LOR is back projected exactly once without
+// host synchronization. See the explanation in joseph3d_tof_sino_fwd.cu.
 template <int W, int V>
 __global__ void joseph3d_tof_sino_back_kernel(const float *lor_start,
                                               const float *lor_end,
