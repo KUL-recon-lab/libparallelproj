@@ -29,8 +29,13 @@ def _bilinear(img, direction, ip, fa, fb):
 
 
 def tof_sino_fwd_reference(xs, xe, img, origin, vs, tof_bin_width, sigma, offset, num_tof_bins,
-                           num_sigmas=3.0, max_window_bins=64):
-    """TOF sinogram (num_tof_bins,) of one LOR from xs to xe (3-vectors), float64"""
+                           num_sigmas=3.0, max_window_bins=64, table=None):
+    """TOF sinogram (num_tof_bins,) of one LOR from xs to xe (3-vectors), float64
+
+    table: None for the Gaussian kernel (sigma, num_sigmas), or (cdf, u_min, u_max, scale)
+    for a tabulated kernel (cumulative kernel cdf on a uniform grid from u_min to u_max in
+    spatial units, positive towards xe, stretched by scale; sigma / num_sigmas are ignored)
+    """
     xs, xe = np.asarray(xs, np.float64), np.asarray(xe, np.float64)
     origin, vs = np.asarray(origin, np.float64), np.asarray(vs, np.float64)
     img = np.asarray(img, np.float64)
@@ -76,8 +81,25 @@ def tof_sino_fwd_reference(xs, xe, img, origin, vs, tof_bin_width, sigma, offset
     sign = 1.0 if xe[direction] >= xs[direction] else -1.0
     tof_origin = (0.5 * (xs[direction] + xe[direction]) - sign * (0.5 * num_tof_bins - 0.5) * tof_bin_width * costheta
                   + sign * offset * costheta)
-    m = num_sigmas * sigma / tof_bin_width  # half width of the support in TOF bins
-    scale = tof_bin_width / (math.sqrt(2) * sigma)
+    # support [lo, hi] of the kernel relative to the TOF position (TOF bins) and the
+    # cumulative kernel (up to a constant factor) as a function of u in TOF bins
+    if table is None:
+        m = num_sigmas * sigma / tof_bin_width
+        lo, hi = -m, m
+        scale = tof_bin_width / (math.sqrt(2) * sigma)
+
+        def cdf(u):
+            return _erf(np.clip(u, lo, hi) * scale)
+    else:
+        tab, u_min, u_max, s_k = table
+        tab = np.asarray(tab, np.float64)
+        grid = np.linspace(u_min, u_max, tab.shape[0])
+        lo, hi = s_k * u_min / tof_bin_width, s_k * u_max / tof_bin_width
+
+        def cdf(u):
+            return np.interp(np.clip(u, lo, hi) * tof_bin_width / s_k, grid, tab)
+    norm = float(cdf(np.array([hi]))[0] - cdf(np.array([lo]))[0])
+
     for ip in range(istart, iend + 1):
         x_dir = origin[direction] + ip * vs[direction]
         t = (x_dir - xs[direction]) / d[direction]
@@ -85,16 +107,14 @@ def tof_sino_fwd_reference(xs, xe, img, origin, vs, tof_bin_width, sigma, offset
         fb = (xs[bx] + t * d[bx] - origin[bx]) / vs[bx]
         val = cf * _bilinear(img, direction, ip, fa, fb)
         it_f = (x_dir - tof_origin) / (sign * tof_bin_width * costheta)
-        it_min = math.floor(it_f - m + 0.5)
-        n = math.floor(it_f + m + 0.5) - it_min + 1
+        it_min = math.floor(it_f + lo + 0.5)
+        n = math.floor(it_f + hi + 0.5) - it_min + 1
         truncated = n > max_window_bins
         if truncated:
-            it_min, n = math.floor(it_f + 0.5) - max_window_bins // 2, max_window_bins
+            it_min, n = math.floor(it_f + 0.5 * (lo + hi) + 0.5) - max_window_bins // 2, max_window_bins
         bins = it_min + np.arange(n)
-        u = np.clip(np.arange(n + 1) + it_min - 0.5 - it_f, -m, m)
-        e = _erf(u * scale)
-        wgt = 0.5 * (e[1:] - e[:-1])
-        wgt /= (0.5 * (e[-1] - e[0])) if truncated else math.erf(m * scale)
+        e = cdf(np.arange(n + 1) + it_min - 0.5 - it_f)
+        wgt = (e[1:] - e[:-1]) / ((e[-1] - e[0]) if truncated else norm)
         ok = (bins >= 0) & (bins < num_tof_bins)
         out[bins[ok]] += val * wgt[ok]
     return out

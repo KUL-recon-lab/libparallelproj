@@ -239,6 +239,78 @@ Implementation-wise, this means that
   2. In sinogram mode, TOF windows of more than 64 TOF bins (:math:`2 n_\sigma \sigma_\text{TOF} / \Delta \gtrsim 62`) are additionally truncated to the 64 bins centered on the ray sample and renormalized. Use wider TOF bins (or a smaller :math:`n_\sigma`) in that case.
 
 
+Tabulated (non-Gaussian) TOF kernels
+------------------------------------
+
+The projectors with the suffix ``_tab`` (e.g. ``joseph3d_tof_sino_fwd_tab``) use an arbitrary,
+possibly asymmetric TOF kernel instead of the Gaussian, e.g. a kernel measured for a detector
+pair. The kernel is given as a table of its **cumulative distribution**
+
+.. math::
+
+   F(u) = \int_{-\infty}^{u} f(u') \, du' ,
+
+where :math:`f(u)` is the probability density that the TOF measurement places an annihilation
+at distance :math:`u` from its true position on the LOR. :math:`u` is measured **in spatial
+units** (the units of ``lor_start`` and ``lor_end``, e.g. mm) and is **positive towards the end
+point of the LOR**.
+
+The table holds :math:`F` at :math:`n` uniformly spaced points from :math:`u_\text{min}` to
+:math:`u_\text{max}`:
+
+.. math::
+
+   \texttt{tof_kernel_cdf}[k] = F\!\left(u_\text{min} + k \, \frac{u_\text{max} - u_\text{min}}{n - 1}\right), \quad k = 0, \dots, n - 1 ,
+
+and :math:`F` is interpolated linearly between the table points (which corresponds to a
+piecewise constant kernel :math:`f`). :math:`[u_\text{min}, u_\text{max}]` is the support of the
+kernel: :math:`F` is held constant outside. :math:`F` must not decrease; it does not need to
+start at 0 or end at 1, since the weights are normalized by :math:`F(u_\text{max}) - F(u_\text{min})`.
+
+**From arrival time differences to u.** Timing measurements give the difference of the arrival
+times of the two photons. With :math:`\Delta t = t_\text{start} - t_\text{end}` (arrival time at
+the detector at ``lor_start`` minus arrival time at the detector at ``lor_end``),
+
+.. math::
+
+   u = \frac{c \, \Delta t}{2} \approx 0.1499 \, \frac{\text{mm}}{\text{ps}} \, \Delta t .
+
+An annihilation closer to the end detector reaches it earlier, so :math:`\Delta t > 0` and
+:math:`u > 0`. If a LOR is stored with start and end swapped, the same detector pair needs the
+mirrored kernel :math:`F'(u) = 1 - F(-u)` (for a normalized :math:`F`), on the grid from
+:math:`-u_\text{max}` to :math:`-u_\text{min}`.
+
+**From a measured histogram to the table.** For a histogram of :math:`\Delta t` (e.g. of a point
+source at a known position), the cumulative sum of the counts is :math:`F` at the histogram bin
+edges (starting with 0 at the first edge); converting the edges to :math:`u` gives
+:math:`u_\text{min}`, :math:`u_\text{max}` and the table directly. Linear interpolation of this
+table is exactly the histogram as density. See the gallery example
+"TOF Projections with a Tabulated (Non-Gaussian) TOF Kernel".
+
+**Bin weights.** As for the Gaussian, the weight of a TOF bin with edges :math:`e_k, e_{k+1}`
+(along the LOR) for a ray sample at position :math:`p` is the integral of the kernel over the bin:
+
+.. math::
+
+   w_k = \frac{F_s(e_{k+1} - p - o) - F_s(e_k - p - o)}{F(u_\text{max}) - F(u_\text{min})}, \qquad F_s(u) = F(u / s),
+
+where :math:`o` is the TOF center offset of the LOR. The **TOF bin width is not part of the
+table** - the projector integrates over each bin - so the same table works for every TOF binning.
+
+**Kernel scale.** ``tof_kernel_scale`` :math:`s > 0` (one value, or one per LOR / event)
+stretches the kernel around :math:`u = 0` (the true position): :math:`s = 1` uses the kernel as
+tabulated, :math:`s = 1.5` the same shape 50 % wider, with support
+:math:`[s \, u_\text{min}, s \, u_\text{max}]`. The TOF center offset is a separate shift and is
+not scaled. (For an asymmetric kernel whose mean is not 0, the mean moves with :math:`s`.)
+
+.. important::
+
+  The projectors handle TOF windows of up to 64 TOF bins. If the support
+  :math:`s \, (u_\text{max} - u_\text{min})` is wider than about 62 TOF bin widths, the window
+  is truncated to 64 bins around the center of the support and renormalized, which cuts off
+  parts of the kernel. Trim empty tails of a measured kernel from the table.
+
+
 Math symbols vs C API variable names
 ------------------------------------
 
@@ -252,3 +324,6 @@ Math symbols vs C API variable names
    ":math:`\Delta`", "TOF bin width", "``tof_bin_width``"
    ":math:`\sigma_{\mathrm{TOF}}`", "TOF standard deviation", "``tof_sigma``"
    ":math:`n_\sigma`", "Truncation width in units of :math:`\sigma_{\mathrm{TOF}}`", "``num_sigmas``"
+   ":math:`F(u)`", "Cumulative TOF kernel (table, ``_tab`` projectors)", "``tof_kernel_cdf``"
+   ":math:`u_\text{min}, u_\text{max}`", "Support of the tabulated kernel (spatial units)", "``tof_kernel_u_min``, ``tof_kernel_u_max``"
+   ":math:`s`", "Scale of the tabulated kernel", "``tof_kernel_scale``"

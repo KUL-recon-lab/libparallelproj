@@ -1,8 +1,58 @@
 #pragma once
+// =====================================================================================
+// TOF listmode forward projection of one event (Joseph's method), CPU and CUDA
+// =====================================================================================
+//
+// Prerequisites: joseph3d_lor_geometry.h (planes, interpolation, TOF position of a plane)
+// and tof_kernel.h (TOF bin coordinates, TOF kernel, weights).
+//
+// A listmode event is a LOR together with the TOF bin `it` in which it was detected. Its
+// expected value is the value of TOF bin `it` of the TOF sinogram projection of its LOR:
+//
+//   value = sum over the image planes ip of  w_it(it_f(ip)) * cf * interp(image, plane ip)
+//
+// where w_it(it_f) is the weight of TOF bin `it` for the intersection point with plane ip
+// (tof_bin_weight in tof_kernel.h - exactly the weight the TOF sinogram projectors use),
+// and cf * interp is the (non-TOF) contribution of the plane. Because only one TOF bin is
+// needed, only the planes whose TOF kernel support overlaps bin `it` are visited (a few
+// planes around the TOF bin), not all planes of the LOR.
+//
+// The template parameter KP is the per-call kernel description (TOFGaussParams or
+// TOFTableParams, see tof_kernel.h); kp.kernel(i) is the TOF kernel of event i.
 #include "cuda_compat.h"
 #include "utils.h"
 #include "tof_kernel.h"
+#include "joseph3d_lor_geometry.h"
 
+/// First and last image plane (istart, iend) whose TOF kernel support can overlap TOF bin
+/// `it`, clipped to the planes intersected by the LOR. Returns false if there is none.
+///
+/// The support of a plane at TOF coordinate it_f is [it_f + u_lo, it_f + u_hi]; it
+/// overlaps bin `it` (= [it - 0.5, it + 0.5]) if it - 0.5 - u_hi < it_f < it + 0.5 - u_lo.
+/// We use the slightly larger range it_f in [it - u_hi - 1, it - u_lo + 1] (planes outside
+/// the overlap simply get weight 0) and convert it to plane numbers with
+/// it_f = ip * at + bt, i.e. ip = (it_f - bt) / at. If at < 0 (TOF bins numbered against
+/// the plane direction), the two ends swap.
+template <typename Kernel>
+WORKER_QUALIFIER inline bool tof_lm_plane_range(const JosephLOR &lor, const Kernel &kernel, int it, float at, float bt,
+                                                int &istart, int &iend)
+{
+  const float ip_a = (it - kernel.u_hi - 1.0f - bt) / at;
+  const float ip_b = (it - kernel.u_lo + 1.0f - bt) / at;
+  // clamp to the intersected planes (+-1) before converting to int (avoids overflow)
+  const float lo = fmaxf(fminf(ip_a, ip_b), static_cast<float>(lor.istart - 1));
+  const float hi = fminf(fmaxf(ip_a, ip_b), static_cast<float>(lor.iend + 1));
+  istart = static_cast<int>(floorf(lo));
+  iend = static_cast<int>(ceilf(hi));
+  if (istart < lor.istart)
+    istart = lor.istart;
+  if (iend > lor.iend)
+    iend = lor.iend;
+  return istart <= iend;
+}
+
+/// TOF listmode forward projection of event i: projection_values[i] (see above).
+template <typename KP>
 WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
                                                         const float *lor_start,
                                                         const float *lor_end,
@@ -12,197 +62,44 @@ WORKER_QUALIFIER inline void joseph3d_tof_lm_fwd_worker(std::size_t i,
                                                         float *projection_values,
                                                         const int *image_dim,
                                                         float tof_bin_width,
-                                                        const float *tof_sigma,
                                                         const float *tof_center_offset,
-                                                        float num_sigmas,
                                                         const short *tof_bin_index,
                                                         short num_tof_bins,
-                                                        unsigned char is_lor_dependent_tof_sigma,
-                                                        unsigned char is_lor_dependent_tof_center_offset)
+                                                        unsigned char is_lor_dependent_tof_center_offset,
+                                                        const KP &kp)
 {
-  int n0 = image_dim[0];
-  int n1 = image_dim[1];
-  int n2 = image_dim[2];
+  // events that miss the image or have degenerate TOF parameters get 0
+  projection_values[i] = 0.0f;
 
-  int direction;
-  int i0, i1, i2;
-  float i0_f, i1_f, i2_f;
-  float cf;
-
-  float a0, a1, a2;
-  float b0, b1, b2;
-
-  // start and end plane index along the principal axis direction according to TOF limits
-  int istart = -1;
-  int iend = -1;
-  // start / end plane where the ray intersects the image cube along the principal axis direction
-  int istart_vol = -1;
-  int iend_vol = -1;
-  int it = tof_bin_index[i];
-
-  float d0 = lor_end[3 * i + 0] - lor_start[3 * i + 0];
-  float d1 = lor_end[3 * i + 1] - lor_start[3 * i + 1];
-  float d2 = lor_end[3 * i + 2] - lor_start[3 * i + 2];
-
-  float dr;
-
-  // test whether the ray intersects the image cube
-  // if it does not, istart and iend are set to -1
-  // if it does, direction is set to the principal axis
-  // and istart and iend are set to the first and last voxel planes
-  // that are intersected
-  // cf is the correction factor voxel_size[dir]/cos[dir]
-  ray_cube_intersection_joseph(lor_start + 3 * i, lor_end + 3 * i, image_origin, voxel_size, image_dim, direction, cf, istart_vol, iend_vol);
-
-  // if the ray does not intersect the image cube, return
-  // istart and iend are set to -1
-  if (istart_vol == -1)
-  {
-    projection_values[i] = 0.0f; // ensure missed LM events produce a defined (zero) value
+  const float *p0 = lor_start + 3 * i;
+  const float *p1 = lor_end + 3 * i;
+  JosephLOR lor;
+  if (!lor.init(p0, p1, image_origin, voxel_size, image_dim))
     return;
-  }
 
-  //////////////////////////////////////////////////////////////////////////////
-  //////////////////////////////////////////////////////////////////////////////
-  //////////////////////////////////////////////////////////////////////////////
-  ////// calculate TOF-related parameters
-  float toAdd = 0.0;                           // variable LM forward projection (to reduce access to projection_values[i])
-  float costheta = voxel_size[direction] / cf; // cosine of angle between ray and principal axis
-
-  // get the tof_sigma and tof_center_offset for this LOR depending on whether they are constant or LOR-dependent
-  float local_tof_sigma = is_lor_dependent_tof_sigma ? tof_sigma[i] : tof_sigma[0];
-  float local_tof_center_offset = is_lor_dependent_tof_center_offset ? tof_center_offset[i] : tof_center_offset[0];
-
-  // Guard against degenerate TOF parameters that would make the plane-range
-  // computation below divide by zero or yield non-finite istart/iend (whose cast
-  // to int is undefined). Python-level validation normally prevents this; this
-  // protects direct C-API callers. Such an event contributes nothing.
-  if (!(tof_bin_width > 0.0f) || !isfinite(tof_bin_width) ||
-      !(local_tof_sigma > 0.0f) || !isfinite(local_tof_sigma) ||
-      !(num_sigmas > 0.0f) || !isfinite(num_sigmas))
-  {
-    projection_values[i] = 0.0f;
+  // TOF kernel of this event (Gaussian or table); degenerate parameters (e.g. sigma <= 0):
+  // no contribution (this also protects the plane range computation below)
+  const auto kernel = kp.kernel(i);
+  if (!kernel.valid())
     return;
-  }
 
-  // sign variable that indicated whether TOF bin numbers increase or decrease when
-  // through the image along the principal axis direction
-  float sign = (lor_end[3 * i + direction] >= lor_start[3 * i + direction]) ? 1.0f : -1.0f;
+  // TOF bin coordinate of plane ip: it_f = ip * at + bt (same as in the sinogram projectors)
+  const float local_tof_center_offset = is_lor_dependent_tof_center_offset ? tof_center_offset[i] : tof_center_offset[0];
+  float at, bt;
+  lor.tof_line(p0, p1, tof_bin_width, num_tof_bins, local_tof_center_offset, image_origin, voxel_size, at, bt);
 
-  // the center of the first TOF bin (TOF bin 0) projected onto the principal axis
-  // (same float expression as in the TOF sinogram projectors)
-  float tof_origin = 0.5f * (lor_start[3 * i + direction] + lor_end[3 * i + direction]) - sign * (0.5f * num_tof_bins - 0.5f) * (tof_bin_width * costheta) + sign * local_tof_center_offset * costheta;
-  // slope of TOF bin number as a function of distance along the principal axis
-  // the position of the TOF bins projects onto the principal axis is: tof_origin + tof_bin_number*tof_slope
-  float tof_slope = sign * tof_bin_width * costheta;
+  // only the planes around the TOF bin of the event
+  const int it = tof_bin_index[i];
+  int istart, iend;
+  if (!tof_lm_plane_range(lor, kernel, it, at, bt, istart, iend))
+    return;
 
-  // the TOF bin number of intersection point of the ray with a given image plane along the principal axis is it_f = i*at + bt
-  float at = sign * cf / tof_bin_width;
-  float bt = (image_origin[direction] - tof_origin) / tof_slope;
-
-  // Truncated TOF kernel (same weights as the TOF sinogram projectors, see tof_kernel.h):
-  // the weight of TOF bin `it` for an image plane at TOF bin coordinate it_f is the
-  // weight of bin `it` in the sinogram projection of that plane, so a listmode event
-  // gets exactly the value of its TOF sinogram bin. Only planes with |it_f - it| <
-  // m + 0.5 (m = num_sigmas * sigma / tof_bin_width) can contribute; the plane range
-  // below uses m + 1 and is clipped to the planes intersected by the image.
-  const TOFKernelGauss kernel(local_tof_sigma, tof_bin_width, num_sigmas);
-  const float max_tof_bin_diff = num_sigmas * local_tof_sigma / tof_bin_width + 1.0f;
-  istart = static_cast<int>(floorf(((it - sign * max_tof_bin_diff) - bt) / at));
-  iend = static_cast<int>(ceilf(((it + sign * max_tof_bin_diff) - bt) / at));
-  if (istart < istart_vol)
-    istart = istart_vol;
-  if (iend > iend_vol)
-    iend = iend_vol;
-
-  float it_f;
-
-  float tof_plane_weight;
-
-  //////////////////////////////////////////////////////////////////////////////
-  //////////////////////////////////////////////////////////////////////////////
-  //////////////////////////////////////////////////////////////////////////////
-
-  if (direction == 0)
+  float sum = 0.0f;
+  for (int ip = istart; ip <= iend; ++ip)
   {
-    dr = d0;
-
-    a1 = (d1 * voxel_size[direction]) / (voxel_size[1] * dr);
-    b1 = (lor_start[3 * i + 1] - image_origin[1] + d1 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[1];
-
-    a2 = (d2 * voxel_size[direction]) / (voxel_size[2] * dr);
-    b2 = (lor_start[3 * i + 2] - image_origin[2] + d2 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[2];
-
-    for (i0 = istart; i0 <= iend; ++i0)
-    {
-      i1_f = i0 * a1 + b1;
-      i2_f = i0 * a2 + b2;
-      it_f = tof_plane_position(i0, at, bt);
-      // TOF contribution
-      tof_plane_weight = tof_bin_weight(kernel, it_f, it);
-
-      // we only add contribution from valid planes where the ray intersects the image cube
-      if (i0 >= istart_vol && i0 <= iend_vol)
-      {
-        toAdd += tof_plane_weight * bilinear_interp_fixed0(image, n0, n1, n2, i0, i1_f, i2_f);
-      }
-
-    }
+    const float w = tof_bin_weight(kernel, tof_plane_position(ip, at, bt), it);
+    if (w != 0.0f)
+      sum += w * lor.interp(image, ip);
   }
-  else if (direction == 1)
-  {
-    dr = d1;
-
-    a0 = (d0 * voxel_size[direction]) / (voxel_size[0] * dr);
-    b0 = (lor_start[3 * i + 0] - image_origin[0] + d0 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[0];
-
-    a2 = (d2 * voxel_size[direction]) / (voxel_size[2] * dr);
-    b2 = (lor_start[3 * i + 2] - image_origin[2] + d2 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[2];
-
-    for (i1 = istart; i1 <= iend; ++i1)
-    {
-      i0_f = i1 * a0 + b0;
-      i2_f = i1 * a2 + b2;
-      it_f = tof_plane_position(i1, at, bt);
-      // TOF contribution
-      tof_plane_weight = tof_bin_weight(kernel, it_f, it);
-
-      // we only add contribution from valid planes where the ray intersects the image cube
-      if (i1 >= istart_vol && i1 <= iend_vol)
-      {
-        toAdd += tof_plane_weight * bilinear_interp_fixed1(image, n0, n1, n2, i0_f, i1, i2_f);
-      }
-
-    }
-  }
-  else if (direction == 2)
-  {
-    dr = d2;
-
-    a0 = (d0 * voxel_size[direction]) / (voxel_size[0] * dr);
-    b0 = (lor_start[3 * i + 0] - image_origin[0] + d0 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[0];
-
-    a1 = (d1 * voxel_size[direction]) / (voxel_size[1] * dr);
-    b1 = (lor_start[3 * i + 1] - image_origin[1] + d1 * (image_origin[direction] - lor_start[3 * i + direction]) / dr) / voxel_size[1];
-
-    for (i2 = istart; i2 <= iend; ++i2)
-    {
-      i0_f = i2 * a0 + b0;
-      i1_f = i2 * a1 + b1;
-      it_f = tof_plane_position(i2, at, bt);
-      // TOF contribution
-      tof_plane_weight = tof_bin_weight(kernel, it_f, it);
-
-      // we only add contribution from valid planes where the ray intersects the image cube
-      if (i2 >= istart_vol && i2 <= iend_vol)
-      {
-        toAdd += tof_plane_weight * bilinear_interp_fixed2(image, n0, n1, n2, i0_f, i1_f, i2);
-      }
-
-    }
-  }
-
-  // sum over the planes of TOF weight x interpolated image value, times the non-TOF
-  // correction factor cf (as in the TOF sinogram projection)
-  projection_values[i] = cf * toAdd;
+  projection_values[i] = sum;
 }

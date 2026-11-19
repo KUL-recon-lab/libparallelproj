@@ -127,7 +127,7 @@ struct TOFSinoStore<4>
 
 /// TOF sinogram forward projection of LOR i: writes all num_tof_bins values of
 /// projection_values[i * num_tof_bins ...]. See the explanation at the top of this file.
-template <int W, int V>
+template <int W, int V, typename KP>
 WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
                                                           const float *lor_start,
                                                           const float *lor_end,
@@ -137,12 +137,10 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
                                                           float *projection_values,
                                                           const int *image_dim,
                                                           float tof_bin_width,
-                                                          const float *tof_sigma,
                                                           const float *tof_center_offset,
-                                                          float num_sigmas,
                                                           short num_tof_bins,
-                                                          unsigned char is_lor_dependent_tof_sigma,
-                                                          unsigned char is_lor_dependent_tof_center_offset)
+                                                          unsigned char is_lor_dependent_tof_center_offset,
+                                                          const KP &kp)
 {
   float *row = projection_values + i * num_tof_bins; // the TOF bins of this LOR
   const float *p0 = lor_start + 3 * i;
@@ -163,9 +161,17 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
   // ---------------------------------------------------------------------------------
   // TOF parameters: truncated kernel of this LOR and the TOF bin coordinate of plane ip,
   // it_f = ip * at + bt
-  const float local_tof_sigma = is_lor_dependent_tof_sigma ? tof_sigma[i] : tof_sigma[0];
   const float local_tof_center_offset = is_lor_dependent_tof_center_offset ? tof_center_offset[i] : tof_center_offset[0];
-  const TOFKernelGauss kernel(local_tof_sigma, tof_bin_width, num_sigmas);
+  // TOF kernel of this LOR (Gaussian or table, see tof_kernel.h): built by the per-call
+  // kernel parameters kp from the LOR's sigma or kernel scale
+  const auto kernel = kp.kernel(i);
+  if (!kernel.valid())
+  {
+    // degenerate TOF parameters (e.g. sigma <= 0): no TOF contribution
+    for (short it = 0; it < num_tof_bins; ++it)
+      row[it] = 0.0f;
+    return;
+  }
   float at, bt;
   lor.tof_line(p0, p1, tof_bin_width, num_tof_bins, local_tof_center_offset, image_origin, voxel_size, at, bt);
 
@@ -202,7 +208,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
     // TOF window of this plane: bins it_min .. it_min + n_tof_weights - 1
     int it_min, n_tof_weights;
     bool truncated;
-    tof_window(it_f, kernel.half_width_bins, max_window, it_min, n_tof_weights, truncated);
+    tof_window(it_f, kernel, max_window, it_min, n_tof_weights, truncated);
 
     // --- move the accumulator such that base <= it_min < base + V
     if (n == 0)
@@ -263,13 +269,13 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
     const float val = lor.interp(image, ip);
 
     // --- distribute val over the window bins with the TOF weights
-    // weight of bin t: (cdf2(upper edge) - cdf2(lower edge)) * inv_norm, see tof_kernel.h.
+    // weight of bin t: (cdf(upper edge) - cdf(lower edge)) * inv_norm, see tof_kernel.h.
     // Neighbouring bins share an edge: e_lo is the lower edge of the current bin, e_hi its
     // upper edge, which becomes e_lo of the next bin. Bin base + k is acc[k]; the loop runs
     // over all W slots (compile-time indices, see above) and only adds to the slots
     // k_lo <= k < k_hi of the window.
     const float inv_norm = tof_window_inv_norm(kernel, it_f, it_min, n_tof_weights, truncated);
-    float e_lo = kernel.cdf2(it_min - 0.5f - it_f);
+    float e_lo = kernel.cdf(it_min - 0.5f - it_f);
     const int k_lo = it_min - base;
     const int k_hi = k_lo + n_tof_weights;
 #pragma unroll
@@ -277,7 +283,7 @@ WORKER_QUALIFIER inline void joseph3d_tof_sino_fwd_worker(std::size_t i,
     {
       if (k >= k_lo && k < k_hi)
       {
-        const float e_hi = kernel.cdf2(base + k + 0.5f - it_f);
+        const float e_hi = kernel.cdf(base + k + 0.5f - it_f);
         acc[k] += (e_hi - e_lo) * inv_norm * val;
         e_lo = e_hi;
       }
