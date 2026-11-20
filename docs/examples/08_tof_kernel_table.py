@@ -23,7 +23,7 @@ u from ``u_min`` to ``u_max``, where u is the distance (in the units of the LOR 
 here mm) between the TOF position and the true annihilation point, **positive towards the
 end point of the LOR**. The TOF bin width is *not* part of the table: the projectors
 integrate the kernel over each TOF bin themselves. See the section on tabulated TOF kernels
-in :doc:`/theory_background`.
+in :doc:`/theory/tof`.
 
 For an arrival time difference :math:`\\Delta t = t_\\text{start} - t_\\text{end}` (arrival
 time at the detector at ``lor_start`` minus arrival time at the detector at ``lor_end``),
