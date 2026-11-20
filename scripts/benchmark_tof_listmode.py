@@ -9,12 +9,18 @@ The script times the TOF listmode forward and back projection of the same events
     lor           sorted by LOR (sinogram index), then TOF bin
     axis_tof      grouped by the principal axis of the LOR, then sorted by the coordinate
                   of the TOF center along that axis (Cui et al., Med Phys 2011)
-    axis_morton   grouped by the principal axis, then sorted along a 3D Morton (Z-order)
-                  curve of the TOF center (neighbouring events are close in 3D)
+    morton<c>     sorted along a 3D Morton (Z-order) curve of the TOF center, on a grid of
+                  c voxels (neighbouring events are close in 3D)
+    axis_morton<c>  grouped by the principal axis of the LOR, then as morton<c>
+    axis_dir<n>_morton<c>  additionally grouped by n bins of the transaxial direction
 - with different THREADS PER BLOCK (hypothesis H4: occupancy; with 64 threads per block,
   at most 16 blocks = 1024 threads are resident per SM on many GPUs),
 - with the Gaussian TOF kernel (erf) and the same Gaussian as a table (hypothesis H5:
   arithmetic per plane; if both are equally fast, erf is not the limit).
+
+Finally, it times "sorting inside every call" (sort key + sort + reordering + projection
+in one call) against events that are sorted once (e.g. once per subset, reused in every
+iteration), to decide whether the projectors should sort automatically.
 
 It also estimates the number of image planes visited per event with the current plane
 range (margin of 1 TOF bin) and with the minimal range (margin of 0.5 TOF bin)
@@ -33,6 +39,7 @@ Needs PyTorch. The geometry and TOF presets are those of scripts/benchmark_tof_s
 
 import argparse
 import math
+import re
 import time
 
 import torch
@@ -40,7 +47,8 @@ import parallelproj_core as pc
 
 from benchmark_tof_sinogram import FWHM_TO_SIGMA, PRESETS, image_geometry, sinogram_lors
 
-ORDERS = ["random", "lor", "axis_tof", "axis_morton"]
+ORDERS = ["random", "lor", "axis_tof", "morton2", "axis_morton1", "axis_morton2", "axis_morton4", "axis_morton8",
+          "axis_dir4_morton2", "axis_dir8_morton2", "axis_dir8_morton4", "axis_dir16_morton4"]
 
 
 def voxel_grid(shape, vs, origin):
@@ -91,7 +99,41 @@ def morton3(q):
     return spread(q[:, 0]) | (spread(q[:, 1]) << 1) | (spread(q[:, 2]) << 2)
 
 
-def event_order(name, lor_idx, it, a, b, nb, w, vs, origin, gen):
+def sort_key(s, e, it, nb, w, vs, origin, cell, ndir, use_axis, axial_axis):
+    """64-bit sort key per event, computed from the float32 event data (as a library
+    function would do it):
+
+      bits 40-41: principal axis of the LOR (if use_axis)
+      bits 32-39: coarse transaxial direction bin (ndir bins of the azimuthal angle in [0, pi))
+      bits  0-29: 3D Morton (Z-order) code of the TOF center, on a grid of `cell` voxels
+
+    Events with close keys have TOF centers close in 3D (and similar directions)."""
+    d = e - s
+    axis = torch.argmax(d.abs(), dim=1)
+    u = (it.float() - 0.5 * (nb - 1)) * w
+    c = 0.5 * (s + e) + u[:, None] * d / torch.linalg.norm(d, dim=1, keepdim=True)
+    q = torch.floor((c - origin) / (cell * vs)).long().clamp(0, 1023)
+    key = morton3(q)
+    if ndir > 1:
+        ta, tb = (1, 2) if axial_axis == 0 else (0, 1)  # transaxial components
+        phi = torch.remainder(torch.atan2(d[:, tb], d[:, ta]), math.pi)  # direction of the line, in [0, pi)
+        dbin = torch.clamp((phi * (ndir / math.pi)).long(), 0, ndir - 1)
+        key = key | (dbin << 32)
+    if use_axis:
+        key = key | (axis.long() << 40)
+    return key
+
+
+def parse_order(name):
+    """(cell, ndir, use_axis) of a Morton order name: morton<c>, axis_morton<c>,
+    axis_dir<n>_morton<c>; None for the other orders"""
+    m = re.fullmatch(r"(axis_)?(?:dir(\d+)_)?morton(\d+)", name)
+    if m is None:
+        return None
+    return int(m.group(3)), int(m.group(2) or 1), m.group(1) is not None
+
+
+def event_order(name, lor_idx, it, s, e, a, b, nb, w, vs, origin, gen, axial_axis):
     """permutation of the events for the given order (computed on the device of the inputs)"""
     n = lor_idx.shape[0]
     if name == "random":
@@ -99,19 +141,17 @@ def event_order(name, lor_idx, it, a, b, nb, w, vs, origin, gen):
     if name == "lor":
         key = lor_idx.long() * nb + it.long()
         return torch.argsort(key)
-    d = (b - a).abs()
-    axis = torch.argmax(d, dim=1)  # principal axis (ties: first axis, as in the projectors)
-    c = tof_centers(a, b, it, nb, w)
     if name == "axis_tof":
+        axis = torch.argmax((b - a).abs(), dim=1)
+        c = tof_centers(a, b, it, nb, w)
         pos = c.gather(1, axis[:, None])[:, 0]
         order = torch.argsort(pos, stable=True)
         return order[torch.argsort(axis[order], stable=True)]
-    if name == "axis_morton":
-        # voxel coordinates of the TOF center (clamped), in units of 2 voxels
-        q = torch.floor((c - origin.double()) / (2 * vs.double())).long().clamp(0, 1023)
-        key = (axis.long() << 32) | morton3(q)
-        return torch.argsort(key)
-    raise ValueError(name)
+    spec = parse_order(name)
+    if spec is None:
+        raise ValueError(f"unknown order {name}")
+    cell, ndir, use_axis = spec
+    return torch.argsort(sort_key(s, e, it, nb, w, vs, origin, cell, ndir, use_axis, axial_axis))
 
 
 def main():
@@ -120,9 +160,13 @@ def main():
     p.add_argument("--preset", default="signa", choices=sorted(PRESETS))
     p.add_argument("--num_events", type=int, default=10_000_000)
     p.add_argument("--num_sigmas", type=float, default=3.0)
-    p.add_argument("--orders", nargs="+", default=ORDERS, choices=ORDERS)
-    p.add_argument("--tpb", nargs="+", type=int, default=[64, 128, 256], help="threads per block to test")
-    p.add_argument("--kernels", nargs="+", default=["gauss", "table"], choices=["gauss", "table"])
+    p.add_argument("--orders", nargs="+", default=ORDERS,
+                   help="random, lor, axis_tof, or Morton orders: morton<c>, axis_morton<c>, axis_dir<n>_morton<c> "
+                        "(c: grid cell in voxels, n: number of direction bins)")
+    p.add_argument("--tpb", nargs="+", type=int, default=[64, 256], help="threads per block to test")
+    p.add_argument("--kernels", nargs="+", default=["gauss"], choices=["gauss", "table"])
+    p.add_argument("--auto_order", default="axis_morton2",
+                   help="order used to time 'sorting inside every call' (key + sort + reorder + projection)")
     p.add_argument("--axial_axis", type=int, default=2, choices=[0, 2])
     p.add_argument("--repeats", type=int, default=3)
     args = p.parse_args()
@@ -223,7 +267,7 @@ def main():
     for order in args.orders:
         sync()
         t0 = time.perf_counter()
-        perm = event_order(order, lor_d, it_d, a_d, b_d, nb, w, vs64, origin64, gen)
+        perm = event_order(order, lor_d, it_d, ev_s, ev_e, a_d, b_d, nb, w, vs_d, origin_d, gen, args.axial_axis)
         s, e, tb = ev_s[perm].contiguous(), ev_e[perm].contiguous(), it_d[perm].contiguous()
         sync()
         t_sort = time.perf_counter() - t0
@@ -232,7 +276,7 @@ def main():
         err_f = float((y - y_ref[perm]).abs().max() / y_ref.abs().max())
         back(s, e, tb, ones, x, "gauss", 64)
         err_b = float((x - x_ref).abs().max() / x_ref.abs().max())
-        print(f"\norder {order:12s} sort + permute {t_sort:7.3f} s   check: fwd max rel diff {err_f:.1e}, "
+        print(f"\norder {order:20s} sort + permute {t_sort:7.3f} s   check: fwd max rel diff {err_f:.1e}, "
               f"back max rel diff {err_b:.1e}")
         for kernel in args.kernels:
             for tpb in args.tpb:
@@ -248,7 +292,44 @@ def main():
     if ref is not None:
         print("\nspeed-up vs. random order, Gaussian kernel, 64 threads per block (default call):")
         for order, kernel, tpb, t_f, t_b in results:
-            print(f"  {order:12s} {kernel:5s} tpb {tpb:4d}:  fwd {ref[3] / t_f:5.2f}x   back {ref[4] / t_b:5.2f}x")
+            print(f"  {order:20s} {kernel:5s} tpb {tpb:4d}:  fwd {ref[3] / t_f:5.2f}x   back {ref[4] / t_b:5.2f}x")
+
+    # --- "sorting inside every call": what an automatic sort in each projector call would
+    # cost. Timed: sort key + argsort + reordering of the inputs + projection (+ putting the
+    # forward results back into the original order), all in one call, compared with the
+    # projection of pre-sorted events (sorted once, e.g. once per subset for all iterations).
+    spec = parse_order(args.auto_order)
+    if spec is not None:
+        cell, ndir, use_axis = spec
+        y_out = torch.zeros(args.num_events, dtype=f32, device=dev)
+        vals = torch.ones(args.num_events, dtype=f32, device=dev)
+
+        def key_and_sort():
+            return torch.argsort(sort_key(ev_s, ev_e, it_d, nb, w, vs_d, origin_d, cell, ndir, use_axis, args.axial_axis))
+
+        def auto_fwd():
+            perm = key_and_sort()
+            fwd(ev_s[perm], ev_e[perm], it_d[perm], y, "gauss", 64)
+            y_out[perm] = y
+
+        def auto_back():
+            perm = key_and_sort()
+            back(ev_s[perm], ev_e[perm], it_d[perm], vals[perm], x, "gauss", 64)
+
+        perm = key_and_sort()
+        s, e, tb = ev_s[perm].contiguous(), ev_e[perm].contiguous(), it_d[perm].contiguous()
+        t_key = best_time(key_and_sort)
+        t_reorder = best_time(lambda: (ev_s[perm], ev_e[perm], it_d[perm]))
+        t_pre_f = best_time(lambda: fwd(s, e, tb, y, "gauss", 64))
+        t_pre_b = best_time(lambda: back(s, e, tb, ones, x, "gauss", 64))
+        t_auto_f = best_time(auto_fwd)
+        t_auto_b = best_time(auto_back)
+        t_rand_f = best_time(lambda: fwd(ev_s, ev_e, it_d, y, "gauss", 64))
+        t_rand_b = best_time(lambda: back(ev_s, ev_e, it_d, ones, x, "gauss", 64))
+        print(f"\nsorting inside every call ({args.auto_order}, Gaussian kernel, 64 threads per block):")
+        print(f"  sort key + argsort {t_key:7.4f} s, reordering the 3 event arrays {t_reorder:7.4f} s")
+        print(f"  fwd:  random order {t_rand_f:7.4f} s   sorted once {t_pre_f:7.4f} s   sorted in every call {t_auto_f:7.4f} s")
+        print(f"  back: random order {t_rand_b:7.4f} s   sorted once {t_pre_b:7.4f} s   sorted in every call {t_auto_b:7.4f} s")
 
 
 if __name__ == "__main__":
