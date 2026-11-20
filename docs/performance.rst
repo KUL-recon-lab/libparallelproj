@@ -81,7 +81,7 @@ than the TOF sinogram projectors. If consecutive events have nearby TOF centers 
 the threads of a warp access the same image region at the same time, and the voxels come
 from the caches.
 
-.. figure:: _static/lm_event_order.svg
+.. figure:: _static/lm_event_order.png
    :width: 100%
 
    (a) TOF center of an event and the planes its projection visits (TOF window).
@@ -96,7 +96,7 @@ interleaves the bits of the cell coordinates; cells with close codes are (mostly
 space, in all three directions at once. Sorting the events by the key orders them by
 principal axis and then along the Z-shaped curve through the grid cells.
 
-.. figure:: _static/lm_sort_key.svg
+.. figure:: _static/lm_sort_key.png
    :width: 100%
 
    (a) Morton code of the cells of a 2D grid: following the numbers means following the

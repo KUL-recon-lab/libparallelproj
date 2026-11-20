@@ -1,19 +1,22 @@
 """Figures explaining the sorting of TOF listmode events (issue #54).
 
-Creates
-  lm_event_order.svg  (a) TOF center of an event and the image region its projection
+Creates (small palette PNGs, see save_png)
+  lm_event_order.png  (a) TOF center of an event and the image region its projection
                       touches, (b) 3 warps (32 consecutive events each) in random order,
                       (c) the same for events sorted by their sort key
-  lm_sort_key.svg     (a) Morton (Z-order) code of a 2D grid of cells,
+  lm_sort_key.png     (a) Morton (Z-order) code of a 2D grid of cells,
                       (b) bit layout of the 64-bit sort key
 
 2D illustration (one transaxial plane); the library uses the same ideas in 3D.
 Run from this directory: python plot_lm_event_order.py
 """
 
+import io
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Rectangle
+from PIL import Image
 
 rng = np.random.default_rng(3)
 
@@ -26,6 +29,16 @@ W, SIGMA, NSIG = 15.0, 15.0, 3.0
 NB = int(2 * R_SCANNER / W) | 1  # number of TOF bins (odd)
 CELL = 2  # Morton grid cell in voxels
 COLORS = ["tab:blue", "tab:orange", "tab:green"]
+
+
+def save_png(fig, fname, dpi=90, colors=64):
+    """save a figure as a PNG with a palette of `colors` colors (~4x smaller files than
+    RGB PNGs or SVGs of these figures)"""
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=dpi)
+    buf.seek(0)
+    img = Image.open(buf).convert("RGB")
+    img.quantize(colors=colors, method=Image.Quantize.FASTOCTREE).save(fname, optimize=True)
 
 
 def make_events(n):
@@ -139,7 +152,7 @@ draw_image(ax, "(c) sorted by sort key: 3 warps of 32 events\n(events of a warp 
 for g, (start, col) in enumerate(zip([4000, 12000, 21000], COLORS)):
     for j in order[start:start + 32]:
         draw_window(ax, s[j], e[j], it[j], col, lw=1.5, alpha=0.8)
-fig.savefig("lm_event_order.svg")
+save_png(fig, "lm_event_order.png")
 
 # ------------------------------------------------------------------ figure 2
 fig, axs = plt.subplots(1, 2, figsize=(13.5, 5.2), layout="constrained", gridspec_kw=dict(width_ratios=[1, 1.5]))
@@ -195,4 +208,4 @@ ax.text(32, -0.8,
         "TOF center: center of the event's TOF bin on its LOR; grid cell: 2 x 2 x 2 voxels.\n"
         "The events are sorted once (e.g. per subset) and reused in all iterations.",
         ha="center", va="top", fontsize="small")
-fig.savefig("lm_sort_key.svg")
+save_png(fig, "lm_sort_key.png")
