@@ -49,6 +49,26 @@ Added
   same. See the theory section and the new gallery example.
   (`#46 <https://github.com/KUL-recon-lab/libparallelproj/issues/46>`_)
 
+* **Much faster TOF listmode projections with sorted events:** new function
+  ``tof_lm_sort_key`` (C API and Python, CPU and CUDA). It computes a 64-bit sort key per
+  event: the principal axis of its LOR and the 3D Morton (Z-order) code of the grid cell
+  (2 x 2 x 2 voxels) that contains its TOF center. Sorting the events by this key once
+  (e.g. per subset, reused in all iterations) brings events with nearby TOF centers
+  together, so that consecutive GPU threads access the same image region. Measured on an
+  RTX A4500 (10 M events, SIGNA-like geometry): TOF listmode forward projection 8.5x and
+  back projection 8.8x faster than with time-ordered (random) events; on a 4-core CPU the
+  back projection was ~1.5x faster. The order does not change the projections. New
+  documentation section "Listmode: the order of the events matters" (performance page),
+  gallery example ``09_tof_listmode_event_order.py`` and
+  ``scripts/benchmark_tof_listmode.py``.
+  (`#54 <https://github.com/KUL-recon-lab/libparallelproj/issues/54>`_)
+
+* **TOF listmode projectors visit fewer image planes:** the planes of an event are now
+  selected with a margin of half a TOF bin (plus 0.001) around the kernel support instead
+  of one TOF bin; the extra planes always had weight 0. ~12 % fewer planes for TOF bins of
+  ~sigma (3 sigma), ~3 % for TOF bins of sigma / 5; results are unchanged.
+  (`#54 <https://github.com/KUL-recon-lab/libparallelproj/issues/54>`_)
+
 * **TOF window limit of 64 bins only applies with more than 64 TOF bins; Python
   warning.** The TOF window of an image plane now contains only existing TOF bins, so it
   has at most ``min(floor(support) + 2, num_tof_bins)`` bins: with at most 64 TOF bins,

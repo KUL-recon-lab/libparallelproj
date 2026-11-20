@@ -90,6 +90,7 @@ if(BUILD_LIBRARY AND USE_CUDA)
     src/joseph3d_tof_lm_back.cu
     src/tof_lm_point_fwd.cu
     src/tof_lm_point_back.cu
+    src/tof_lm_sort_key.cu
     src/cuda_utils.cu
     src/parallelproj_info.cpp
   )
@@ -119,6 +120,7 @@ elseif(BUILD_LIBRARY)
     src/joseph3d_tof_lm_back.cpp
     src/tof_lm_point_fwd.cpp
     src/tof_lm_point_back.cpp
+    src/tof_lm_sort_key.cpp
     src/parallelproj_info.cpp
   )
 

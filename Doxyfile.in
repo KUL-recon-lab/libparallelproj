@@ -22,6 +22,7 @@ JAVADOC_AUTOBRIEF      = YES
 
 # Reusable documentation snippets (used in include/parallelproj.h)
 ALIASES                += pp_note_pointer_types="@note All pointers can be host pointers, CUDA device pointers, or CUDA managed pointers."
+ALIASES                += pp_note_lm_event_order="@note Speed: on GPUs, sort the events once (e.g. per subset) by the keys of tof_lm_sort_key() and use the sorted events in all projections. Events with nearby TOF centers are then processed together, which made the TOF listmode projections ~9x faster in our benchmarks."
 ALIASES                += pp_note_image_layout="@note Image memory layout for @p image is C-contiguous with index n1*n2*i + n2*j + k for voxel/pixel [i,j,k]."
 ALIASES                += pp_note_tof_sino_layout="@note TOF sinogram memory layout for @p projection_values is row-major per LOR:^^[LOR0-TOFBIN-0, LOR0-TOFBIN-1, ..., LOR0-TOFBIN-(@p num_tof_bins-1),^^ LOR1-TOFBIN-0, LOR1-TOFBIN-1, ..., LOR1-TOFBIN-(@p num_tof_bins-1), ...]."
 ALIASES                += pp_param_lor_start{1}="@param lor_start Pointer to array of shape [3 * @p \1] with the coordinates of the start points of the LORs/events.^^The start coordinates of the n-th LOR/event are at @p lor_start[n*3 + i] with i = 0,1,2.^^Units are those of @p voxel_size."

@@ -50,3 +50,11 @@ TOF Listmode Point Projections
 .. autofunction:: parallelproj_core.tof_lm_point_fwd
 
 .. autofunction:: parallelproj_core.tof_lm_point_back
+
+Sorting of TOF Listmode Events
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Sorting the events by this key (once, e.g. per subset) makes the TOF listmode projectors
+much faster on GPUs, see :ref:`listmode-event-order`.
+
+.. autofunction:: parallelproj_core.tof_lm_sort_key

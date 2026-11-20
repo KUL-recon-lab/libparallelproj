@@ -1014,6 +1014,62 @@ void tof_lm_point_back_py(ConstFloatNDArray event_start,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Sort keys of TOF listmode events (tof_lm_sort_key)
+////////////////////////////////////////////////////////////////////////////////
+
+using Int64NDArray = nb::ndarray<std::int64_t, nb::c_contig>;
+
+void tof_lm_sort_key_py(ConstFloatNDArray event_start,
+                        ConstFloatNDArray event_end,
+                        ConstFloat1D3ELArray image_origin,
+                        ConstFloat1D3ELArray voxel_size,
+                        Int64NDArray sort_key,
+                        float tof_bin_width,
+                        ConstFloatNDArray tof_center_offset,
+                        ConstShortNDArray tof_bin_index,
+                        short num_tof_bins,
+                        int device_id = -1,
+                        int threads_per_block = 64,
+                        std::optional<std::uintptr_t> stream = std::nullopt)
+{
+  if (event_start.ndim() != 2 || event_end.ndim() != 2)
+    throw std::invalid_argument("event_start and event_end must have 2 dimensions");
+  if (event_start.shape(1) != 3 || event_end.shape(1) != 3)
+    throw std::invalid_argument("event_start and event_end must have shape (..., 3)");
+  if (event_start.shape(0) != event_end.shape(0))
+    throw std::invalid_argument("event_start and event_end must have the same number of events (shape[0])");
+  const std::size_t num_events = event_start.shape(0);
+  if (sort_key.ndim() != 1 || sort_key.shape(0) != num_events)
+    throw std::invalid_argument("sort_key must have shape (num_events,)");
+  if (tof_bin_index.ndim() != 1 || tof_bin_index.shape(0) != num_events)
+    throw std::invalid_argument("tof_bin_index must have shape (num_events,)");
+  if (!(tof_bin_width > 0.0f) || !std::isfinite(tof_bin_width))
+    throw std::invalid_argument("tof_bin_width must be finite and > 0");
+  if (num_tof_bins < 1)
+    throw std::invalid_argument("num_tof_bins must be >= 1");
+  bool is_lor_dependent_tof_center_offset;
+  if (tof_center_offset.ndim() == 1 && tof_center_offset.shape(0) == 1)
+    is_lor_dependent_tof_center_offset = false;
+  else if (tof_center_offset.ndim() == 1 && tof_center_offset.shape(0) == num_events)
+    is_lor_dependent_tof_center_offset = true;
+  else
+    throw std::invalid_argument("shape of tof_center_offset must be [1,] or [num_events,]");
+
+  // check the devices of all arrays and get the CUDA device to use
+  device_id = check_devices({array_device(event_start, "event_start"), array_device(event_end, "event_end"),
+                             array_device(image_origin, "image_origin"), array_device(voxel_size, "voxel_size"),
+                             array_device(sort_key, "sort_key"), array_device(tof_bin_index, "tof_bin_index")},
+                            {array_device(tof_center_offset, "tof_center_offset")}, device_id);
+
+  // release the GIL while the keys are computed
+  nb::gil_scoped_release release;
+  tof_lm_sort_key(event_start.data(), event_end.data(), image_origin.data(), voxel_size.data(), sort_key.data(),
+                  num_events, tof_bin_width, tof_center_offset.data(), tof_bin_index.data(), num_tof_bins,
+                  static_cast<unsigned char>(is_lor_dependent_tof_center_offset ? 1 : 0), device_id,
+                  threads_per_block, stream_pointer(stream));
+}
+
+////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1485,6 +1541,12 @@ NB_MODULE(parallelproj_core, m)
         R"pbdoc(
         TOF listmode forward projection using the Joseph 3D algorithm.
 
+        **Speed:** on GPUs, sort the events once (e.g. per subset) with
+        :func:`tof_lm_sort_key` and use the sorted events in all projections: events with
+        nearby TOF centers are then processed together, which made the TOF listmode
+        projections ~9x faster in our benchmarks (see "Listmode: the order of the events
+        matters" in the performance section of the documentation).
+
         Parameters
         ----------
         event_start : ndarray
@@ -1551,6 +1613,12 @@ NB_MODULE(parallelproj_core, m)
         "device_id"_a = -1, "threads_per_block"_a = 64, "stream"_a = nb::none(),
         R"pbdoc(
         TOF listmode backprojection using the Joseph 3D algorithm.
+
+        **Speed:** on GPUs, sort the events once (e.g. per subset) with
+        :func:`tof_lm_sort_key` and use the sorted events in all projections: events with
+        nearby TOF centers are then processed together, which made the TOF listmode
+        projections ~9x faster in our benchmarks (see "Listmode: the order of the events
+        matters" in the performance section of the documentation).
 
         Parameters
         ----------
@@ -1775,6 +1843,8 @@ NB_MODULE(parallelproj_core, m)
           ``UserWarning`` is issued (checked only if tof_kernel_scale is a CPU array).
           With at most 64 TOF bins, the projection is always exact. Trim empty tails of
           a measured kernel to keep the support small.
+        - Speed: on GPUs, sort the events once with :func:`tof_lm_sort_key` (see
+          :func:`joseph3d_tof_lm_fwd`).
 
         Parameters
         ----------
@@ -1845,6 +1915,8 @@ NB_MODULE(parallelproj_core, m)
           ``UserWarning`` is issued (checked only if tof_kernel_scale is a CPU array).
           With at most 64 TOF bins, the projection is always exact. Trim empty tails of
           a measured kernel to keep the support small.
+        - Speed: on GPUs, sort the events once with :func:`tof_lm_sort_key` (see
+          :func:`joseph3d_tof_lm_fwd`).
 
         Parameters
         ----------
@@ -2017,5 +2089,79 @@ NB_MODULE(parallelproj_core, m)
         Notes
         -----
         Values are accumulated into the existing image array (not overwritten).
+        )pbdoc");
+
+  m.def("tof_lm_sort_key", &tof_lm_sort_key_py,
+        "event_start"_a.noconvert(), "event_end"_a.noconvert(), "image_origin"_a.noconvert(),
+        "voxel_size"_a.noconvert(), "sort_key"_a.noconvert(), "tof_bin_width"_a,
+        "tof_center_offset"_a.noconvert(), "tof_bin_index"_a.noconvert(), "num_tof_bins"_a,
+        "device_id"_a = -1, "threads_per_block"_a = 64, "stream"_a = nb::none(),
+        R"pbdoc(
+        Sort keys of TOF listmode events: sort the events by this key (once) to make the TOF
+        listmode projectors much faster.
+
+        The TOF listmode projectors (:func:`joseph3d_tof_lm_fwd`, :func:`joseph3d_tof_lm_back`
+        and their ``_tab`` versions) process consecutive events at the same time (on GPUs:
+        32 events per "warp"). If these events lie anywhere in the image, as in time-ordered
+        listmode data, almost every voxel access needs its own memory transaction. If
+        consecutive events have nearby TOF centers, they access the same image region and the
+        voxels come from the caches. Measured on a desktop GPU (10 M events): the TOF listmode
+        forward and back projections were ~9x faster after sorting the events by this key.
+        See "Listmode: the order of the events matters" in the performance section of the
+        documentation.
+
+        The key of an event is a 64-bit integer:
+
+        - bits 40-41: principal axis of the LOR (0, 1, 2; 3 for degenerate events with
+          ``event_start == event_end`` or non-finite coordinates, which are sorted last),
+        - bits 0-29: 3D Morton code ("Z-order": interleaved bits of the cell coordinates) of
+          the grid cell of 2 x 2 x 2 voxels that contains the TOF center of the event, i.e.
+          the center of its TOF bin on the LOR, at the distance
+          ``(tof_bin_index - (num_tof_bins - 1) / 2) * tof_bin_width + tof_center_offset``
+          from the LOR center towards ``event_end`` (cell coordinates clamped to 0 .. 1023).
+
+        Typical use (e.g. once per subset, before the iterations of a reconstruction)::
+
+            key = xp.zeros(num_events, dtype=xp.int64, device=dev)
+            parallelproj_core.tof_lm_sort_key(event_start, event_end, image_origin, voxel_size,
+                                              key, tof_bin_width, tof_center_offset,
+                                              tof_bin_index, num_tof_bins)
+            order = xp.argsort(key)
+            event_start, event_end = event_start[order], event_end[order]
+            tof_bin_index = tof_bin_index[order]   # and all other per-event arrays
+
+        The key only changes the order of the events; the projection of an event does not
+        depend on it.
+
+        Parameters
+        ----------
+        event_start : ndarray
+            Array of shape (num_events, 3) with coordinates of event LOR start points.
+        event_end : ndarray
+            Array of shape (num_events, 3) with coordinates of event LOR end points.
+        image_origin : ndarray
+            Array of shape (3,) with coordinates of [0,0,0] voxel center.
+        voxel_size : ndarray
+            Array of shape (3,) with voxel sizes.
+        sort_key : ndarray
+            Output array of shape (num_events,) and dtype int64. Overwritten with the keys.
+        tof_bin_width : float
+            Width of TOF bins in spatial units (finite, > 0).
+        tof_center_offset : ndarray
+            Offset of the central TOF bin from the LOR midpoint towards the LOR end point,
+            in spatial units. Shape (1,) or (num_events,).
+        tof_bin_index : ndarray
+            TOF bin indices for each event (int16), shape (num_events,).
+        num_tof_bins : int
+            Number of TOF bins.
+        device_id : int, optional
+            CUDA device to use (CUDA builds only). Default -1 (automatic): the GPU of the
+            input arrays for GPU arrays, the current CUDA device for CPU arrays (which are
+            copied to the GPU). Must match the GPU of the input arrays if given for GPU arrays.
+        threads_per_block : int, optional
+            Number of threads per block for GPU (default: 64).
+        stream : int or None, optional
+            CUDA stream handle for this call (CUDA builds only, ignored otherwise), see
+            :func:`joseph3d_tof_lm_fwd`. ``None`` (default): the call is synchronous.
         )pbdoc");
 }
