@@ -36,7 +36,7 @@ Content
    :maxdepth: 1
    :titlesonly:
 
-   Theory and Background <theory_background>
+   Theory and implementation <theory/index>
    Performance <performance>
    Installation <installation>
    C API Reference <c_api>

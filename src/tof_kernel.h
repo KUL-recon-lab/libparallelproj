@@ -4,7 +4,7 @@
 // =====================================================================================
 //
 // Shared by all TOF projectors (sinogram and listmode, CPU and CUDA). See also the
-// section "Truncation of the Gaussian TOF kernel" in docs/theory_background.rst.
+// section "Truncation of the TOF kernel" in docs/theory/tof.rst.
 //
 // 1. Units: TOF bin coordinates
 // -----------------------------

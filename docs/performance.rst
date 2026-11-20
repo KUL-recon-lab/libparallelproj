@@ -84,7 +84,7 @@ from the caches.
 .. figure:: _static/lm_event_order.png
    :width: 100%
 
-   (a) TOF center of an event and the planes its projection visits (TOF window).
+   \(a) TOF center of an event and the planes its projection visits (TOF window).
    (b) Three warps of 32 consecutive events in random (time) order and (c) after sorting
    the events by their sort key. 2D illustration (one transaxial plane).
 
@@ -99,7 +99,7 @@ principal axis and then along the Z-shaped curve through the grid cells.
 .. figure:: _static/lm_sort_key.png
    :width: 100%
 
-   (a) Morton code of the cells of a 2D grid: following the numbers means following the
+   \(a) Morton code of the cells of a 2D grid: following the numbers means following the
    blue curve. (b) Bit layout of the 64-bit sort key.
 
 **Usage.** Sort the events once - e.g. once per subset, before the iterations of a
