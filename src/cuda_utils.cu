@@ -1,4 +1,5 @@
 #include "cuda_utils.h"
+#include <cstdint>
 #include <iostream>
 #include <stdexcept>
 
@@ -144,6 +145,9 @@ template void handle_cuda_input_array<unsigned int>(const unsigned int *, CudaDe
 template void handle_cuda_input_array<unsigned int>(unsigned int *, CudaDevicePtr<unsigned int> &, std::size_t, int, cudaMemoryAdvise, cudaStream_t);
 template void handle_cuda_input_array<std::size_t>(const std::size_t *, CudaDevicePtr<std::size_t> &, std::size_t, int, cudaMemoryAdvise, cudaStream_t);
 template void handle_cuda_input_array<std::size_t>(std::size_t *, CudaDevicePtr<std::size_t> &, std::size_t, int, cudaMemoryAdvise, cudaStream_t);
+// 64-bit signed integers (sort keys of tof_lm_sort_key)
+template void handle_cuda_input_array<std::int64_t>(const std::int64_t *, CudaDevicePtr<std::int64_t> &, std::size_t, int, cudaMemoryAdvise, cudaStream_t);
+template void handle_cuda_input_array<std::int64_t>(std::int64_t *, CudaDevicePtr<std::int64_t> &, std::size_t, int, cudaMemoryAdvise, cudaStream_t);
 
 template void handle_cuda_input_array<char>(const char *, CudaDevicePtr<char> &, std::size_t, int, cudaMemoryAdvise, cudaStream_t);
 template void handle_cuda_input_array<char>(char *, CudaDevicePtr<char> &, std::size_t, int, cudaMemoryAdvise, cudaStream_t);

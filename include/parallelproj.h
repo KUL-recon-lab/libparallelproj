@@ -4,6 +4,7 @@
 
 #pragma once
 #include <cstddef>
+#include <cstdint>
 // import parallelproj_export.h to get the PARALLELPROJ_API macro
 // needed for __declspec(dllexport) and __declspec(dllimport)
 // This is needed for Windows to export the functions in the DLL
@@ -263,6 +264,7 @@ extern "C"
   /*! @brief 3D listmode TOF Joseph forward projector
 
   \pp_note_pointer_types
+  \pp_note_lm_event_order
 
   \pp_param_lor_start{num_events}
   \pp_param_lor_end{num_events}
@@ -318,6 +320,7 @@ extern "C"
   /*! @brief 3D listmode TOF Joseph back projector
 
   \pp_note_pointer_types
+  \pp_note_lm_event_order
 
   \pp_param_lor_start{num_events}
   \pp_param_lor_end{num_events}
@@ -508,6 +511,7 @@ extern "C"
   is_lor_dependent_tof_sigma are replaced by the table and the kernel scale).
 
   \pp_note_pointer_types
+  \pp_note_lm_event_order
   \pp_note_tof_kernel_table
 
   \pp_param_lor_start{num_events}
@@ -574,6 +578,7 @@ extern "C"
   is_lor_dependent_tof_sigma are replaced by the table and the kernel scale).
 
   \pp_note_pointer_types
+  \pp_note_lm_event_order
   \pp_note_tof_kernel_table
 
   \pp_param_lor_start{num_events}
@@ -737,6 +742,74 @@ extern "C"
                                           int device_id = 0,
                                           int threads_per_block = 64,
                                           void *stream = nullptr);
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+  /*! @brief Sort keys of TOF listmode events: sort the events by this key (once) to make the
+  TOF listmode projectors much faster
+
+  The TOF listmode projectors (joseph3d_tof_lm_fwd(), joseph3d_tof_lm_back() and their
+  *_tab versions) process consecutive events at the same time (on GPUs: 32 events per
+  "warp"). If these events lie anywhere in the image, as in time-ordered listmode data,
+  almost every voxel access needs its own memory transaction. If consecutive events have
+  nearby TOF centers, they access the same image region and the voxels come from the
+  caches: measured on a desktop GPU (10 M events), the TOF listmode forward and back
+  projections were ~9x faster after sorting the events by this key.
+
+  The key of an event is a 64-bit integer:
+  - bits 40-41: principal axis of the LOR (0, 1, 2; 3 for degenerate events with
+    lor_start == lor_end or non-finite coordinates, which are sorted last),
+  - bits 0-29: 3D Morton code ("Z-order", interleaved bits of the cell coordinates) of the
+    grid cell of 2 x 2 x 2 voxels that contains the TOF center of the event (the center of
+    its TOF bin on the LOR, at the distance
+    (tof_bin_index - (num_tof_bins - 1) / 2) * tof_bin_width + tof_center_offset from the
+    LOR center towards lor_end; cell coordinates are clamped to 0 .. 1023).
+
+  Typical use: compute the keys once, sort the events (lor_start, lor_end, tof_bin_index,
+  per-event TOF parameters and data) by the key, e.g. with std::sort, numpy.argsort or
+  torch.argsort, and use the sorted events in all iterations of the reconstruction (e.g.
+  once per subset). The key only changes the order of the events; the projections of an
+  event do not depend on it.
+
+  \pp_note_pointer_types
+
+  \pp_param_lor_start{num_events}
+  \pp_param_lor_end{num_events}
+  \pp_param_image_origin
+  \pp_param_voxel_size
+  @param sort_key Pointer to array of length @p num_events; overwritten with the sort keys.
+  \pp_param_count{num_events,events}
+  \pp_param_tof_bin_width
+  \pp_param_tof_center_offset{num_events,is_lor_dependent_tof_center_offset}
+  \pp_param_tof_bin_index{num_events}
+  \pp_param_tof_num_bins
+  \pp_param_tof_dep_center{events}
+  \pp_param_device_id
+  \pp_param_threads
+  \pp_param_stream
+  */
+
+  PARALLELPROJ_API void tof_lm_sort_key(const float *lor_start,
+                                        const float *lor_end,
+                                        const float *image_origin,
+                                        const float *voxel_size,
+                                        std::int64_t *sort_key,
+                                        std::size_t num_events,
+                                        float tof_bin_width,
+                                        const float *tof_center_offset,
+                                        const short *tof_bin_index,
+                                        short num_tof_bins,
+                                        unsigned char is_lor_dependent_tof_center_offset,
+                                        int device_id = 0,
+                                        int threads_per_block = 64,
+                                        void *stream = nullptr);
 
 #ifdef __cplusplus
 }

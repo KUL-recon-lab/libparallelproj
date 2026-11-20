@@ -29,16 +29,22 @@
 ///
 /// The support of a plane at TOF coordinate it_f is [it_f + u_lo, it_f + u_hi]; it
 /// overlaps bin `it` (= [it - 0.5, it + 0.5]) if it - 0.5 - u_hi < it_f < it + 0.5 - u_lo.
-/// We use the slightly larger range it_f in [it - u_hi - 1, it - u_lo + 1] (planes outside
-/// the overlap simply get weight 0) and convert it to plane numbers with
-/// it_f = ip * at + bt, i.e. ip = (it_f - bt) / at. If at < 0 (TOF bins numbered against
-/// the plane direction), the two ends swap.
+/// Only these planes can give bin `it` a non-zero weight (tof_bin_weight). We convert this
+/// range to plane numbers with it_f = ip * at + bt, i.e. ip = (it_f - bt) / at (if at < 0,
+/// i.e. TOF bins numbered against the plane direction, the two ends swap), and round
+/// outwards (floor / ceil): this includes one more plane at each end, which covers the
+/// float rounding of it_f (planes outside the overlap simply get weight 0). The extra
+/// TOF_LM_PLANE_RANGE_EPS bins are an additional safety margin.
+///
+/// (Until #54, the range was [it - u_hi - 1, it - u_lo + 1], i.e. half a TOF bin wider at
+/// each end: ~12 % more planes - all with weight 0 - for sigma ~ 1 TOF bin and 3 sigma.)
+#define TOF_LM_PLANE_RANGE_EPS 1e-3f
 template <typename Kernel>
 WORKER_QUALIFIER inline bool tof_lm_plane_range(const JosephLOR &lor, const Kernel &kernel, int it, float at, float bt,
                                                 int &istart, int &iend)
 {
-  const float ip_a = (it - kernel.u_hi - 1.0f - bt) / at;
-  const float ip_b = (it - kernel.u_lo + 1.0f - bt) / at;
+  const float ip_a = (it - kernel.u_hi - (0.5f + TOF_LM_PLANE_RANGE_EPS) - bt) / at;
+  const float ip_b = (it - kernel.u_lo + (0.5f + TOF_LM_PLANE_RANGE_EPS) - bt) / at;
   // clamp to the intersected planes (+-1) before converting to int (avoids overflow)
   const float lo = fmaxf(fminf(ip_a, ip_b), static_cast<float>(lor.istart - 1));
   const float hi = fminf(fmaxf(ip_a, ip_b), static_cast<float>(lor.iend + 1));
