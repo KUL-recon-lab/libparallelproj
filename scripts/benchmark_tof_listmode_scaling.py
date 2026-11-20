@@ -12,12 +12,12 @@ memory needed for sorting small (keys, permutation, sort buffers and the reorder
 one chunk). The events are generated directly on the device (float32), so that host memory
 is not a limit either.
 
-Events: random LORs of the SIGNA-like sinogram geometry of benchmark_tof_sinogram.py,
-emission point uniform along the part of the LOR inside a cylinder of radius 200 mm, TOF bin
+Events: random LORs of the SIGNA-like sinogram geometry of benchmark_tof_sinogram.py that
+cross the phantom (cylinder of radius 200 mm, as in real data), emission point uniform along the part of the LOR inside a cylinder of radius 200 mm, TOF bin
 of the emission point plus Gaussian TOF noise.
 
 Memory (GPU): ~26 bytes per event for the events (start, end: 2 x 12 bytes, TOF bin: 2
-bytes) plus ~4 bytes per event for the forward projection, plus ~40 bytes per event of one
+bytes) plus ~8 bytes per event for the forward projection and the back projected values, plus ~40 bytes per event of one
 chunk for sorting; 3e8 events need ~9 GB + ~2 GB per 5e7 events of chunk.
 
 usage (from the repository root):
@@ -71,7 +71,13 @@ def main():
     img_shape, vox = image_geometry(cfg, 2)
     vs = torch.tensor(vox, dtype=torch.float32, device=dev)
     origin = -0.5 * (torch.tensor(img_shape, dtype=torch.float32, device=dev) - 1) * vs
-    xs, xe = (t.to(dev) for t in sinogram_lors(cfg, "RVP", 2))
+    xs, xe = sinogram_lors(cfg, "RVP", 2)
+    # only LORs that cross the phantom (cylinder of radius 200 mm), as in real data: events
+    # on LORs outside of the activity do not exist (transaxial distance of the LOR to the axis)
+    d = xe[:, :2] - xs[:, :2]
+    dist = (xs[:, 0] * d[:, 1] - xs[:, 1] * d[:, 0]).abs() / torch.linalg.norm(d, dim=1)
+    keep = dist < 200.0
+    xs, xe = xs[keep].to(dev), xe[keep].to(dev)
     sigma_d = torch.tensor([sig], dtype=torch.float32, device=dev)
     off_d = torch.zeros(1, dtype=torch.float32, device=dev)
 
@@ -112,6 +118,7 @@ def main():
         try:
             chunks = [make_events(xs, xe, m, nb, w, sig, gen, dev) for m in sizes]
             ys = [torch.zeros(m, dtype=torch.float32, device=dev) for m in sizes]
+            ones = [torch.ones(m, dtype=torch.float32, device=dev) for m in sizes]
         except torch.OutOfMemoryError:
             print(f"{n:8.0e}  out of GPU memory when creating the events - skipped")
             continue
@@ -121,8 +128,10 @@ def main():
                 pc.joseph3d_tof_lm_fwd(s, e, img, origin, vs, y, w, sigma_d, off_d, tb, nb, num_sigmas=args.num_sigmas)
 
         def back(cs):
+            # back projection of ones (all events non-zero, as the ratios in listmode MLEM;
+            # events with value 0 would be skipped by the projector)
             x.zero_()
-            for (s, e, tb), y in zip(cs, ys):
+            for (s, e, tb), y in zip(cs, ones):
                 pc.joseph3d_tof_lm_back(s, e, x, origin, vs, y, w, sigma_d, off_d, tb, nb, num_sigmas=args.num_sigmas)
 
         if args.skip_random:
@@ -146,7 +155,7 @@ def main():
         t_sf, t_sb = best_time(lambda: fwd(chunks)), best_time(lambda: back(chunks))
         print(f"{n:8.0e} {len(sizes):6d} | {t_rf:10.4f} {t_rb:11.4f} | {t_sort:9.4f} | {t_sf:10.4f} {t_sb:11.4f} | "
               f"{1e9 * t_sf / n:12.2f} {1e9 * t_sb / n:6.2f} | {t_rf / t_sf:11.1f}x {t_rb / t_sb:4.1f}x")
-        del chunks, ys
+        del chunks, ys, ones
         if on_gpu:
             torch.cuda.empty_cache()
 
