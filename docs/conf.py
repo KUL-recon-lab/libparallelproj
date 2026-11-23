@@ -13,6 +13,9 @@ _BUILD_DOXYGEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_buil
 
 # Add the build directory to the path so we can import the Python module
 sys.path.insert(0, _BUILD_DOXYGEN)
+# Helper modules of the gallery examples (utils.py, gpu_utils.py) live in docs/examples,
+# the examples themselves in its subdirectories: make the helpers importable
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples"))
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
