@@ -1,12 +1,60 @@
 Changelog
 =========
 
-v3.0.0 (unreleased)
+v3.0.0 (2026-11-24)
 -------------------
 
 3.0 bundles the changes planned for 2.1 (never released) with CUDA stream
 support, which changes the C API signatures (ABI). Code that includes
 ``parallelproj.h`` compiles unchanged, but has to be rebuilt.
+
+Upgrading from 2.x
+^^^^^^^^^^^^^^^^^^
+
+**C / C++ code**
+
+* **Rebuild** everything that links ``libparallelproj``: the shared library is now
+  ``libparallelproj.so.3`` (ABI change). Source code compiles unchanged: the new
+  trailing ``void *stream = nullptr`` parameter of all projector functions has a
+  default value, so existing calls keep their synchronous behavior.
+* Code that **declares the projector functions itself or stores typed function
+  pointers** to them has to add the ``stream`` parameter.
+* The compile-time macro ``MAX_NUM_TOF_WEIGHTS`` is gone (the TOF window is fixed to
+  at most 64 TOF bins, ``PARALLELPROJ_TOF_MAX_WINDOW_BINS``).
+* **CMake:** ``find_package(parallelproj 2.0 ...)`` still finds 3.x (version
+  compatibility ``AnyNewerVersion``, because the source API is unchanged). Building
+  libparallelproj itself now needs a C++17 compiler (the public header only needs
+  C++11) and CMake >= 3.31.
+
+**Python code** (``parallelproj_core``)
+
+* Works unchanged. ``stream`` is an optional keyword argument.
+* ``device_id`` defaults to -1 (automatic): GPU arrays are projected on their own GPU,
+  and an explicit ``device_id`` that does not match the GPU of the arrays raises a
+  ``ValueError`` (see "Changed").
+
+**Results**
+
+* Projections change slightly (see "Breaking changes"): the TOF kernel is truncated
+  and renormalized in all TOF projectors (up to ~0.3 % of the maximum of a TOF
+  projection), and several bug fixes change TOF listmode projections, non-zero TOF
+  center offsets and the TOF sinogram back projection of signed data (see "Fixed").
+  Regression tests that compare with 2.x results need new reference values.
+
+**Worth adopting**
+
+* **Sort TOF listmode events** once with ``tof_lm_sort_key`` (e.g. per subset): up to
+  ~9x faster TOF listmode projections on GPUs.
+* **CUDA streams** (``stream=``) for asynchronous calls and several GPUs in parallel,
+  and the GIL is released during projections.
+* **Tabulated TOF kernels** (``*_tab``) and the fast TOF listmode **point projector**.
+
+**conda-forge**
+
+* Packages built against libparallelproj 2.x (e.g. STIR) keep requiring 2.0.x
+  (``run_exports``) until they are rebuilt against 3.x, so they cannot be installed
+  in the same environment as libparallelproj 3.x before that. Their source code
+  compiles unchanged against 3.x.
 
 Breaking changes
 ^^^^^^^^^^^^^^^^
