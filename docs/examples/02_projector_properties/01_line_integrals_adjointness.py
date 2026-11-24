@@ -43,39 +43,46 @@ set_style()
 # %%
 # A uniform disk and LORs at different distances from the center
 # --------------------------------------------------------------
-# A disk with radius R = 100 mm and value 1 in an image of 64 x 64 x 1 voxels of 4 mm. 120
-# LORs parallel to the x-axis (0°) and 120 LORs at 33°, at distances from -118 mm to 118 mm
-# from the center.
+# A disk with radius R = 100 mm and value 1, in an image of 256 x 256 x 1 voxels of 1 mm
+# (and, for comparison, 64 x 64 x 1 voxels of 4 mm). 120 LORs parallel to the x-axis (0°)
+# and 120 LORs at 33°, at distances from -118 mm to 118 mm from the center.
 
-n, vs, R = 64, 4.0, 100.0
-origin_np = np.array([-(n - 1) / 2 * vs, -(n - 1) / 2 * vs, 0.0], np.float32)
-c = origin_np[0] + np.arange(n) * vs  # voxel centers along x and y
-X, Y = np.meshgrid(c, c, indexing="ij")
-disk = ((X**2 + Y**2) < R**2).astype(np.float32)[:, :, None]
-
-image = xp.asarray(disk, device=dev)
-image_origin = xp.asarray(origin_np, device=dev)
-voxel_size = xp.asarray([vs, vs, vs], dtype=xp.float32, device=dev)
-
+R = 100.0
 r = np.linspace(-118, 118, 120)
 lors = [lor_2d(0, ri) for ri in r] + [lor_2d(33, ri) for ri in r]
 lor_start = xp.asarray(np.array([s for s, _ in lors]), device=dev)
 lor_end = xp.asarray(np.array([e for _, e in lors]), device=dev)
 num_lors = len(lors)
-
-proj = xp.zeros(num_lors, dtype=xp.float32, device=dev)
-parallelproj_core.joseph3d_fwd(lor_start, lor_end, image, image_origin, voxel_size, proj)
-proj_np = to_numpy(proj)
-
 chord = 2 * np.sqrt(np.clip(R**2 - r**2, 0, None))  # analytic length of the LORs inside the disk
-dev_mm = np.abs(proj_np - np.concatenate([chord, chord]))
-print(f"|projection - analytic chord length|: median {np.median(dev_mm):.1f} mm, max. {dev_mm.max():.1f} mm")
+
+
+def disk_image(n, vs):
+    """uniform disk (radius R, value 1) in an image of n x n x 1 voxels of vs mm, centered at 0"""
+    origin = np.array([-(n - 1) / 2 * vs, -(n - 1) / 2 * vs, 0.0], np.float32)
+    c = origin[0] + np.arange(n) * vs  # voxel centers along x and y
+    X, Y = np.meshgrid(c, c, indexing="ij")
+    disk = ((X**2 + Y**2) < R**2).astype(np.float32)[:, :, None]
+    return (xp.asarray(disk, device=dev), xp.asarray(origin, device=dev),
+            xp.asarray([vs, vs, vs], dtype=xp.float32, device=dev))
+
+
+proj, deviation = {}, {}
+for n, vs in [(64, 4.0), (256, 1.0)]:
+    image, image_origin, voxel_size = disk_image(n, vs)
+    p = xp.zeros(num_lors, dtype=xp.float32, device=dev)
+    parallelproj_core.joseph3d_fwd(lor_start, lor_end, image, image_origin, voxel_size, p)
+    proj[vs] = to_numpy(p)
+    deviation[vs] = proj[vs] - np.concatenate([chord, chord])
+    print(f"{vs:g} mm voxels: |projection - analytic chord length|: median {np.median(np.abs(deviation[vs])):.2f} mm, "
+          f"max. {np.abs(deviation[vs]).max():.1f} mm")
+# the 1 mm image is used below
 
 # %%
-# The projections follow the analytic chord lengths. The deviations (typically about a mm,
-# up to ~20 mm for LORs that just graze the edge) come from the image, not from the
-# projector: the disk is represented by 4 mm voxels, so its edge is a staircase, not a
-# circle, and Joseph's method interpolates linearly between the voxel centers.
+# The projections follow the analytic chord lengths. The deviations come from the image,
+# not from the projector: the disk is represented by voxels, so its edge is a staircase, not
+# a circle, and Joseph's method interpolates linearly between the voxel centers. They are
+# largest for LORs that just graze the edge of the disk, and shrink with the voxel size
+# (median 0.9 mm with 4 mm voxels, 0.3 mm with 1 mm voxels).
 #
 # Adjointness: the dot-product test
 # ---------------------------------
@@ -138,26 +145,35 @@ for name, (fwd, back, data_shape) in projectors.items():
     print(f"{name:20s}: max. |relative difference| {np.abs(rel_diff[name]).max():.1e}")
 
 # %%
-fig, (a, b) = plt.subplots(1, 2, figsize=(12, 4.5), layout="constrained")
+fig, (a, b, c) = plt.subplots(1, 3, figsize=(17, 4.6), layout="constrained")
 a.plot(r, chord, color=COLORS["gray"], lw=3, alpha=0.45, label="analytic chord length 2√(R² − r²)")
-a.plot(r, proj_np[:120], ".", ms=4, color=COLORS["blue"], label="joseph3d_fwd, LORs at 0°")
-a.plot(r, proj_np[120:], ".", ms=4, color=COLORS["orange"], label="joseph3d_fwd, LORs at 33°")
+a.plot(r, proj[1.0][:120], ".", ms=4, color=COLORS["blue"], label="joseph3d_fwd, LORs at 0°")
+a.plot(r, proj[1.0][120:], ".", ms=4, color=COLORS["orange"], label="joseph3d_fwd, LORs at 33°")
 a.set_xlabel("distance r of the LOR from the center [mm]")
 a.set_ylabel("projection of a uniform disk (value 1) [mm]")
 a.legend(loc="lower center")
-a.set_title("(a) the projection is a line integral (here: the length in the disk)")
+a.set_title("(a) the projection is a line integral (1 mm voxels)")
+for vs, col in [(4.0, COLORS["red"]), (1.0, COLORS["blue"])]:
+    b.plot(r, deviation[vs][:120], ".-", ms=3, lw=0.8, color=col, label=f"{vs:g} mm voxels, LORs at 0°")
+    b.plot(r, deviation[vs][120:], "x", ms=3, color=col, alpha=0.6, label=f"{vs:g} mm voxels, LORs at 33°")
+b.axhline(0, color=COLORS["gray"], lw=0.8)
+b.set_xlabel("distance r of the LOR from the center [mm]")
+b.set_ylabel("projection − analytic chord length [mm]")
+b.legend(loc="upper center", ncols=2)
+b.set_ylim(-5, 24)
+b.set_title("(b) deviation: voxelized disk (smaller with smaller voxels)")
 cols = [COLORS["blue"], COLORS["orange"], COLORS["green"], COLORS["purple"]]
 for k, (name, d) in enumerate(rel_diff.items()):
-    b.plot(k + np.linspace(-0.25, 0.25, d.size), d * 1e9, "o", ms=4, color=cols[k])
-b.axhline(0, color=COLORS["gray"], lw=0.8)
+    c.plot(k + np.linspace(-0.25, 0.25, d.size), d * 1e9, "o", ms=4, color=cols[k])
+c.axhline(0, color=COLORS["gray"], lw=0.8)
 for lim in (-np.finfo(np.float32).eps * 1e9, np.finfo(np.float32).eps * 1e9):
-    b.axhline(lim, color=COLORS["red"], lw=0.8, ls=(0, (3, 2)))
-b.text(3.45, np.finfo(np.float32).eps * 1e9, "± float32 eps", color=COLORS["red"], fontsize=8.5, va="bottom",
+    c.axhline(lim, color=COLORS["red"], lw=0.8, ls=(0, (3, 2)))
+c.text(3.45, np.finfo(np.float32).eps * 1e9, "± float32 eps", color=COLORS["red"], fontsize=8.5, va="bottom",
        ha="right")
-b.set_xticks(range(len(rel_diff)), list(rel_diff), fontsize=9)
-b.set_ylim(-150, 150)
-b.set_ylabel("(⟨x, Aᵀy⟩ − ⟨Ax, y⟩) / ⟨Ax, y⟩  [×10⁻⁹]")
-b.set_title("(b) dot-product test: 20 random (x, y) per projector pair")
+c.set_xticks(range(len(rel_diff)), [n.replace("TOF listmode ", "TOF LM ") for n in rel_diff], fontsize=9)
+c.set_ylim(-150, 150)
+c.set_ylabel("(⟨x, Aᵀy⟩ − ⟨Ax, y⟩) / ⟨Ax, y⟩  [×10⁻⁹]")
+c.set_title("(c) dot-product test: 20 random (x, y) per pair")
 fig.show()
 
 # %%

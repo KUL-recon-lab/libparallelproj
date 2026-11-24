@@ -35,16 +35,19 @@ set_style()
 # %%
 # A point source and a LOR through it
 # -----------------------------------
-# A point source (one voxel with value 1) in voxel [42, 32, 0] of a 64 x 64 x 1 image with
-# 4 mm voxels, i.e. at x = 42 mm, y = 2 mm, and a LOR along the x-axis through it. Its
-# non-TOF projection is 4 (1 voxel x 4 mm). TOF: σ = 12 mm, 45 TOF bins of 8 mm.
+# A point source (one voxel with value 1) at x = 42 mm, y = 2 mm in an image of
+# 255 x 255 x 1 voxels of 1 mm (voxel centers at integer mm), and a LOR along the x-axis
+# through it. Its non-TOF projection is 1 (1 voxel x 1 mm). The voxels are small compared
+# with the TOF kernel, so the TOF profile shows the kernel and not the size of the source.
+# TOF: σ = 12 mm, 45 TOF bins of 8 mm.
 
-n, vs = 64, 4.0
-image_origin = xp.asarray([-(n - 1) / 2 * vs, -(n - 1) / 2 * vs, 0.0], dtype=xp.float32, device=dev)
+n, vs = 255, 1.0
+origin_np = np.array([-(n - 1) / 2 * vs, -(n - 1) / 2 * vs, 0.0], np.float32)  # voxel [127, 127] at (0, 0)
+image_origin = xp.asarray(origin_np, device=dev)
 voxel_size = xp.asarray([vs, vs, vs], dtype=xp.float32, device=dev)
-point = xp.zeros((n, n, 1), dtype=xp.float32, device=dev)
-point[42, 32, 0] = 1.0
 x_src = 42.0  # position of the point source along the LOR (from the LOR center)
+point = xp.zeros((n, n, 1), dtype=xp.float32, device=dev)
+point[int((x_src - origin_np[0]) / vs), int((2.0 - origin_np[1]) / vs), 0] = 1.0
 
 lor_start = xp.asarray([[-170.0, 2.0, 0.0]], dtype=xp.float32, device=dev)
 lor_end = xp.asarray([[170.0, 2.0, 0.0]], dtype=xp.float32, device=dev)
@@ -96,19 +99,20 @@ for w in (4.0, 12.0, 24.0):
 # mm), the parts of the LORs outside the TOF bins are lost - as for a real scanner whose
 # TOF bins do not cover the whole LOR.
 
-phantom_np, _, _, _ = disk_phantom()
+phantom_np, phantom_origin_np, phantom_vs_np, _ = disk_phantom()
 phantom = xp.asarray(phantom_np, device=dev)
+phantom_origin, phantom_vs = xp.asarray(phantom_origin_np, device=dev), xp.asarray(phantom_vs_np, device=dev)
 lors = [lor_2d(0, ri) for ri in np.linspace(-118, 118, 120)] + [lor_2d(33, ri) for ri in np.linspace(-118, 118, 120)]
 ls = xp.asarray(np.array([s for s, _ in lors]), device=dev)
 le = xp.asarray(np.array([e for _, e in lors]), device=dev)
 
 nontof = xp.zeros(len(lors), dtype=xp.float32, device=dev)
-parallelproj_core.joseph3d_fwd(ls, le, phantom, image_origin, voxel_size, nontof)
+parallelproj_core.joseph3d_fwd(ls, le, phantom, phantom_origin, phantom_vs, nontof)
 tof_sums = {}
 for nb in (45, 15):
     p = xp.zeros((len(lors), nb), dtype=xp.float32, device=dev)
-    parallelproj_core.joseph3d_tof_sino_fwd(ls, le, phantom, image_origin, voxel_size, p, tof_bin_width, tof_sigma,
-                                            tof_offset, nb)
+    parallelproj_core.joseph3d_tof_sino_fwd(ls, le, phantom, phantom_origin, phantom_vs, p, tof_bin_width,
+                                            tof_sigma, tof_offset, nb)
     tof_sums[nb] = to_numpy(xp.sum(p, axis=1))
 nontof = to_numpy(nontof)
 print(f"max. |sum over 45 TOF bins - non-TOF| / max. non-TOF: {np.abs(tof_sums[45] - nontof).max() / nontof.max():.1e}")
@@ -126,10 +130,10 @@ for ax in axs[0]:
     ax.set_xlabel("TOF bin")
     ax.axvline((num_tof_bins - 1) / 2 + x_src / tof_bin_width, color=COLORS["gray"], lw=0.6, ls=":")
     ax.legend(loc="upper left")
-axs[0, 0].set_ylim(0, 1.45)
+axs[0, 0].set_ylim(0, 0.36)
 axs[0, 0].set_ylabel("TOF projection of the point source")
-axs[0, 0].set_title("(a) num_sigmas = 2, 3, 4: linear scale")
-axs[0, 1].set_ylim(1e-5, 3)
+axs[0, 0].set_title("(a) num_sigmas = 2, 3, 4: linear scale (sum = 1)")
+axs[0, 1].set_ylim(1e-6, 1)
 axs[0, 1].set_ylabel("TOF projection of the point source (log scale)")
 axs[0, 1].text(0.99, 0.03, "weight 0 outside ± num_sigmas · σ\n(not shown on the log scale)", ha="right",
                transform=axs[0, 1].transAxes, fontsize=8, color=COLORS["gray"])
@@ -139,7 +143,7 @@ xx = np.linspace(-40, 120, 400)
 axs[1, 0].plot(xx, np.exp(-0.5 * ((xx - x_src) / sigma) ** 2) / (sigma * math.sqrt(2 * math.pi)),
                color=COLORS["gray"], lw=2.5, alpha=0.4, label=f"Gaussian kernel, σ = {sigma:g} mm")
 for (w, (pos, p)), col in zip(profiles_w.items(), [COLORS["purple"], COLORS["orange"], COLORS["blue"]]):
-    axs[1, 0].step(pos, p / (4.0 * w), where="mid", color=col, label=f"TOF bin width {w:g} mm")
+    axs[1, 0].step(pos, p / (p.sum() * w), where="mid", color=col, label=f"TOF bin width {w:g} mm")
 axs[1, 0].axvline(x_src, color=COLORS["gray"], lw=0.6, ls=":")
 axs[1, 0].set_xlim(-40, 120)
 axs[1, 0].set_xlabel("TOF bin center along the LOR [mm]")
@@ -162,7 +166,7 @@ fig.show()
 # - **(a), (b)** ``num_sigmas`` sets how many TOF bins get a weight (here 7, 10 and 13 bins
 #   of 8 mm for σ = 12 mm): fewer bins make the projections faster. On the linear scale
 #   the profiles are almost identical (3 and 4 overlap); the renormalization raises the maximum for
-#   ``num_sigmas = 2``, and the sum is the non-TOF projection (4) in all cases. The log
+#   ``num_sigmas = 2``, and the sum is the non-TOF projection (1) in all cases. The log
 #   scale shows the difference: the tails, two to four orders of magnitude below the
 #   maximum. The default of 3 keeps 99.7 % of the Gaussian.
 # - **(c)** Wide TOF bins average the kernel over the bin: the TOF profile becomes a coarser
