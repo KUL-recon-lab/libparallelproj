@@ -37,7 +37,7 @@ and :math:`u > 0`.
 """
 
 # %%
-import importlib
+import importlib.util
 import math
 import numpy as np
 import matplotlib.pyplot as plt

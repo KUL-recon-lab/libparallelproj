@@ -6,7 +6,7 @@
 - ``set_style`` / ``COLORS`` / ``show_image``: a common, readable plotting style.
 """
 
-import importlib
+import importlib.util
 import math
 
 import numpy as np

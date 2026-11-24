@@ -26,7 +26,7 @@ This example shows
 """
 
 # %%
-import importlib
+import importlib.util
 import time
 
 import numpy as np

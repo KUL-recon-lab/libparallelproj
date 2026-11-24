@@ -17,7 +17,7 @@ plain histo-image, remove them by randomly dithering the events within their TOF
 bins, and compare to the TOF listmode Joseph back projection of the same events.
 """
 
-import importlib
+import importlib.util
 import time
 import numpy as np
 import parallelproj_core
