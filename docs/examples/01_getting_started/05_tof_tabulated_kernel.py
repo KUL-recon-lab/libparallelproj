@@ -204,8 +204,8 @@ bins = np.arange(num_tof_bins)
 pg, pgt, pt = to_numpy(p_gauss)[0], to_numpy(p_gauss_tab)[0], to_numpy(p_tail)[0]
 cg, ct = COLORS["blue"], COLORS["orange"]
 
-fig, ax = plt.subplots(2, 2, figsize=(13, 9.5), layout="constrained")
-for a, log in [(ax[0, 0], False), (ax[0, 1], True)]:
+fig, ax = plt.subplot_mosaic([["a", "b", "c"], ["d", "d", "e"]], figsize=(17, 9.5), layout="constrained")
+for a, log in [(ax["a"], False), (ax["b"], True)]:
     a.plot(uu, k_gauss, color=cg, label=f"Gaussian, σ = {sigma:g} mm (truncated at 3σ)")
     a.plot(uu, k_tail, color=ct, label="core + tail (same FWHM)")
     a.fill_between(uu, k_tail, color=ct, alpha=0.08, lw=0)
@@ -232,26 +232,39 @@ for a, log in [(ax[0, 0], False), (ax[0, 1], True)]:
         a.set_title("(a) the TOF kernels: area 1, same FWHM, different FWTM")
         a.legend(loc="upper left")
 
-ax[1, 0].step(bins, p_true, where="mid", color=COLORS["gray"], lw=1.2, alpha=0.8, label="perfect TOF (no blur)")
-ax[1, 0].plot(bins, pg, "o", ms=6, mfc="none", color=cg, label="1. Gaussian")
-ax[1, 0].plot(bins, pgt, ".", ms=5, color=COLORS["purple"], label="2. Gaussian table")
-ax[1, 0].plot(bins, pt, ".-", ms=4, color=ct, label="3. core + tail table")
-ax[1, 0].set_xlabel("TOF bin")
-ax[1, 0].set_ylabel("TOF sinogram value")
-ax[1, 0].legend(loc="upper left")
-ax[1, 0].set_title("(c) TOF projections of the LOR")
+# (c) the tables F(u) as passed to the projector (normalized: F(u_max) - F(u_min) = 1)
+for u_tab, cdf, c, name in [(u_gauss, cdf_gauss, cg, "Gaussian table (601 points)"),
+                            (u_tail, cdf_tail, ct, "core + tail table (1201 points)")]:
+    F = (cdf - cdf[0]) / (cdf[-1] - cdf[0])
+    ax["c"].plot(u_tab, F, color=c, label=name)
+    ax["c"].plot(u_tab[::50], F[::50], "o", ms=3.5, color=c)  # every 50th table point
+ax["c"].axhline(0.5, color=COLORS["gray"], lw=0.6, ls=":")
+ax["c"].set_xlim(-110, 110)
+ax["c"].set_xlabel("u: distance from the annihilation point [mm]")
+ax["c"].set_ylabel("F(u) (tof_kernel_cdf, normalized)")
+ax["c"].legend(loc="upper left")
+ax["c"].set_title("(c) the tables: cumulative kernels F(u)")
 
-ax[1, 1].plot(bins, pgt - pg, ".-", color=COLORS["purple"], label="2. Gaussian table − 1.")
-ax[1, 1].plot(bins, pt - pg, ".-", color=ct, label="3. core + tail − 1.")
-ax[1, 1].axhline(0, color=COLORS["gray"], lw=0.8)
-ax[1, 1].set_xlabel("TOF bin")
-ax[1, 1].set_ylabel("difference to the Gaussian projection")
-ax[1, 1].legend(loc="lower left")
-ax[1, 1].set_title("(d) differences to 1.")
+ax["d"].step(bins, p_true, where="mid", color=COLORS["gray"], lw=1.2, alpha=0.8, label="perfect TOF (no blur)")
+ax["d"].plot(bins, pg, "o", ms=6, mfc="none", color=cg, label="1. Gaussian")
+ax["d"].plot(bins, pgt, ".", ms=5, color=COLORS["purple"], label="2. Gaussian table")
+ax["d"].plot(bins, pt, ".-", ms=4, color=ct, label="3. core + tail table")
+ax["d"].set_xlabel("TOF bin")
+ax["d"].set_ylabel("TOF sinogram value")
+ax["d"].legend(loc="upper left")
+ax["d"].set_title("(d) TOF projections of the LOR")
+
+ax["e"].plot(bins, pgt - pg, ".-", color=COLORS["purple"], label="2. Gaussian table − 1.")
+ax["e"].plot(bins, pt - pg, ".-", color=ct, label="3. core + tail − 1.")
+ax["e"].axhline(0, color=COLORS["gray"], lw=0.8)
+ax["e"].set_xlabel("TOF bin")
+ax["e"].set_ylabel("difference to the Gaussian projection")
+ax["e"].legend(loc="lower left")
+ax["e"].set_title("(e) differences to 1.")
 fig.show()
 
 # %%
-# - **Perfect TOF** (gray steps in (c)): the line integral of the image per TOF bin. Every TOF
+# - **Perfect TOF** (gray steps in (d)): the line integral of the image per TOF bin. Every TOF
 #   kernel blurs this profile along the LOR; its sum is the same as that of the TOF
 #   projections (up to 0.03 %: Joseph's method samples the LOR once per image plane, the
 #   reference integrates it in 0.05 mm steps).
