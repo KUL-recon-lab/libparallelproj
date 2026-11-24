@@ -5,6 +5,8 @@ import array_api_compat.numpy as np
 
 import parallelproj_core as pp
 
+from ._cuda_driver import has_physical_cuda_device
+
 num_cuda_devices = 0
 
 torch_available = (
@@ -21,9 +23,10 @@ cupy_available = (
 )
 if cupy_available:
     import array_api_compat.cupy as cp
+    # ask CuPy only if the CUDA driver reports a device (see _cuda_driver.py)
     try:
-        num_cuda_devices = cp.cuda.runtime.getDeviceCount()
-    except:
+        num_cuda_devices = cp.cuda.runtime.getDeviceCount() if has_physical_cuda_device() else 0
+    except Exception:
         num_cuda_devices = 0
 
 # %%

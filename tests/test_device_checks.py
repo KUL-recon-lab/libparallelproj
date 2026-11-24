@@ -14,6 +14,8 @@ import pytest
 import numpy as np
 import parallelproj_core as ppb
 
+from ._cuda_driver import has_physical_cuda_device
+
 KDL_CPU = 1
 KDL_CUDA = 2
 
@@ -279,6 +281,8 @@ def test_check_devices_main_arrays_must_match(cuda_build_flag):
 
 def _gpu_xp():
     """array namespace with GPU support (torch preferred, then cupy) or None"""
+    if not has_physical_cuda_device():  # no driver / GPU: do not ask CuPy (see _cuda_driver.py)
+        return None
     if importlib.util.find_spec("torch") is not None:
         import torch
 

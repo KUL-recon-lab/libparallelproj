@@ -16,6 +16,8 @@ import pytest
 import numpy as np
 import parallelproj_core as ppb
 
+from ._cuda_driver import has_physical_cuda_device
+
 cuda_build = bool(int(ppb.cuda_enabled))
 
 ################################################################################
@@ -143,7 +145,7 @@ class _Cupy:
 
 def _gpu_libs():
     libs = []
-    if not cuda_build:
+    if not cuda_build or not has_physical_cuda_device():  # do not ask CuPy without a GPU (_cuda_driver.py)
         return libs
     if importlib.util.find_spec("torch") is not None:
         lib = _Torch()
