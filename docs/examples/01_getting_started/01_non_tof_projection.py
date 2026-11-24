@@ -12,7 +12,7 @@ The non-TOF projectors :func:`parallelproj_core.joseph3d_fwd` (forward projectio
 - the **back projection** distributes one value per LOR back into the image along the LOR
   (the adjoint of the forward projection).
 
-Here, the image has a single plane (shape ``(64, 64, 1)``) and the LORs lie in this plane,
+Here, the image has a single plane (shape ``(128, 128, 1)``) and the LORs lie in this plane,
 which makes the result easy to plot. Everything works the same way in 3D.
 """
 
@@ -39,7 +39,7 @@ print(f"parallelproj_core {parallelproj_core.__version__}, using {xp.__name__} o
 # The projectors need the image as a 3D ``float32`` array (C order), the position of the
 # **center of voxel [0, 0, 0]** (``image_origin``) and the voxel size, in the same units as
 # the LOR coordinates (here mm). ``disk_phantom`` creates a disk with two hot spots in an image
-# with 64 x 64 x 1 voxels of 4 mm.
+# with 128 x 128 x 1 voxels of 2 mm.
 
 image_np, image_origin_np, voxel_size_np, extent = disk_phantom()
 image = xp.asarray(image_np, device=dev)

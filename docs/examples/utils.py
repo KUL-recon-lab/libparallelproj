@@ -52,7 +52,7 @@ def array_backend():
     return xp, "cpu"
 
 
-def disk_phantom(n=64, voxel_size=4.0):
+def disk_phantom(n=128, voxel_size=2.0):
     """2D phantom in one image plane (image shape (n, n, 1)): a disk of radius 100 mm with
     value 1 and two hot spots (values 4 and 3). Returns (image, image_origin, voxel_size,
     extent) as float32 NumPy arrays; extent is the (x, y) range for plt.imshow."""

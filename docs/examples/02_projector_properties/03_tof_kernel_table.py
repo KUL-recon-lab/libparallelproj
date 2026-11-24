@@ -36,31 +36,22 @@ An annihilation closer to the end detector reaches it earlier, so :math:`\\Delta
 and :math:`u > 0`.
 """
 
-# %%
-import importlib.util
-import math
-import numpy as np
-import matplotlib.pyplot as plt
-import parallelproj_core
 # sphinx_gallery_start_ignore
-# the helper modules (utils.py, gpu_utils.py) are in the parent directory (docs/examples)
 import pathlib, sys
 try:
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 except NameError:  # run by sphinx-gallery: docs/conf.py adds docs/examples to the path
     pass
 # sphinx_gallery_end_ignore
-from utils import to_numpy
+import math
 
-if parallelproj_core.cuda_enabled == 1 and importlib.util.find_spec("cupy") is not None:
-    import array_api_compat.cupy as xp
+import numpy as np
+import matplotlib.pyplot as plt
+import parallelproj_core
+from utils import COLORS, array_backend, set_style, to_numpy
 
-    dev = xp.cuda.Device(0)
-else:
-    import array_api_compat.numpy as xp
-
-    dev = "cpu"
-
+xp, dev = array_backend()
+set_style()
 print(f"parallelproj_core {parallelproj_core.__version__}, using {xp.__name__} on {dev}")
 
 # %%
@@ -113,19 +104,20 @@ print(f"standard deviation of the measured kernel: {sigma_mm:.1f} mm (FWHM {2.35
 
 # %%
 u_edges = hist_edges_ps * C_MM_PER_PS
-fig, ax = plt.subplots(1, 2, figsize=(10, 3.8), layout="constrained")
-ax[0].stairs(counts / counts.sum() / np.diff(u_edges), u_edges, label="measured kernel f(u)")
+fig, ax = plt.subplots(1, 2, figsize=(11, 4), layout="constrained")
+ax[0].stairs(counts / counts.sum() / np.diff(u_edges), u_edges, color=COLORS["purple"], lw=1.6,
+             label="measured kernel f(u) (histogram)")
 uu = np.linspace(u_min, u_max, 500)
-ax[0].plot(uu, np.exp(-0.5 * (uu / sigma_mm) ** 2) / (sigma_mm * math.sqrt(2 * math.pi)),
-           "--", label="Gaussian, same std. dev.")
+ax[0].plot(uu, np.exp(-0.5 * (uu / sigma_mm) ** 2) / (sigma_mm * math.sqrt(2 * math.pi)), color=COLORS["blue"],
+           ls=(0, (4, 2)), label="Gaussian, same std. dev.")
 ax[0].set_xlabel("u [mm] (> 0: towards lor_end)")
 ax[0].set_ylabel("density [1/mm]")
-ax[0].legend()
-ax[1].plot(np.linspace(u_min, u_max, tof_kernel_cdf.shape[0]), tof_kernel_cdf)
+ax[0].legend(loc="upper right")
+ax[0].set_title("(a) the measured kernel has a tail towards lor_end")
+ax[1].plot(np.linspace(u_min, u_max, tof_kernel_cdf.shape[0]), tof_kernel_cdf, color=COLORS["purple"])
 ax[1].set_xlabel("u [mm]")
-ax[1].set_ylabel("F(u) (table)")
-for a in ax:
-    a.grid(ls=":")
+ax[1].set_ylabel("F(u)")
+ax[1].set_title(f"(b) the table: F(u) at {tof_kernel_cdf.shape[0]} points from u_min to u_max")
 fig.show()
 
 # %%
@@ -172,16 +164,18 @@ for scale in [1.0, 1.5]:
 # position of the TOF bin centers along the LOR (bin (num_tof_bins - 1) / 2 is the LOR center)
 x_bins = (np.arange(num_tof_bins) - (num_tof_bins - 1) / 2) * tof_bin_width
 
-fig, ax = plt.subplots(figsize=(7, 4), layout="constrained")
-ax.plot(x_bins, to_numpy(p_gauss)[0], ".-", label="Gaussian (same std. dev.)")
-ax.plot(x_bins, profiles[1.0], ".-", label="tabulated, scale 1")
-ax.plot(x_bins, profiles[1.5], ".-", label="tabulated, scale 1.5")
-ax.axvline(20.0, color="k", ls=":", label="point source")
+fig, ax = plt.subplots(figsize=(8, 4.2), layout="constrained")
+ax.plot(x_bins, to_numpy(p_gauss)[0], ".-", color=COLORS["blue"], label="Gaussian (same std. dev.)")
+ax.plot(x_bins, profiles[1.0], ".-", color=COLORS["purple"], label="tabulated, scale 1")
+ax.plot(x_bins, profiles[1.5], ".-", color=COLORS["orange"], label="tabulated, scale 1.5")
+ax.axvline(20.0, color=COLORS["gray"], lw=0.8, ls=":")
+ax.text(19.0, 0.04, "point source", transform=ax.get_xaxis_transform(), fontsize=8.5, color=COLORS["gray"],
+        ha="right")
 ax.set_xlabel("TOF bin center along the LOR [mm]")
 ax.set_ylabel("TOF sinogram value")
 ax.set_xlim(-60, 120)
-ax.grid(ls=":")
-ax.legend()
+ax.legend(loc="upper right")
+ax.set_title("TOF profiles of a point source: Gaussian vs. tabulated kernel")
 fig.show()
 
 # %%

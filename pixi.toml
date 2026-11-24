@@ -1,6 +1,9 @@
 [workspace]
 name = "libparallelproj"
 channels = ["conda-forge"]
+# same version as in the CI workflows (.github/workflows/*.yml); older versions write the
+# CUDA-tagged platforms with generated names (p1, p2, ...) into pixi.lock
+requires-pixi = ">=0.84.2"
 platforms = [
     "linux-64",
     "win-64",

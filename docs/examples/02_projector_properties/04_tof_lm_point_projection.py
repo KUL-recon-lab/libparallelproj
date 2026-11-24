@@ -17,25 +17,23 @@ plain histo-image, remove them by randomly dithering the events within their TOF
 bins, and compare to the TOF listmode Joseph back projection of the same events.
 """
 
-import importlib.util
+# sphinx_gallery_start_ignore
+import pathlib, sys
+try:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+except NameError:  # run by sphinx-gallery: docs/conf.py adds docs/examples to the path
+    pass
+# sphinx_gallery_end_ignore
 import time
+
 import numpy as np
-import parallelproj_core
 import matplotlib.pyplot as plt
+import parallelproj_core
+from utils import COLORS, array_backend, set_style, to_numpy
 
-# %%
-# import array API compatible library (CuPy if CUDA is available, otherwise NumPy).
-if parallelproj_core.cuda_enabled == 1 and importlib.util.find_spec("cupy") is not None:
-    import array_api_compat.cupy as xp
-
-    dev = xp.cuda.Device(0)
-else:
-    import array_api_compat.numpy as xp
-
-    dev = "cpu"
-
-print(f"parallelproj_core version: {parallelproj_core.__version__}")
-print(f"using array API compatible library: {xp.__name__} on device {dev}")
+xp, dev = array_backend()  # CuPy on the GPU (CUDA build) or NumPy on the CPU
+set_style()
+print(f"parallelproj_core {parallelproj_core.__version__}, using {xp.__name__} on {dev}")
 
 # %%
 # Image grid: 81 x 81 x 3 voxels of 3 mm, centered at the origin.
@@ -184,27 +182,37 @@ def best_time(fn, repeats=3):
 t_point = best_time(lambda: histo_image(d_tof_bin, tof_bin_width, num_tof_bins))
 t_joseph = best_time(joseph_back)
 
-print(f"tof_lm_point_back:    {t_point:.3f} s")
-print(f"joseph3d_tof_lm_back: {t_joseph:.3f} s")
+print(f"tof_lm_point_back:    {1e3 * t_point:8.2f} ms")
+print(f"joseph3d_tof_lm_back: {1e3 * t_joseph:8.2f} ms ({t_joseph / t_point:.0f}x slower)")
 print(f"events in the histo-image: {float(xp.sum(histo_plain)):.0f} of {num_events}")
 
 # %%
-# Show the central plane of the images. The plain histo-image shows rings
-# (centered at the scanner center) and stripes in the hot spots. Dithering
-# removes them, and the result is close to the Joseph back projection.
-fig, ax = plt.subplots(1, 3, figsize=(12, 4.8), layout="constrained")
-for a, img, title in zip(
-    ax,
-    (histo_plain, histo_dithered, joseph_image),
-    (
-        f"tof_lm_point_back\n{tof_bin_width:.0f} mm TOF bins",
-        f"tof_lm_point_back\ndithered ({k} sub-bins of {tof_bin_width / k:.1f} mm)",
-        f"joseph3d_tof_lm_back\n{tof_bin_width:.0f} mm TOF bins",
-    ),
-):
-    sl = img[:, :, 1]
-    sl = sl.get() if hasattr(sl, "get") else np.asarray(sl)
-    a.imshow(sl.T, origin="lower", cmap="Greys")
+# Show the central plane of the images and a profile through the large hot spot (y = 30 mm).
+# The plain histo-image shows rings (centered at the scanner center) and stripes in the hot
+# spots. Dithering removes them, and the result is close to the Joseph back projection.
+extent = [img_origin[0] - voxel_size[0] / 2, img_origin[0] + (img_shape[0] - 0.5) * voxel_size[0],
+          img_origin[1] - voxel_size[1] / 2, img_origin[1] + (img_shape[1] - 0.5) * voxel_size[1]]
+j_prof = int(round((30.0 - img_origin[1]) / voxel_size[1]))  # image row at y = 30 mm
+x_prof = img_origin[0] + np.arange(img_shape[0]) * voxel_size[0]
+
+fig, ax = plt.subplots(1, 4, figsize=(17, 4.5), layout="constrained",
+                       gridspec_kw=dict(width_ratios=[1, 1, 1, 1.35]))
+images = {
+    f"(a) tof_lm_point_back\n{tof_bin_width:.0f} mm TOF bins": (histo_plain, COLORS["red"]),
+    f"(b) tof_lm_point_back, dithered\n({k} sub-bins of {tof_bin_width / k:.1f} mm)": (histo_dithered, COLORS["green"]),
+    f"(c) joseph3d_tof_lm_back\n{tof_bin_width:.0f} mm TOF bins": (joseph_image, COLORS["blue"]),
+}
+for a, (title, (img, col)) in zip(ax, images.items()):
+    sl = to_numpy(img)[:, :, 1]
+    a.imshow(sl.T, origin="lower", cmap="Greys", extent=extent)
+    a.axhline(30.0, color=col, lw=0.8, ls=(0, (3, 2)))
     a.set_title(title)
-    a.set_axis_off()
+    a.set_xlabel("x [mm]")
+    a.set_ylabel("y [mm]")
+    prof = sl[:, j_prof]
+    ax[3].plot(x_prof, prof / prof.mean(), color=col, label=title.split("\n")[0][4:])
+ax[3].set_xlabel("x [mm]")
+ax[3].set_ylabel("profile at y = 30 mm (/ mean)")
+ax[3].legend(loc="upper left")
+ax[3].set_title("(d) profiles through the large hot spot")
 fig.show()
