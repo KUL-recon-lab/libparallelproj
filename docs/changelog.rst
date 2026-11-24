@@ -152,6 +152,10 @@ Added
 Changed
 ^^^^^^^
 
+* **C++17 is set explicitly** for all C++ and CUDA sources (``CMAKE_CXX_STANDARD`` /
+  ``CMAKE_CUDA_STANDARD`` 17); before, the compiler default was used (C++14 for MSVC). The
+  public header ``parallelproj.h`` still only needs C++11.
+
 * **Non-TOF forward projection accumulates in a register** and writes every projection
   value once, instead of reading and writing it in every image plane (the output and the
   image may alias, so the compiler could not keep the sum in a register). Results are
