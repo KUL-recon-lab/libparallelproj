@@ -199,7 +199,9 @@ Changed
 
 * **Example gallery reorganized** into three sections: "Getting started" (non-TOF, TOF
   sinogram and TOF listmode projections with a 2D geometry, and a new example on the
-  conventions of the arguments), "What the projectors compute" (new examples on line
+  conventions of the arguments; a new example on TOF projections with a tabulated kernel:
+  a Gaussian as a table and a non-Gaussian kernel with the same FWHM and wider tails),
+  "What the projectors compute" (new examples on line
   integrals and the adjointness of all projector pairs, and on the TOF kernel: truncation
   with ``num_sigmas``, TOF bin width, sum over the TOF bins) and "PyTorch, GPUs and
   performance" (a simpler PyTorch layer example that fits an image with Adam; the non-TOF
