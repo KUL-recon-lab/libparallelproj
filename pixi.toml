@@ -91,7 +91,11 @@ test-cpp           = "ctest --output-on-failure --test-dir build"
 test-python        = {cmd = "pytest -v tests", env = {PYTHONPATH = "build"}}
 test-python-cov    = {cmd = "pytest --cov=parallelproj_core --cov-report=xml:coverage_python.xml --cov-report=term tests", env = {PYTHONPATH = "build"}}
 test               = {depends-on = ["test-cpp", "test-python"]}
-collect-coverage-cpp = "lcov --capture --directory build --output-file coverage_cpp.info && lcov --remove coverage_cpp.info '/usr/*' '*/tests/*' --output-file coverage_cpp_filtered.info && lcov --list coverage_cpp_filtered.info"
+# lcov >= 2 stops on "inconsistent" gcov data, which GCC >= 15 produces for the nanobind
+# module function (mismatched end line); lcov 1.x ignored it. "inconsistent" twice: no error
+# and no warning. "unused": exclude patterns that match nothing are not an error. The headers
+# of the pixi environment (compiler, Python, nanobind) are excluded like /usr.
+collect-coverage-cpp = "lcov --capture --directory build --output-file coverage_cpp.info --ignore-errors inconsistent,inconsistent && lcov --remove coverage_cpp.info '/usr/*' '*/.pixi/*' '*/tests/*' --output-file coverage_cpp_filtered.info --ignore-errors unused,inconsistent && lcov --list coverage_cpp_filtered.info"
 install            = "cmake --install build"
 uninstall          = "cmake --build build --target uninstall"
 
