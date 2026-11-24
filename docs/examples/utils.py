@@ -1,178 +1,87 @@
-import numpy as np
-import matplotlib.pyplot as plt
+"""Helpers shared by the gallery examples (not an example itself).
+
+- ``to_numpy``: convert NumPy / CuPy / PyTorch arrays to NumPy (for plotting),
+- ``array_backend``: CuPy on the GPU if available (CUDA build), otherwise NumPy on the CPU,
+- a simple 2D geometry (one image plane, LORs in that plane): ``disk_phantom``, ``lor_2d``,
+- ``set_style`` / ``COLORS`` / ``show_image``: a common, readable plotting style.
+"""
+
+import importlib.util
+import math
 
 import numpy as np
+import matplotlib as mpl
+
+# colors used in all examples (the same as in the figures of the documentation)
+COLORS = dict(blue="#2F6DB5", orange="#E07B39", green="#3A9D5D", red="#C8433A", purple="#7A5BA6",
+              gray="#6B6B6B", light="#E9EDF2", mid="#C9D1DB")
+
+
+def set_style():
+    """a common, light plotting style for all examples"""
+    mpl.rcParams.update({
+        "font.size": 10, "axes.titlesize": 10.5, "axes.titleweight": "bold", "axes.titlelocation": "left",
+        "axes.edgecolor": COLORS["gray"], "axes.spines.top": False, "axes.spines.right": False,
+        "xtick.color": COLORS["gray"], "ytick.color": COLORS["gray"], "lines.linewidth": 1.6,
+        "legend.frameon": False, "legend.fontsize": 8.5, "figure.facecolor": "white",
+    })
 
 
 def to_numpy(x):
-    """
-    Convert x (NumPy / CuPy / torch.Tensor) to a NumPy ndarray on CPU.
-
-    - torch CPU: zero-copy when possible (via .numpy()).
-    - torch CUDA: moves to CPU, then converts.
-    - cupy: moves to host (asnumpy).
-    """
-    # Fast path: already NumPy
+    """Convert x (NumPy / CuPy / torch.Tensor, CPU or GPU) to a NumPy array on the CPU."""
     if isinstance(x, np.ndarray):
         return x
-
-    # PyTorch
-    try:
-        import torch
-
-        if isinstance(x, torch.Tensor):
-            # detach to avoid autograd surprises; then ensure CPU
-            if x.device.type != "cpu":
-                x = x.detach().to("cpu")
-            else:
-                x = x.detach()
-            return x.numpy()
-    except Exception:
-        pass
-
-    # CuPy
-    try:
-        import cupy as cp
-
-        if isinstance(x, cp.ndarray):
-            return cp.asnumpy(x)  # same as x.get()
-    except Exception:
-        pass
-
-    # Fallbacks:
-    # - Works for objects implementing __array__ (e.g., some CPU array-likes)
-    # - Will NOT magically pull from GPU for CuPy/torch CUDA
+    if hasattr(x, "detach"):  # torch
+        return x.detach().cpu().numpy()
+    if hasattr(x, "get"):  # cupy
+        return x.get()
     return np.asarray(x)
 
 
-def show_voxel_cube(ax, img, voxel_size, img_origin, num_bins=64):
-    x = np.arange(img.shape[0] + 1) * float(voxel_size[0]) + (
-        float(img_origin[0]) - float(voxel_size[0]) / 2
-    )
-    y = np.arange(img.shape[1] + 1) * float(voxel_size[1]) + (
-        float(img_origin[1]) - float(voxel_size[1]) / 2
-    )
-    z = np.arange(img.shape[2] + 1) * float(voxel_size[2]) + (
-        float(img_origin[2]) - float(voxel_size[2]) / 2
-    )
+def array_backend():
+    """(xp, dev): CuPy on GPU 0 if libparallelproj was built with CUDA and CuPy is installed,
+    otherwise NumPy on the CPU (both wrapped by array_api_compat)"""
+    import parallelproj_core
 
-    X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
+    if parallelproj_core.cuda_enabled == 1 and importlib.util.find_spec("cupy") is not None:
+        import array_api_compat.cupy as xp
 
-    norm_image = to_numpy(img)
-    norm_image = np.asarray(num_bins * norm_image / np.max(norm_image)).astype(np.int16)
+        return xp, xp.cuda.Device(0)
+    import array_api_compat.numpy as xp
 
-    for b in np.unique(norm_image):
-        ax.voxels(
-            X,
-            Y,
-            Z,
-            norm_image == b,
-            facecolors="C4",
-            edgecolor=(0.2, 0.2, 0.2, 0.3),
-            alpha=0.5 * (b / num_bins),
-        )
+    return xp, "cpu"
 
 
-def show_lors(
-    ax,
-    lor_start,
-    lor_end,
-    labels=None,
-    num_tofbins=None,
-    tofbin_width=None,
-    tof_center_offset=None,
-    highlight_tof_bin=None,
-):
-    l_start = to_numpy(lor_start)
-    l_end = to_numpy(lor_end)
+def disk_phantom(n=64, voxel_size=4.0):
+    """2D phantom in one image plane (image shape (n, n, 1)): a disk of radius 100 mm with
+    value 1 and two hot spots (values 4 and 3). Returns (image, image_origin, voxel_size,
+    extent) as float32 NumPy arrays; extent is the (x, y) range for plt.imshow."""
+    vs = np.array([voxel_size, voxel_size, voxel_size], np.float32)
+    origin = np.array([-(n - 1) / 2 * voxel_size, -(n - 1) / 2 * voxel_size, 0.0], np.float32)
+    c = origin[0] + np.arange(n) * voxel_size  # voxel centers along x and y
+    X, Y = np.meshgrid(c, c, indexing="ij")
+    img = (X**2 + Y**2 < 100**2).astype(np.float32)
+    img += 3 * ((X - 40) ** 2 + (Y - 20) ** 2 < 15**2)
+    img += 2 * ((X + 45) ** 2 + (Y + 30) ** 2 < 10**2)
+    half = n / 2 * voxel_size
+    return img[:, :, None].astype(np.float32), origin, vs, (-half, half, -half, half)
 
-    for i in range(lor_start.shape[0]):
-        col = plt.cm.tab10(i)
-        # plor the start and end points of the line of response as red dots
-        ax.scatter(
-            l_start[i, 0],
-            l_start[i, 1],
-            l_start[i, 2],
-            color=col,
-            s=50,
-            marker="^",
-        )
-        ax.scatter(l_end[i, 0], l_end[i, 1], l_end[i, 2], color=col, s=50, marker="X")
-        # plot the line of response as a red line
-        ax.plot(
-            [l_start[i, 0], l_end[i, 0]],
-            [l_start[i, 1], l_end[i, 1]],
-            [l_start[i, 2], l_end[i, 2]],
-            color=col,
-            linewidth=2,
-        )
 
-        if num_tofbins is not None and tofbin_width is not None:
-            # calculate the LOR center
-            center = (l_start[i] + l_end[i]) / 2
-            # calculat the unit vector along the LOR
-            lor_vec = l_end[i] - l_start[i]
-            lor_unit_vec = lor_vec / np.linalg.norm(lor_vec)
+def lor_2d(phi_deg, r, radius=180.0):
+    """end points (start, end) of the LOR in the plane z = 0 with direction angle phi_deg whose
+    closest point to the center is at signed distance r; both end points lie on a circle
+    (the "scanner") of the given radius"""
+    ph = math.radians(phi_deg)
+    d = np.array([math.cos(ph), math.sin(ph), 0.0])
+    nrm = np.array([-math.sin(ph), math.cos(ph), 0.0])
+    h = math.sqrt(radius**2 - r**2)
+    return (r * nrm - h * d).astype(np.float32), (r * nrm + h * d).astype(np.float32)
 
-            if tof_center_offset is not None:
-                to = to_numpy(tof_center_offset)
-                if len(to) == 1:
-                    center += to[0] * lor_unit_vec
-                elif len(to) == lor_start.shape[0]:
-                    center += to[i] * lor_unit_vec
-                else:
-                    raise ValueError(
-                        "tof_center_offset should be either a scalar or an array of shape (num_lors,)"
-                    )
 
-            # calculate the signed tof bins
-            signed_tof_bins = np.arange(num_tofbins) - num_tofbins / 2 + 0.5
-
-            for it, signed_tof_bin in enumerate(signed_tof_bins):
-                tofbin_center = center + signed_tof_bin * tofbin_width * lor_unit_vec
-                tofbin_edge1 = (
-                    center + (signed_tof_bin - 0.5) * tofbin_width * lor_unit_vec
-                )
-                tofbin_edge2 = (
-                    center + (signed_tof_bin + 0.5) * tofbin_width * lor_unit_vec
-                )
-                ax.scatter(
-                    tofbin_edge1[0],
-                    tofbin_edge1[1],
-                    tofbin_edge1[2],
-                    color="k",
-                    s=15,
-                    marker=".",
-                )
-                ax.scatter(
-                    tofbin_edge2[0],
-                    tofbin_edge2[1],
-                    tofbin_edge2[2],
-                    color="k",
-                    s=15,
-                    marker=".",
-                )
-
-                if highlight_tof_bin is not None and it == highlight_tof_bin[i]:
-                    col = "red"
-                else:
-                    col = "k"
-                ax.text(
-                    tofbin_center[0],
-                    tofbin_center[1],
-                    tofbin_center[2],
-                    f"{it}",
-                    color=col,
-                    fontsize="xx-small",
-                    multialignment="center",
-                )
-
-        if labels is not None:
-            ax.text(
-                l_start[i, 0],
-                l_start[i, 1],
-                l_start[i, 2],
-                labels[i],
-                color="black",
-                fontsize="x-small",
-            )
+def show_image(ax, img, extent, cmap="Greys", title=None, vmax=None):
+    """show the (single) plane of an image of shape (n0, n1, 1); x horizontal, y vertical"""
+    ax.imshow(to_numpy(img)[:, :, 0].T, origin="lower", extent=extent, cmap=cmap, vmax=vmax)
+    ax.set_xlabel("x [mm]")
+    ax.set_ylabel("y [mm]")
+    if title:
+        ax.set_title(title)

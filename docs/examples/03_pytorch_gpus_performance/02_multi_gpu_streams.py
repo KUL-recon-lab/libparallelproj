@@ -55,6 +55,14 @@ if they are called one after another from a single Python thread.
 
 import torch
 import parallelproj_core
+# sphinx_gallery_start_ignore
+# the helper modules (utils.py, gpu_utils.py) are in the parent directory (docs/examples)
+import pathlib, sys
+try:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+except NameError:  # run by sphinx-gallery: docs/conf.py adds docs/examples to the path
+    pass
+# sphinx_gallery_end_ignore
 from gpu_utils import (cuda_devices, current_stream, best_time, sinogram_lors,
                        image_origin, random_images)
 

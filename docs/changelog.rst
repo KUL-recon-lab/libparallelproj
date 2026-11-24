@@ -59,7 +59,7 @@ Added
   back projection 8.8x faster than with time-ordered (random) events; on a 4-core CPU the
   back projection was ~1.5x faster. The order does not change the projections. New
   documentation section "Listmode: the order of the events matters" (performance page),
-  gallery example ``09_tof_listmode_event_order.py`` and
+  gallery example "Faster TOF Listmode Projections by Sorting the Events" and
   ``scripts/benchmark_tof_listmode.py``.
   (`#54 <https://github.com/KUL-recon-lab/libparallelproj/issues/54>`_)
 
@@ -106,11 +106,11 @@ Added
 
 * **New gallery examples for multiple GPUs** (PyTorch):
 
-  - ``05_multi_gpu_streams.py``: synchronous vs. asynchronous calls, a mini
+  - "Multiple GPUs and CUDA Streams": synchronous vs. asynchronous calls, a mini
     batch split across several GPUs, an autograd layer that works with one or
     several GPUs, and how to time GPU code (non-TOF sinogram projectors),
-  - ``06_multi_gpu_tof_sinogram.py``: the same with the TOF sinogram projectors,
-  - ``07_multi_gpu_tof_listmode.py``: TOF listmode projectors with a different
+  - "Multiple GPUs: TOF Sinogram Projections": the same with the TOF sinogram projectors,
+  - "Multiple GPUs: TOF Listmode Projections": TOF listmode projectors with a different
     number of events per sample, load balancing across GPUs, and a training step
     with the Poisson listmode log-likelihood.
 
@@ -178,6 +178,12 @@ Changed
   sinogram and listmode projectors with degenerate TOF parameters (e.g. sigma <= 0) now
   give zero TOF contributions (previously NaN for the sinogram projectors).
   (`#46 <https://github.com/KUL-recon-lab/libparallelproj/issues/46>`_)
+
+* **Example gallery reorganized** into three sections: "Getting started" (non-TOF, TOF
+  sinogram and TOF listmode projections with a 2D geometry, and a new example on the
+  conventions of the arguments), "What the projectors compute" and "PyTorch, GPUs and
+  performance". Complete reconstructions are shown in the examples of parallelproj.
+  (`#57 <https://github.com/KUL-recon-lab/libparallelproj/issues/57>`_)
 
 * **Truncated TOF kernel in all TOF projectors.** The weight of a TOF bin is the
   integral of the Gaussian TOF kernel truncated at ``num_sigmas`` sigma over the
