@@ -14,7 +14,12 @@ import parallelproj_core
 def cuda_devices() -> list[torch.device]:
     """all CUDA devices; exits with a message if no GPU can be used"""
     if not (parallelproj_core.cuda_enabled == 1 and torch.cuda.is_available()):
-        print("This example needs a CUDA build of parallelproj_core, PyTorch with CUDA and a GPU.")
+        msg = "This example needs a CUDA build of parallelproj_core, PyTorch with CUDA and a GPU."
+        if "sphinx_gallery" in sys.modules:
+            # executed by the docs build (BUILD_ALL_EXAMPLES=1): sys.exit would silently end
+            # the whole Sphinx build, so fail this example with a clear error instead
+            raise RuntimeError(msg)
+        print(msg)
         sys.exit(0)
     return [torch.device(f"cuda:{k}") for k in range(torch.cuda.device_count())]
 

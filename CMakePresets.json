@@ -60,6 +60,16 @@
       "cacheVariables": {
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/install-cuda13"
       }
+    },
+    {
+      "name": "docs-cuda13",
+      "inherits": "docs",
+      "binaryDir": "${sourceDir}/docs/_build_doxygen_cuda13",
+      "cacheVariables": {
+        "USE_CUDA": "ON",
+        "CMAKE_CUDA_ARCHITECTURES": "native",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install-docs-cuda13"
+      }
     }
   ]
 }
