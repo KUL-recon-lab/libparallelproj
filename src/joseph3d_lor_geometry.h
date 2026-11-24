@@ -3,8 +3,9 @@
 // Geometry of one LOR for Joseph's method
 // =====================================================================================
 //
-// Shared by the TOF sinogram forward and back projection (CPU and CUDA), so that both
-// use exactly the same planes, interpolation weights and TOF positions (adjointness).
+// Shared by all Joseph projectors (non-TOF, TOF sinogram and TOF listmode; forward and back;
+// CPU and CUDA), so that they use exactly the same planes, interpolation weights and TOF
+// positions (adjointness).
 //
 // Joseph's method in short
 // ------------------------
@@ -96,10 +97,9 @@ struct JosephLOR
     return true;
   }
 
-  /// cf times the bilinear interpolation of the image in plane ip at (fa, fb): the
-  /// contribution of plane ip to the (non-TOF) line integral. Voxels outside the image
+  /// Bilinear interpolation of the image in plane ip at (fa, fb). Voxels outside the image
   /// count as zero.
-  WORKER_QUALIFIER float interp(const float *image, int ip) const
+  WORKER_QUALIFIER float bilinear(const float *image, int ip) const
   {
     const float fa = ip * aa + ba;
     const float fb = ip * ab + bb;
@@ -123,13 +123,13 @@ struct JosephLOR
       if ((ja >= 0) && (ja < n_a) && (jb >= 0) && (jb < n_b))
         val += ((q & 1) ? wa : 1.0f - wa) * ((q >> 1) ? wb : 1.0f - wb) * image[ip * s_dir + ja * s_a + jb * s_b];
     }
-    return cf * val;
+    return val;
   }
 
-  /// Adjoint of interp: add cf * val, distributed with the same 4 bilinear weights, to
-  /// the voxels of plane ip. Atomic additions, because other threads (LORs) can add to the
+  /// Adjoint of bilinear: add val, distributed with the same 4 bilinear weights, to the
+  /// voxels of plane ip. Atomic additions, because other threads (LORs) can add to the
   /// same voxels at the same time.
-  WORKER_QUALIFIER void interp_adjoint(float *image, int ip, float val) const
+  WORKER_QUALIFIER void bilinear_adjoint(float *image, int ip, float val) const
   {
     const float fa = ip * aa + ba;
     const float fb = ip * ab + bb;
@@ -137,7 +137,6 @@ struct JosephLOR
     const int ib = static_cast<int>(floorf(fb));
     const float wa = fa - ia;
     const float wb = fb - ib;
-    val *= cf;
 #pragma unroll
     for (int q = 0; q < 4; ++q)
     {
@@ -147,6 +146,14 @@ struct JosephLOR
         atomic_sum(image + ip * s_dir + ja * s_a + jb * s_b, ((q & 1) ? wa : 1.0f - wa) * ((q >> 1) ? wb : 1.0f - wb) * val);
     }
   }
+
+  /// cf times the bilinear interpolation in plane ip: the contribution of plane ip to the
+  /// (non-TOF) line integral (used per plane by the TOF projectors; the non-TOF projectors
+  /// sum bilinear() over all planes and multiply by cf once).
+  WORKER_QUALIFIER float interp(const float *image, int ip) const { return cf * bilinear(image, ip); }
+
+  /// Adjoint of interp: add cf * val, distributed with the bilinear weights, to plane ip.
+  WORKER_QUALIFIER void interp_adjoint(float *image, int ip, float val) const { bilinear_adjoint(image, ip, cf * val); }
 
   /// TOF position of the planes: the continuous TOF bin coordinate (see tof_kernel.h) of
   /// the intersection point with plane ip is it_f = ip * at + bt
