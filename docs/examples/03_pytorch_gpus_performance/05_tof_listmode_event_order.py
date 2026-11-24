@@ -20,8 +20,8 @@ This example shows
 - how to compute the keys and sort the events,
 - that sorting does not change the projections (only their order),
 - the TOF centers of consecutive events before and after sorting,
-- the projection times before and after sorting (on the device used to build this
-  documentation; the large gains are on GPUs),
+- the projection times before and after sorting (on a GPU with 10 million events, on the
+  CPU with 300 000; the large gains are on GPUs),
 - how to sort the events of the subsets of a listmode OSEM reconstruction.
 """
 
@@ -56,36 +56,58 @@ print(f"parallelproj_core {parallelproj_core.__version__}, using {xp.__name__} o
 # %%
 # A simple scanner, image and listmode data
 # -----------------------------------------
-# A cylindrical scanner (radius 300 mm), an image of 128 x 128 x 40 voxels of 4 mm with a
-# cylinder phantom (radius 150 mm), and events with random LORs through the phantom. The
-# TOF bin of an event is that of its emission point plus Gaussian TOF noise. Like
-# time-ordered listmode data, the events are in random order.
+# A cylindrical scanner (radius 300 mm), a cylinder phantom (radius 150 mm) and events with
+# random LORs through the phantom. The TOF bin of an event is that of its emission point
+# plus Gaussian TOF noise. Like time-ordered listmode data, the events are in random order.
+#
+# The problem size depends on the device: on a GPU, 10 million events and an image of
+# 256 x 256 x 80 voxels of 2 mm (20 MB). With fewer events, the projections take less than
+# a millisecond on a GPU and the timings show no difference; with a small image, it fits
+# into the L2 cache of the GPU and the memory access pattern hardly matters. On the CPU
+# (e.g. when the documentation is built), 300 000 events and 128 x 128 x 40 voxels of 4 mm.
+# (10 million events need ~0.8 GB of GPU memory in this example.)
 
-rng = np.random.default_rng(1)
-num_events = 300_000
-img_shape = (128, 128, 40)
-vs = np.array([4.0, 4.0, 4.0], np.float32)
+on_gpu = xp.__name__.endswith("cupy")
+if on_gpu:
+    num_events, img_shape, vs = 10_000_000, (256, 256, 80), np.array([2.0, 2.0, 2.0], np.float32)
+else:
+    num_events, img_shape, vs = 300_000, (128, 128, 40), np.array([4.0, 4.0, 4.0], np.float32)
 origin = (-0.5 * (np.array(img_shape) - 1) * vs).astype(np.float32)
 radius, phantom_radius, axial_half = 300.0, 150.0, 75.0
 tof_bin_width, sigma_tof, num_tof_bins = 20.0, 25.0, 31
 
-# emission points uniformly in the phantom, random directions
-r = phantom_radius * np.sqrt(rng.uniform(size=num_events))
-phi = rng.uniform(0, 2 * np.pi, num_events)
-p = np.stack([r * np.cos(phi), r * np.sin(phi), rng.uniform(-axial_half, axial_half, num_events)], axis=1)
-theta = rng.uniform(0, np.pi, num_events)
-d = np.stack([np.cos(theta), np.sin(theta), rng.uniform(-0.2, 0.2, num_events)], axis=1)
-d /= np.linalg.norm(d, axis=1, keepdims=True)
-# intersections of the lines p + t d with the scanner cylinder (transaxial radius 300 mm)
-a2 = d[:, 0] ** 2 + d[:, 1] ** 2
-b = p[:, 0] * d[:, 0] + p[:, 1] * d[:, 1]
-c = p[:, 0] ** 2 + p[:, 1] ** 2 - radius**2
-t = np.sqrt(b**2 - a2 * c) / a2
-ev_start = (p + (-b / a2 - t)[:, None] * d).astype(np.float32)
-ev_end = (p + (-b / a2 + t)[:, None] * d).astype(np.float32)
-# TOF bin: distance of the emission point from the LOR center (towards ev_end) + TOF noise
-u = np.sum((p - 0.5 * (ev_start + ev_end)) * d, axis=1) + rng.normal(0, sigma_tof, num_events)
-tof_bin = np.clip(np.round(u / tof_bin_width + 0.5 * (num_tof_bins - 1)), 0, num_tof_bins - 1).astype(np.int16)
+
+def random_events(n, rng):
+    """n events: LOR end points on the scanner (float32) and TOF bins (int16)"""
+    # emission points uniformly in the phantom, random directions
+    r = phantom_radius * np.sqrt(rng.uniform(size=n))
+    phi = rng.uniform(0, 2 * np.pi, n)
+    p = np.stack([r * np.cos(phi), r * np.sin(phi), rng.uniform(-axial_half, axial_half, n)], axis=1)
+    theta = rng.uniform(0, np.pi, n)
+    d = np.stack([np.cos(theta), np.sin(theta), rng.uniform(-0.2, 0.2, n)], axis=1)
+    d /= np.linalg.norm(d, axis=1, keepdims=True)
+    # intersections of the lines p + t d with the scanner cylinder (transaxial radius 300 mm)
+    a2 = d[:, 0] ** 2 + d[:, 1] ** 2
+    b = p[:, 0] * d[:, 0] + p[:, 1] * d[:, 1]
+    c = p[:, 0] ** 2 + p[:, 1] ** 2 - radius**2
+    t = np.sqrt(b**2 - a2 * c) / a2
+    s = (p + (-b / a2 - t)[:, None] * d).astype(np.float32)
+    e = (p + (-b / a2 + t)[:, None] * d).astype(np.float32)
+    # TOF bin: distance of the emission point from the LOR center (towards e) + TOF noise
+    u = np.sum((p - 0.5 * (s + e)) * d, axis=1) + rng.normal(0, sigma_tof, n)
+    tb = np.clip(np.round(u / tof_bin_width + 0.5 * (num_tof_bins - 1)), 0, num_tof_bins - 1).astype(np.int16)
+    return s, e, tb
+
+
+# generated in chunks of (at most) 1 million events to limit the memory on the host
+rng = np.random.default_rng(1)
+ev_start = np.empty((num_events, 3), np.float32)
+ev_end = np.empty((num_events, 3), np.float32)
+tof_bin = np.empty(num_events, np.int16)
+for i in range(0, num_events, 1_000_000):
+    j = min(i + 1_000_000, num_events)
+    ev_start[i:j], ev_end[i:j], tof_bin[i:j] = random_events(j - i, rng)
+print(f"{num_events:,} events, image {img_shape} voxels of {vs[0]} mm")
 
 image = np.zeros(img_shape, np.float32)
 X, Y = np.meshgrid(*[origin[k] + np.arange(img_shape[k]) * vs[k] for k in range(2)], indexing="ij")
@@ -177,17 +199,18 @@ fig.show()
 # Projection times before and after sorting
 # -----------------------------------------
 # The large speed-ups (~9x) were measured on GPUs. On CPUs, the effect is smaller (back
-# projection ~1.5x faster, forward projection about the same).
+# projection ~1.5x faster, forward projection about the same). The times shown below are
+# those of the device used to build this documentation.
 
 
 def best_time(fn, repeats=3):
     times = []
     for _ in range(repeats):
-        if xp.__name__.endswith("cupy"):
+        if on_gpu:
             xp.cuda.Device(0).synchronize()
         t0 = time.perf_counter()
         fn()
-        if xp.__name__.endswith("cupy"):
+        if on_gpu:
             xp.cuda.Device(0).synchronize()
         times.append(time.perf_counter() - t0)
     return min(times)
