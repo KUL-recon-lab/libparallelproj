@@ -8,6 +8,9 @@ Presets (--preset):
               27 TOF bins of 169 ps, CTR 400 ps (TOF bin width ~ sigma)
   signa_fine  as signa with TOF bins of sigma / 5 (134 bins)
   ctr50       CTR 50 ps, TOF bin width = sigma (215 bins)
+  signa_subset       one OSEM subset (every 28th view: 8 views) of the FULL SIGNA sinogram
+                     with all 2025 ring pairs (5.7 M LORs); full iteration = 28 x this time
+  signa_fine_subset  as signa_subset with TOF bins of sigma / 5 (134 bins)
   small       a small geometry for quick CPU runs
 
 Sinogram order (--lor_order, default RVP: planes fastest) and image layout
@@ -42,6 +45,12 @@ PRESETS = {
     "signa_fine": dict(_SIGNA, tof_bin_width=_sigma / 5, num_tof_bins=int(round(_tof_range / (_sigma / 5)))),
     "ctr50": dict(_SIGNA, fwhm=_fwhm50, tof_bin_width=_fwhm50 * FWHM_TO_SIGMA,
                   num_tof_bins=int(math.ceil(_tof_range / (_fwhm50 * FWHM_TO_SIGMA)))),
+    # one OSEM subset (28 subsets by view: 224 / 28 = 8 views) of the FULL SIGNA sinogram with
+    # all 45^2 = 2025 ring pairs: 8 x 351 x 2025 = 5.7 M LORs, the real reuse of the image
+    # along the transaxial paths (time of a full iteration = 28 x time of this subset)
+    "signa_subset": dict(_SIGNA, n_views=224 // 28, n_ring_pairs=45 * 45),
+    "signa_fine_subset": dict(_SIGNA, n_views=224 // 28, n_ring_pairs=45 * 45, tof_bin_width=_sigma / 5,
+                              num_tof_bins=int(round(_tof_range / (_sigma / 5)))),
     "small": dict(radius=300.0, n_views=96, n_rad=129, rad_half=150.0, n_rings=8, ring_spacing=4.0,
                   n_ring_pairs=16, img=(96, 96, 32), vox=(2.5, 2.5, 2.5),
                   tof_bin_width=169 * C_MM_PER_PS, num_tof_bins=27, fwhm=400 * C_MM_PER_PS),

@@ -132,6 +132,15 @@ Added
   looks, motion detection on short frames, inputs for neural networks, and as
   an approximate TOF projector in iterative methods.
 
+* **Benchmark and profiling scripts** in ``scripts/`` (overview in
+  ``scripts/README.md``): scaling of the TOF listmode projectors with the number of
+  events (random vs. sorted), a mini-batch benchmark (B data sets sharing one projector,
+  Poisson gradient + Hessian layer), a comparison of speed and results of two library
+  versions (e.g. 2.x vs. 3.0), a driver for Nsight Compute profiling of the non-TOF
+  sinogram projectors, and presets for one OSEM subset of the full SIGNA sinogram in
+  ``benchmark_tof_sinogram.py``.
+  (`#63 <https://github.com/KUL-recon-lab/libparallelproj/issues/63>`_)
+
 * **pixi environment ``docs-gpu``** (docs + CUDA 13) to build the
   documentation on a GPU system with a CUDA build of ``parallelproj_core``
   (``pixi run docs-gpu``, CMake preset ``docs-cuda13``), executing all gallery
