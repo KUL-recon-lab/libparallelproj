@@ -152,11 +152,10 @@ Added
 Changed
 ^^^^^^^
 
-* **Non-TOF Joseph projectors use the shared LOR geometry** (``JosephLOR``, as the TOF
-  projectors): one loop for all principal axes instead of three (no warp divergence on
-  GPUs for LORs with different principal axes), and the forward projection accumulates
-  in a register and writes every projection value once (instead of once per image
-  plane). Results change only by float32 rounding (forward projection ~1e-7 relative).
+* **Non-TOF forward projection accumulates in a register** and writes every projection
+  value once, instead of reading and writing it in every image plane (the output and the
+  image may alias, so the compiler could not keep the sum in a register). Results are
+  unchanged.
   (`#67 <https://github.com/KUL-recon-lab/libparallelproj/issues/67>`_)
 
 * **Much faster TOF sinogram forward projection, especially on GPUs.** The TOF
