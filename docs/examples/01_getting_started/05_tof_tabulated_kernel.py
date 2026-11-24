@@ -279,5 +279,9 @@ fig.show()
 #   outermost part of the ±101 mm tails of the samples at the edge of the disk, so the sum
 #   is 0.01 % smaller.
 # - **Table range:** the support ``u_max - u_min`` should only cover the region where the
-#   kernel is not (practically) zero: the projectors handle TOF windows of up to 64 TOF bins
-#   (here: ±9 s = ±101 mm, i.e. 25 TOF bins of 8 mm).
+#   kernel is not (practically) zero. The TOF window of an image plane has at most
+#   floor(support / tof_bin_width) + 2 TOF bins, and the projectors handle windows of up to
+#   64 TOF bins. Here, the table covers ±9 s = ±101 mm (3 standard deviations of the tail
+#   component, whose width is 3 s): a support of 202 mm = 25.3 TOF bins of 8 mm, i.e. TOF
+#   windows of up to 27 bins. The 0.07 % of the kernel outside the table are cut off (the
+#   projector normalizes the kernel over the table range).
