@@ -64,6 +64,15 @@ endif()
 # Prefer position-independent code for libraries
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# C++17 for all C++ and CUDA sources (library, Python extension, tests). Without this, the
+# compiler default is used (e.g. C++14 for MSVC). The public header parallelproj.h only needs
+# C++11, so consumers of the installed library are not forced to C++17.
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
 # ------------------------------------------------------------------------------
 # C++ library target: parallelproj
 # ------------------------------------------------------------------------------
@@ -328,6 +337,14 @@ if(INSTALL_DEVEL AND TARGET parallelproj)
   )
 
   # Config + version files
+  #
+  # COMPATIBILITY: decides which find_package(parallelproj <version>) requests this installed
+  # version accepts. AnyNewerVersion: requests for older versions (also of older major
+  # versions) are accepted, because C++ code written for them compiles unchanged (3.0 changed
+  # the ABI, e.g. the trailing stream = nullptr parameter, but not the source API).
+  # In a release whose C++ API is NOT source compatible with the previous major version,
+  # switch to SameMajorVersion (see "Versioning and release procedure" in README.md): the
+  # decision is made by the file of the installed (newer) version.
   write_basic_package_version_file(
     "${CMAKE_BINARY_DIR}/parallelprojConfigVersion.cmake"
     VERSION "${PROJECT_VERSION}"
