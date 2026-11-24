@@ -133,6 +133,14 @@ Added
   looks, motion detection on short frames, inputs for neural networks, and as
   an approximate TOF projector in iterative methods.
 
+* **pixi environment ``docs-gpu``** (docs + CUDA 13) to build the
+  documentation on a GPU system with a CUDA build of ``parallelproj_core``
+  (``pixi run docs-gpu``, CMake preset ``docs-cuda13``), executing all gallery
+  examples including the multi-GPU ones, and ``scripts/run_examples.py``
+  (``pixi run run-examples-gpu`` / ``pixi run -e docs run-examples``) to run
+  every example as a standalone script.
+  (`#59 <https://github.com/KUL-recon-lab/libparallelproj/issues/59>`_)
+
 Changed
 ^^^^^^^
 
