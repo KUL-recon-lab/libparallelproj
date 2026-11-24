@@ -197,9 +197,11 @@ t_key = best_time(lambda: (parallelproj_core.tof_lm_sort_key(ev_start_d, ev_end_
                                                              offset_d, tof_bin_d, num_tof_bins), xp.argsort(key)))
 t = {name: (best_time(lambda: fwd(*args)), best_time(lambda: back(*args, ones)))
      for name, args in [("random", (ev_start_d, ev_end_d, tof_bin_d)), ("sorted", (ev_start_s, ev_end_s, tof_bin_s))]}
-print(f"sort key + argsort: {t_key:.3f} s")
+# times in ms (a few ms or less on a GPU for this problem size)
+print(f"sort key + argsort: {1e3 * t_key:8.2f} ms")
 for name, (tf, tb_) in t.items():
-    print(f"{name:7s} events: fwd {tf:.3f} s, back {tb_:.3f} s")
+    print(f"{name:7s} events: fwd {1e3 * tf:8.2f} ms, back {1e3 * tb_:8.2f} ms")
+print(f"speed-up by sorting: fwd {t['random'][0] / t['sorted'][0]:.1f}x, back {t['random'][1] / t['sorted'][1]:.1f}x")
 
 # %%
 # Listmode OSEM: sort the events of every subset once
