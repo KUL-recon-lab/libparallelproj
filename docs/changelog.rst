@@ -152,6 +152,12 @@ Added
 Changed
 ^^^^^^^
 
+* **Non-TOF forward projection accumulates in a register** and writes every projection
+  value once, instead of reading and writing it in every image plane (the output and the
+  image may alias, so the compiler could not keep the sum in a register). Results are
+  unchanged.
+  (`#67 <https://github.com/KUL-recon-lab/libparallelproj/issues/67>`_)
+
 * **Much faster TOF sinogram forward projection, especially on GPUs.** The TOF
   sums of a LOR are kept in a sliding window in registers and every TOF bin is
   written exactly once, instead of adding into all bins of the TOF window in

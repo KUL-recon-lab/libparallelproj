@@ -50,6 +50,12 @@ WORKER_QUALIFIER inline void joseph3d_fwd_worker(std::size_t i,
     return;
   }
 
+  // Sum in a register and write projection_values[i] once at the end: projection_values
+  // and image are both float*, so the compiler has to assume that they can alias and would
+  // otherwise load and store projection_values[i] in every plane (on GPUs: a global memory
+  // write per plane).
+  float sum = 0.0f;
+
   if (direction == 0)
   {
     dr = d0;
@@ -64,7 +70,7 @@ WORKER_QUALIFIER inline void joseph3d_fwd_worker(std::size_t i,
     {
       i1_f = i0 * a1 + b1;
       i2_f = i0 * a2 + b2;
-      projection_values[i] += bilinear_interp_fixed0(image, n0, n1, n2, i0, i1_f, i2_f);
+      sum += bilinear_interp_fixed0(image, n0, n1, n2, i0, i1_f, i2_f);
     }
   }
   else if (direction == 1)
@@ -81,7 +87,7 @@ WORKER_QUALIFIER inline void joseph3d_fwd_worker(std::size_t i,
     {
       i0_f = i1 * a0 + b0;
       i2_f = i1 * a2 + b2;
-      projection_values[i] += bilinear_interp_fixed1(image, n0, n1, n2, i0_f, i1, i2_f);
+      sum += bilinear_interp_fixed1(image, n0, n1, n2, i0_f, i1, i2_f);
     }
   }
   else if (direction == 2)
@@ -98,9 +104,9 @@ WORKER_QUALIFIER inline void joseph3d_fwd_worker(std::size_t i,
     {
       i0_f = i2 * a0 + b0;
       i1_f = i2 * a1 + b1;
-      projection_values[i] += bilinear_interp_fixed2(image, n0, n1, n2, i0_f, i1_f, i2);
+      sum += bilinear_interp_fixed2(image, n0, n1, n2, i0_f, i1_f, i2);
     }
   }
 
-  projection_values[i] *= cf;
+  projection_values[i] = cf * sum;
 }
