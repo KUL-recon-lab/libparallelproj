@@ -108,8 +108,7 @@ Added
 
   - "Multiple GPUs and CUDA Streams": synchronous vs. asynchronous calls, a mini
     batch split across several GPUs, an autograd layer that works with one or
-    several GPUs, and how to time GPU code (non-TOF sinogram projectors),
-  - "Multiple GPUs: TOF Sinogram Projections": the same with the TOF sinogram projectors,
+    several GPUs, and how to time GPU code (non-TOF and TOF sinogram projectors),
   - "Multiple GPUs: TOF Listmode Projections": TOF listmode projectors with a different
     number of events per sample, load balancing across GPUs, and a training step
     with the Poisson listmode log-likelihood.
@@ -184,7 +183,11 @@ Changed
   conventions of the arguments), "What the projectors compute" (new examples on line
   integrals and the adjointness of all projector pairs, and on the TOF kernel: truncation
   with ``num_sigmas``, TOF bin width, sum over the TOF bins) and "PyTorch, GPUs and
-  performance". Complete reconstructions are shown in the examples of parallelproj.
+  performance" (a simpler PyTorch layer example that fits an image with Adam; the non-TOF
+  and TOF sinogram multi-GPU examples merged into one, with a schematic of synchronous vs.
+  asynchronous calls; event sorting and a load balancing schematic in the multi-GPU
+  listmode example). Complete reconstructions are shown in the examples of parallelproj;
+  the listmode OSEM recipe of the practical guide is reduced to the sorting of the events.
   (`#57 <https://github.com/KUL-recon-lab/libparallelproj/issues/57>`_)
 
 * **Truncated TOF kernel in all TOF projectors.** The weight of a TOF bin is the

@@ -106,4 +106,4 @@ fig.show()
 # Listmode reconstructions therefore use exactly the same model as TOF sinogram
 # reconstructions of the same data. For large numbers of events, **sort the events** once
 # (e.g. per subset) to make the listmode projections much faster on GPUs, see
-# :ref:`sphx_glr_auto_examples_03_pytorch_gpus_performance_05_tof_listmode_event_order.py`.
+# :ref:`sphx_glr_auto_examples_03_pytorch_gpus_performance_04_tof_listmode_event_order.py`.

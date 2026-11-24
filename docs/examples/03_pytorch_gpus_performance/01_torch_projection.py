@@ -1,155 +1,160 @@
 """
-Torch Projection Layer
-======================
+The Projector as a PyTorch Layer
+================================
 
-This minimal example demonstrates how to use the `parallelproj_core` library
-with torch tensors and how to backward propagate gradients through the forward projection operation.
+To use a projector in a PyTorch model (e.g. in an unrolled reconstruction network, or to
+fit an image with a PyTorch optimizer), wrap it in a :class:`torch.autograd.Function`:
+
+- ``forward`` computes the forward projection :math:`y = A x`,
+- ``backward`` gets the gradient of the loss with respect to :math:`y` and returns the
+  gradient with respect to :math:`x`. For a linear operator, this is the **back
+  projection** :math:`A^T` of the incoming gradient (the adjoint, see
+  :ref:`sphx_glr_auto_examples_02_projector_properties_01_line_integrals_adjointness.py`).
+
+The projectors accept PyTorch tensors directly (CPU or CUDA, no copies). On a GPU, pass
+the **current CUDA stream** of the tensor, so that the projections run asynchronously and
+in order with all other PyTorch operations (see
+:ref:`sphx_glr_auto_examples_03_pytorch_gpus_performance_02_multi_gpu_streams.py`).
+
+This example fits an image to its projections with the Adam optimizer, using a 2D
+geometry (one image plane). It runs on the GPU if available, otherwise on the CPU.
 """
 
-import parallelproj_core
-import array_api_compat.torch as torch
-from array_api_compat import device
-
-
-# %%
-# Setup a custom torch autograd function to wraps the forward projection.
-# We also implement the backward path (Jacobian-vector product) which in case of a linear operator
-# is equivalent to its adjoint (back projection).
-# Here we operator on a singel 3D tensor. In practice, this would probably be a batch of 3D tensors, with a signle channel (5D tensor).
-
-
-class FwdProjLayer(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, x, lor_start, lor_end, img_origin, voxel_size):
-        dev = device(x)
-        img_fwd = torch.zeros(lor_start.shape[0], dtype=torch.float32, device=dev)
-        parallelproj_core.joseph3d_fwd(
-            lor_start, lor_end, x, img_origin, voxel_size, img_fwd
-        )
-        # save context variables for backward pass
-        image_shape = torch.asarray(x.shape)
-        ctx.save_for_backward(lor_start, lor_end, img_origin, voxel_size, image_shape)
-        return img_fwd
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        dev = device(grad_output)
-        lor_start, lor_end, img_origin, voxel_size, image_shape = ctx.saved_tensors
-        grad_input = torch.zeros(tuple(image_shape), dtype=torch.float32, device=dev)
-        parallelproj_core.joseph3d_back(
-            lor_start,
-            lor_end,
-            grad_input,
-            img_origin,
-            voxel_size,
-            grad_output,
-        )
-        return grad_input, None, None, None, None
-
-
-# %%
-# select device
-if torch.cuda.is_available() and parallelproj_core.cuda_enabled == 1:
-    dev = "cuda"
-else:
-    dev = "cpu"
-
-
-# %%
-# Print backend and device info.
-print(f"parallelproj_core version: {parallelproj_core.__version__}")
-print(f"parallelproj_core cuda enabled: {parallelproj_core.cuda_enabled}")
-print(f"using array API compatible library: {torch.__name__} on device {dev}")
-
-# %%
-# Define a mini sparse demo image.
-image = torch.zeros((3, 3, 3), dtype=torch.float32, device=dev)
-image[0, 0, 2] = 0.25
-image[2, 0, 0] = 0.25
-image[2, 2, 2] = 0.5
-
-voxel_size = torch.asarray([2.0, 2.0, 2.0], device=dev, dtype=torch.float32)
-img_origin = torch.asarray([-1.0, -1.0, -1.0], device=dev, dtype=torch.float32)
-
-# %%
-# Define LOR start and end points.
-lor_start = torch.asarray(
-    [[7.0, 2.0, 2.0], [-1, -1, -5], [3, -3, -3]],
-    device=dev,
-    dtype=torch.float32,
-)
-lor_end = torch.asarray(
-    [[-5.0, 2.0, 2.0], [-1, -1, 7], [3, 6, 6]],
-    device=dev,
-    dtype=torch.float32,
-)
-
-# %%
-fwd_proj_layer = FwdProjLayer.apply
-img_fwd = fwd_proj_layer(image, lor_start, lor_end, img_origin, voxel_size)
-print("Forward projection result:", img_fwd)
-
-# %%
-# Run a torch gradient check to verify that the backward projection correctly computes gradients.
-# Since all parallelproj_core functions use float32, we set the eps, atol, and rtol parameters to higher values
-# to account for numerical precision issues.
-
-x = torch.rand(image.shape, dtype=torch.float32, device=dev, requires_grad=True)
-
-print("Running forward projection layer gradient test")
-grad_test_fwd = torch.autograd.gradcheck(
-    fwd_proj_layer,
-    (x, lor_start, lor_end, img_origin, voxel_size),
-    eps=1e-2,
-    atol=1e-5,
-    rtol=1e-5,
-)
-
-assert grad_test_fwd, "Gradient check failed!"
-
-# %%
-
 # sphinx_gallery_start_ignore
-import matplotlib.pyplot as plt
-from matplotlib.patches import Circle
-
-fig, ax = plt.subplots(figsize=(2.6, 1.6), layout="constrained")
-ax.axis("off")
-
-r = 0.035  # neuron radius
-
-x_in, x_h1, x_h2, x_out = 0.12, 0.38, 0.64, 0.88
-ys_in = [0.35, 0.65]  # 2 inputs
-ys_h1 = [0.25, 0.50, 0.75]  # 3 hidden
-ys_h2 = [0.25, 0.50, 0.75]  # 3 hidden
-ys_out = [0.50]  # 1 output
-
-
-def connect(x0, ys0, x1, ys1):
-    for y0 in ys0:
-        for y1 in ys1:
-            ax.plot([x0 + r, x1 - r], [y0, y1], lw=0.8, alpha=0.35)
-
-
-connect(x_in, ys_in, x_h1, ys_h1)
-connect(x_h1, ys_h1, x_h2, ys_h2)
-connect(x_h2, ys_h2, x_out, ys_out)
-
-
-def neurons(x, ys):
-    for y in ys:
-        ax.add_patch(Circle((x, y), r, fill=True, alpha=0.95))
-
-
-neurons(x_in, ys_in)
-neurons(x_h1, ys_h1)
-neurons(x_h2, ys_h2)
-neurons(x_out, ys_out)
-
-ax.text(x_in, 0.06, "in", ha="center", va="center", fontsize=9)
-ax.text(x_h1, 0.06, "h1", ha="center", va="center", fontsize=9)
-ax.text(x_h2, 0.06, "h2", ha="center", va="center", fontsize=9)
-ax.text(x_out, 0.06, "out", ha="center", va="center", fontsize=9)
-
-fig.show()
+import pathlib, sys
+try:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+except NameError:  # run by sphinx-gallery: docs/conf.py adds docs/examples to the path
+    pass
 # sphinx_gallery_end_ignore
+import numpy as np
+import matplotlib.pyplot as plt
+import torch
+import parallelproj_core
+from utils import COLORS, disk_phantom, lor_2d, set_style, show_image
+
+set_style()
+dev = "cuda" if (torch.cuda.is_available() and parallelproj_core.cuda_enabled == 1) else "cpu"
+print(f"parallelproj_core {parallelproj_core.__version__}, PyTorch {torch.__version__}, device {dev}")
+
+# %%
+# The geometry: a 2D "sinogram"
+# -----------------------------
+# 90 directions x 150 parallel LORs (2 mm apart) through the disk phantom (128 x 128 x 1
+# voxels of 2 mm). All arrays are PyTorch tensors on ``dev``.
+
+image_np, origin_np, voxel_size_np, extent = disk_phantom()
+x_true = torch.from_numpy(image_np).to(dev)
+img_origin = torch.from_numpy(origin_np).to(dev)
+voxel_size = torch.from_numpy(voxel_size_np).to(dev)
+img_shape = tuple(x_true.shape)
+
+lors = [lor_2d(phi, r) for phi in np.linspace(0, 180, 90, endpoint=False) for r in np.linspace(-149, 149, 150)]
+lor_start = torch.from_numpy(np.array([s for s, _ in lors])).to(dev)
+lor_end = torch.from_numpy(np.array([e for _, e in lors])).to(dev)
+print(f"{lor_start.shape[0]} LORs, image {img_shape}")
+
+
+# %%
+# The autograd layer
+# ------------------
+# ``stream`` is the current CUDA stream for GPU tensors and ``None`` (synchronous) for
+# CPU tensors. The geometry is not differentiated, so it is taken from the enclosing
+# scope instead of being passed to ``apply``.
+
+
+def stream_of(t):
+    return torch.cuda.current_stream(t.device).cuda_stream if t.is_cuda else None
+
+
+class ForwardProjection(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x):
+        y = torch.zeros(lor_start.shape[0], dtype=torch.float32, device=x.device)
+        parallelproj_core.joseph3d_fwd(lor_start, lor_end, x.contiguous(), img_origin, voxel_size, y,
+                                       stream=stream_of(x))
+        return y
+
+    @staticmethod
+    def backward(ctx, grad_y):
+        # the gradient with respect to x is the back projection of the gradient w.r.t. y
+        grad_x = torch.zeros(img_shape, dtype=torch.float32, device=grad_y.device)
+        parallelproj_core.joseph3d_back(lor_start, lor_end, grad_x, img_origin, voxel_size, grad_y.contiguous(),
+                                        stream=stream_of(grad_y))
+        return grad_x
+
+
+project = ForwardProjection.apply
+
+# %%
+# Check the gradient
+# ------------------
+# For the loss :math:`L(x) = \frac{1}{2}\|Ax - y\|^2`, the gradient is
+# :math:`A^T (Ax - y)`. The gradient computed by autograd (through ``backward``) must be
+# the same as the explicit back projection:
+
+y = project(x_true)  # "measured" data: the projections of the true image
+x = torch.rand(img_shape, device=dev, requires_grad=True)
+loss = 0.5 * ((project(x) - y) ** 2).sum()
+loss.backward()
+
+expected = torch.zeros(img_shape, device=dev)
+parallelproj_core.joseph3d_back(lor_start, lor_end, expected, img_origin, voxel_size, (project(x) - y).detach())
+print(f"max. relative difference autograd vs. A^T(Ax - y): "
+      f"{float((x.grad - expected).abs().max() / expected.abs().max()):.1e}")
+
+# %%
+# Fit an image with Adam
+# ----------------------
+# Start from zeros and minimize the mean squared difference between the projections of
+# the image and the data with ``torch.optim.Adam`` (here without noise and without
+# regularization, to keep it simple). Every iteration calls the forward projection
+# (``project``) and, through ``loss.backward()``, the back projection.
+
+x = torch.zeros(img_shape, device=dev, requires_grad=True)
+optimizer = torch.optim.Adam([x], lr=0.2)
+losses = []
+for it in range(200):
+    optimizer.zero_grad()
+    loss = ((project(x) - y) ** 2).mean()
+    loss.backward()
+    optimizer.step()
+    losses.append(loss.item())
+print(f"loss: {losses[0]:.3e} (iteration 1) -> {losses[-1]:.3e} (iteration {len(losses)})")
+
+# %%
+x_fit = x.detach().cpu()
+fig, ax = plt.subplots(1, 4, figsize=(17, 4.2), layout="constrained", gridspec_kw=dict(width_ratios=[1, 1, 1, 1.2]))
+show_image(ax[0], x_true.cpu(), extent, title="(a) true image", vmax=4.2)
+show_image(ax[1], x_fit, extent, title=f"(b) fitted (Adam, {len(losses)} iterations)", vmax=4.2)
+show_image(ax[2], x_fit - x_true.cpu(), extent, cmap="RdBu_r", title="(c) difference (b) − (a)")
+ax[2].images[0].set_clim(-1, 1)
+ax[3].semilogy(np.arange(1, len(losses) + 1), losses, color=COLORS["blue"])
+ax[3].set_xlabel("iteration")
+ax[3].set_ylabel("loss: mean (A x − y)²")
+ax[3].set_title("(d) the projector as a differentiable layer")
+for a in ax[:3]:
+    a.set_xlim(-130, 130)
+    a.set_ylim(-130, 130)
+fig.show()
+
+# %%
+# The image is recovered well; the remaining differences are at the sharp edges of the
+# disk and the hot spots, which converge slowest (and are not uniquely determined by a
+# limited number of LORs). The learning rate matters: with ``lr=0.05`` instead of 0.2,
+# the loss after 200 iterations is about 100 times higher.
+#
+# Notes
+# -----
+# - **Batches and channels:** a network works with tensors of shape (batch, channel,
+#   ...). Loop over the batch (and channels) in ``forward`` / ``backward``, or reshape;
+#   the projectors work on one image at a time.
+# - **TOF and listmode:** the same pattern works with the TOF sinogram and TOF listmode
+#   projectors; for listmode, the events are passed to ``apply`` as an extra
+#   (non-differentiable) argument, see
+#   :ref:`sphx_glr_auto_examples_03_pytorch_gpus_performance_03_multi_gpu_tof_listmode.py`.
+# - **Poisson data:** for PET data, use the Poisson log-likelihood instead of the squared
+#   difference (also shown in the listmode example).
+# - **parallelproj** provides ready-to-use operators and PyTorch layers built on these
+#   projectors (scanner geometries, sinogram and listmode, attenuation, resolution
+#   models), see the examples of `parallelproj <https://parallelproj.readthedocs.io>`_.

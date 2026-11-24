@@ -35,39 +35,39 @@ events).
 For large scanners, process the LORs in chunks (e.g. per ring difference): the LOR end points
 of all LORs of a large scanner can need several GB.
 
-TOF listmode OSEM with sorted events
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Sorting listmode events (e.g. once per OSEM subset)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Sort the events once, before the iterations, and use the sorted events in all iterations;
+this makes the TOF listmode projections on GPUs much faster (see
+:ref:`listmode-event-order`). With subsets, sort the events of every subset. All per-event
+arrays (LOR end points, TOF bins, per-event TOF parameters and corrections) must be
+reordered consistently:
 
 .. code-block:: python
 
-   # once: split the events into subsets and sort the events of every subset
    subsets = []
    for k in range(num_subsets):
-       idx = xp.arange(k, num_events, num_subsets, device=dev)
+       idx = xp.arange(k, num_events, num_subsets, device=dev)  # e.g. every num_subsets-th event
        s, e, tb = event_start[idx, :], event_end[idx, :], tof_bin[idx]
-       m, c = mult_events[idx], contamination_events[idx]  # per-event corrections
        key = xp.zeros(s.shape[0], dtype=xp.int64, device=dev)
        pc.tof_lm_sort_key(s, e, image_origin, voxel_size, key, tof_bin_width, tof_center_offset, tb, num_tof_bins)
        o = xp.argsort(key)
-       subsets.append(tuple(a[o, ...] for a in (s, e, tb, m, c)))
+       subsets.append((s[o, :], e[o, :], tb[o], mult_events[idx][o], contamination_events[idx][o]))
 
-   # iterations
-   for it in range(num_iterations):
-       for s, e, tb, m, c in subsets:
-           expected = xp.zeros(s.shape[0], dtype=xp.float32, device=dev)
-           pc.joseph3d_tof_lm_fwd(s, e, x, image_origin, voxel_size, expected, tof_bin_width, tof_sigma,
-                                  tof_center_offset, tb, num_tof_bins)
-           ratio = m / (m * expected + c)  # every event has count 1
-           update = xp.zeros_like(x)
-           pc.joseph3d_tof_lm_back(s, e, update, image_origin, voxel_size, ratio, tof_bin_width, tof_sigma,
-                                   tof_center_offset, tb, num_tof_bins)
-           x = x * update / (sens / num_subsets)
+The iterations then project the sorted subsets with :func:`parallelproj_core.joseph3d_tof_lm_fwd`
+and :func:`parallelproj_core.joseph3d_tof_lm_back`. Complete listmode (OSEM / MLEM)
+reconstructions, with scanner geometries and corrections, are shown in the examples of
+`parallelproj <https://parallelproj.readthedocs.io>`_; the projector calls themselves are
+shown in the gallery example
+:ref:`sphx_glr_auto_examples_03_pytorch_gpus_performance_04_tof_listmode_event_order.py`.
 
 Testing adjointness
 ^^^^^^^^^^^^^^^^^^^
 
 For your own geometry and parameters, check :math:`\langle A x, y \rangle = \langle x, A^T y \rangle`
-with random :math:`x, y`:
+with random :math:`x, y` (see also the example
+:ref:`sphx_glr_auto_examples_02_projector_properties_01_line_integrals_adjointness.py`):
 
 .. code-block:: python
 

@@ -34,7 +34,19 @@ The projectors of :mod:`parallelproj_core` support both modes via their ``stream
   ``torch.cuda.current_stream(device).cuda_stream``. ``0`` is PyTorch's default stream.
 
 With asynchronous calls, projections on different GPUs run **at the same time**, even
-if they are called one after another from a single Python thread.
+if they are called one after another from a single Python thread:
+
+.. figure:: /_static/figures/multi_gpu_streams.svg
+   :width: 100%
+   :alt: timeline of synchronous and asynchronous projector calls on two GPUs
+
+   Synchronous calls (top): the CPU waits for every projection, so the GPUs work one after
+   another. Asynchronous calls (bottom): the CPU only queues the projections, and both GPUs
+   work at the same time. (Schematic; the measured times are printed below.)
+
+The second part of the example does the same with the **TOF sinogram projectors**; the
+TOF listmode projectors (event lists of different lengths per sample) are shown in the
+next example.
 """
 
 # %%
@@ -55,6 +67,7 @@ if they are called one after another from a single Python thread.
 
 import torch
 import parallelproj_core
+# sphinx_gallery_thumbnail_path = "_static/figures/multi_gpu_streams.png"
 # sphinx_gallery_start_ignore
 # the helper modules (utils.py, gpu_utils.py) are in the parent directory (docs/examples)
 import pathlib, sys
@@ -129,14 +142,14 @@ batch = random_images(2 * num_gpus, img_shape)
 chunks = [c.to(d) for c, d in zip(torch.tensor_split(batch, num_gpus), devices)]
 
 
-def project_batch(chunks, use_streams):
+def project_batch(chunks, use_streams, fwd=fwd_project, back=back_project):
     """forward and back project all images of all chunks (one chunk per GPU)"""
     results = []
     for chunk in chunks:  # loop over GPUs
         out = []
         for x in chunk:  # loop over the images of this GPU
             stream = current_stream(x) if use_streams else None
-            out.append(back_project(fwd_project(x, stream), stream))
+            out.append(back(fwd(x, stream), stream))
         results.append(torch.stack(out))
     return results
 
@@ -263,6 +276,84 @@ rel_err = float((x[0].grad - expected).abs().max() / expected.abs().max())
 print(f"relative error of the gradient: {rel_err:.2e}")
 
 # %%
+# The same with TOF sinogram projections
+# --------------------------------------
+# Only the projection functions change: the TOF sinogram projectors get the TOF
+# parameters, and a TOF sinogram has one value per LOR **and** TOF bin, i.e. it is
+# ``num_tof_bins`` times larger than a non-TOF sinogram. We therefore use a scanner with
+# fewer rings (8 rings, 64 ring pairs) and fewer image planes to keep the memory per GPU
+# moderate. TOF: bins of 20 mm, 300 ps FWHM (about 45 mm FWHM, σ = 19 mm).
+
+tof_img_shape = (128, 128, 32)
+tof_img_origin = image_origin(tof_img_shape, voxel_size)
+tof_lor_start, tof_lor_end = sinogram_lors(num_rings=8, ring_spacing=8.0)
+tof_bin_width, num_tof_bins = 20.0, 21  # covers +/- 210 mm around the LOR centers
+tof_sigma, tof_center_offset = torch.tensor([45.0 / 2.355]), torch.tensor([0.0])
+num_tof_lors = tof_lor_start.shape[0]
+print(f"{num_tof_lors / 1e6:.2f} million LORs x {num_tof_bins} TOF bins, image {tof_img_shape}: "
+      f"TOF sinogram of one image {num_tof_lors * num_tof_bins * 4 / 1e6:.0f} MB")
+
+tof_geometry = {
+    d: dict(lor_start=tof_lor_start.to(d), lor_end=tof_lor_end.to(d), img_origin=tof_img_origin.to(d),
+            voxel_size=voxel_size.to(d), tof_sigma=tof_sigma.to(d), tof_center_offset=tof_center_offset.to(d))
+    for d in devices
+}
+
+
+def tof_fwd_project(x, stream=None):
+    geo = tof_geometry[x.device]
+    y = torch.zeros((num_tof_lors, num_tof_bins), dtype=torch.float32, device=x.device)
+    parallelproj_core.joseph3d_tof_sino_fwd(
+        geo["lor_start"], geo["lor_end"], x, geo["img_origin"], geo["voxel_size"], y,
+        tof_bin_width, geo["tof_sigma"], geo["tof_center_offset"], num_tof_bins, stream=stream,
+    )
+    return y
+
+
+def tof_back_project(y, stream=None):
+    geo = tof_geometry[y.device]
+    x = torch.zeros(tof_img_shape, dtype=torch.float32, device=y.device)
+    parallelproj_core.joseph3d_tof_sino_back(
+        geo["lor_start"], geo["lor_end"], x, geo["img_origin"], geo["voxel_size"], y,
+        tof_bin_width, geo["tof_sigma"], geo["tof_center_offset"], num_tof_bins, stream=stream,
+    )
+    return x
+
+
+tof_batch = random_images(2 * num_gpus, tof_img_shape)
+tof_chunks = [c.to(d) for c, d in zip(torch.tensor_split(tof_batch, num_gpus), devices)]
+
+t_sync = best_time(lambda: project_batch(tof_chunks, False, tof_fwd_project, tof_back_project), devices)
+t_async = best_time(lambda: project_batch(tof_chunks, True, tof_fwd_project, tof_back_project), devices)
+print(f"{num_gpus} GPU(s), batch of {tof_batch.shape[0]} images (TOF forward + back projection)")
+print(f"  synchronous calls (stream=None):     {t_sync:.3f} s")
+print(f"  asynchronous calls (current stream): {t_async:.3f} s  ->  speed-up {t_sync / t_async:.2f}")
+
+# %%
+# The autograd layer is the same as above, with the TOF functions: the output of
+# ``forward`` is a TOF sinogram, and ``backward`` receives the gradient with respect to
+# the TOF sinogram.
+
+
+class TOFForwardProjection(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x):
+        return tof_fwd_project(x, stream=current_stream(x))
+
+    @staticmethod
+    def backward(ctx, grad_y):
+        return tof_back_project(grad_y.contiguous(), stream=current_stream(grad_y))
+
+
+x_tof = tof_chunks[0][0].clone().requires_grad_(True)
+y_tof = TOFForwardProjection.apply(tof_chunks[0][0]).detach()
+loss = ((TOFForwardProjection.apply(x_tof) - 1.1 * y_tof) ** 2).sum()
+loss.backward()
+expected = 2 * tof_back_project(tof_fwd_project(x_tof.detach()) - 1.1 * y_tof)
+print(f"TOF layer: relative error of the gradient: "
+      f"{float((x_tof.grad - expected).abs().max() / expected.abs().max()):.2e}")
+
+# %%
 # Summary and further notes
 # -------------------------
 # - **One GPU:** the same code works. Asynchronous calls (current stream) avoid that the
@@ -279,5 +370,5 @@ print(f"relative error of the gradient: {rel_err:.2e}")
 # - **CuPy:** use ``cupy.cuda.get_current_stream().ptr`` as stream handle. During CUDA
 #   graph capture, pass CuPy arrays as ``x.__dlpack__(stream=handle)``.
 # - **CPU arrays** (NumPy) work as well; such calls always return complete results.
-# - **TOF:** the next examples do the same with the TOF sinogram projectors and with
-#   the TOF listmode projectors (different numbers of events per sample).
+# - **TOF listmode:** the next example does the same with the TOF listmode projectors,
+#   where every sample has its own list of events (of different length).
