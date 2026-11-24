@@ -164,6 +164,8 @@ pixi run run-examples-gpu  # every example as a standalone script, pass/fail + r
 ```
 
 `docs-gpu` writes to `docs/_build/html-gpu`; the CUDA build lives in `docs/_build_doxygen_cuda13`.
+It first removes the generated gallery pages (`pixi run -e docs clean-gallery`), so all examples
+run again and no pages of renamed or removed examples remain.
 `pixi run -e docs run-examples` runs all examples as scripts with the CPU build.
 
 **Without pixi:** install the documentation dependencies and run:
