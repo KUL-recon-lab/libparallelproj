@@ -142,6 +142,35 @@ print(f"max. |Gaussian table - Gaussian| / max. Gaussian: "
       f"{float(xp.max(xp.abs(p_gauss_tab - p_gauss)) / xp.max(p_gauss)):.1e}")
 
 # %%
+# The "true" TOF profile (perfect TOF)
+# ------------------------------------
+# With a perfect timing resolution, every TOF bin would contain the line integral of the
+# image over its own 8 mm section of the LOR, without blurring. We compute it numerically:
+# bilinear interpolation of the image (as in Joseph's method) at points 0.05 mm apart along
+# the LOR, summed per TOF bin.
+
+s_np, e_np = to_numpy(lor_start)[0].astype(np.float64), to_numpy(lor_end)[0].astype(np.float64)
+lor_length = np.linalg.norm(e_np - s_np)
+step = 0.05  # mm
+t = np.arange(step / 2, lor_length, step)  # distance from lor_start
+pts = s_np + t[:, None] * (e_np - s_np) / lor_length
+fx = (pts[:, 0] - image_origin_np[0]) / voxel_size_np[0]  # continuous voxel coordinates
+fy = (pts[:, 1] - image_origin_np[1]) / voxel_size_np[1]
+img2d = image_np[:, :, 0]
+ix, iy = np.floor(fx).astype(int), np.floor(fy).astype(int)
+wx, wy = fx - ix, fy - iy
+vals = np.zeros_like(t)
+for dx, dy, w in [(0, 0, (1 - wx) * (1 - wy)), (1, 0, wx * (1 - wy)), (0, 1, (1 - wx) * wy), (1, 1, wx * wy)]:
+    jx, jy = ix + dx, iy + dy
+    inside = (jx >= 0) & (jx < img2d.shape[0]) & (jy >= 0) & (jy < img2d.shape[1])
+    vals[inside] += w[inside] * img2d[jx[inside], jy[inside]]
+# TOF bin of every point: bins of tof_bin_width centered on the LOR center, numbered towards lor_end
+tof_bin = np.floor((t - 0.5 * lor_length) / tof_bin_width + 0.5 * num_tof_bins).astype(int)
+ok = (tof_bin >= 0) & (tof_bin < num_tof_bins)
+p_true = np.bincount(tof_bin[ok], weights=vals[ok] * step, minlength=num_tof_bins)
+print(f"perfect TOF: sum over TOF bins {p_true.sum():.3f} (non-TOF projection {float(p_nontof[0]):.3f})")
+
+# %%
 # The back projection with a table
 # --------------------------------
 # :func:`parallelproj_core.joseph3d_tof_sino_back_tab` takes the same table and is the
@@ -203,6 +232,7 @@ for a, log in [(ax[0, 0], False), (ax[0, 1], True)]:
         a.set_title("(a) the TOF kernels: area 1, same FWHM, different FWTM")
         a.legend(loc="upper left")
 
+ax[1, 0].step(bins, p_true, where="mid", color=COLORS["gray"], lw=1.2, alpha=0.8, label="perfect TOF (no blur)")
 ax[1, 0].plot(bins, pg, "o", ms=6, mfc="none", color=cg, label="1. Gaussian")
 ax[1, 0].plot(bins, pgt, ".", ms=5, color=COLORS["purple"], label="2. Gaussian table")
 ax[1, 0].plot(bins, pt, ".-", ms=4, color=ct, label="3. core + tail table")
@@ -221,6 +251,10 @@ ax[1, 1].set_title("(d) differences to 1.")
 fig.show()
 
 # %%
+# - **Perfect TOF** (gray steps in (c)): the line integral of the image per TOF bin. Every TOF
+#   kernel blurs this profile along the LOR; its sum is the same as that of the TOF
+#   projections (up to 0.03 %: Joseph's method samples the LOR once per image plane, the
+#   reference integrates it in 0.05 mm steps).
 # - **1. and 2.** give the same projection (up to float32 rounding and the resolution of the
 #   table): a table of a Gaussian reproduces the Gaussian kernel.
 # - **3.** has the same FWHM, but a wider FWTM (full width at tenth maximum). Both kernels
