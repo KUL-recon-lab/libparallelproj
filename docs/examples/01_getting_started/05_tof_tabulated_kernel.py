@@ -105,11 +105,16 @@ def mixture_pdf(u, s):
     return 0.75 * g(u, s) + 0.25 * g(u, 3 * s)
 
 
-def fwhm(s):
-    """FWHM of the mixture with core width s (numerically)"""
-    u = np.linspace(0, 10 * s, 100001)
+def full_width(s, fraction=0.5):
+    """full width of the mixture (core width s) at the given fraction of its maximum
+    (0.5: FWHM, 0.1: FWTM), computed numerically"""
+    u = np.linspace(0, 20 * s, 200001)
     f = mixture_pdf(u, s)
-    return 2 * u[np.argmax(f < 0.5 * f[0])]
+    return 2 * u[np.argmax(f < fraction * f[0])]
+
+
+def fwhm(s):
+    return full_width(s, 0.5)
 
 
 fwhm_gauss = 2 * math.sqrt(2 * math.log(2)) * sigma
@@ -124,7 +129,10 @@ cdf_tail = np.concatenate([[0.0], np.cumsum(0.5 * (mixture_pdf(u_tail[1:], s_cor
                                             * np.diff(u_tail))])  # trapezoidal integration of the density
 p_tail = tabulated_projection(cdf_tail, float(u_tail[0]), float(u_tail[-1]))
 
+fwtm_gauss = 2 * math.sqrt(2 * math.log(10)) * sigma  # full width at tenth maximum of a Gaussian
+fwtm_tail = full_width(s_core, 0.1)
 print(f"FWHM: Gaussian {fwhm_gauss:.2f} mm, core + tail {fwhm(s_core):.2f} mm (core s = {s_core:.2f} mm)")
+print(f"FWTM: Gaussian {fwtm_gauss:.2f} mm, core + tail {fwtm_tail:.2f} mm")
 p_nontof = xp.zeros(1, dtype=xp.float32, device=dev)
 parallelproj_core.joseph3d_fwd(lor_start, lor_end, image, image_origin, voxel_size, p_nontof)
 print(f"non-TOF projection: {float(p_nontof[0]):.3f}")
@@ -155,41 +163,56 @@ k_gauss = np.where(np.abs(uu) <= 3 * sigma, np.exp(-0.5 * (uu / sigma) ** 2), np
 k_tail = np.where(np.abs(uu) <= 9 * s_core, mixture_pdf(uu, s_core) / mixture_pdf(0.0, s_core), np.nan)
 bins = np.arange(num_tof_bins)
 pg, pgt, pt = to_numpy(p_gauss)[0], to_numpy(p_gauss_tab)[0], to_numpy(p_tail)[0]
+cg, ct = COLORS["blue"], COLORS["orange"]
 
-fig, ax = plt.subplots(1, 3, figsize=(16, 4.4), layout="constrained")
-ax[0].semilogy(uu, k_gauss, color=COLORS["blue"], label=f"Gaussian, σ = {sigma:g} mm (truncated at 3σ)")
-ax[0].semilogy(uu, k_tail, color=COLORS["orange"], label=f"core + tail, same FWHM ({fwhm_gauss:.1f} mm)")
-ax[0].axhline(0.5, color=COLORS["gray"], lw=0.6, ls=":")
-for x in (-0.5 * fwhm_gauss, 0.5 * fwhm_gauss):
-    ax[0].axvline(x, color=COLORS["gray"], lw=0.6, ls=":")
-ax[0].text(78, 0.56, "half maximum", fontsize=8, color=COLORS["gray"], ha="right")
-ax[0].set_ylim(3e-4, 2)
-ax[0].set_xlabel("u: distance from the annihilation point [mm]")
-ax[0].set_ylabel("kernel / its maximum (log scale)")
-ax[0].legend(loc="lower center")
-ax[0].set_title("(a) the TOF kernels")
+fig, ax = plt.subplots(2, 2, figsize=(13, 9.5), layout="constrained")
+for a, log in [(ax[0, 0], False), (ax[0, 1], True)]:
+    a.plot(uu, k_gauss, color=cg, label=f"Gaussian, σ = {sigma:g} mm (truncated at 3σ)")
+    a.plot(uu, k_tail, color=ct, label="core + tail")
+    # FWHM (the same for both) and FWTM (different): horizontal bars at 0.5 and 0.1
+    a.hlines(0.5, -0.5 * fwhm_gauss, 0.5 * fwhm_gauss, color=COLORS["gray"], lw=1.5)
+    a.text(0, 0.53 if not log else 0.56, f"FWHM {fwhm_gauss:.1f} mm (both)", ha="center", va="bottom", fontsize=8.5,
+           color=COLORS["gray"])
+    # FWTM bars, with ticks at their ends (in the color of the kernel)
+    for w, c, lw in [(fwtm_tail, ct, 1.2), (fwtm_gauss, cg, 1.2)]:
+        a.hlines(0.1, -0.5 * w, 0.5 * w, color=c, lw=lw)
+        a.plot([-0.5 * w, 0.5 * w], [0.1, 0.1], "|", ms=12, mew=2, color=c)
+    a.text(42, 0.3 if log else 0.28, f"FWTM (at 0.1):\n{fwtm_gauss:.1f} mm Gaussian\n{fwtm_tail:.1f} mm core + tail",
+           va="center", fontsize=8.5, color=COLORS["gray"])
+    a.set_xlabel("u: distance from the annihilation point [mm]")
+    if log:
+        a.set_yscale("log")
+        a.set_ylim(3e-4, 2)
+        a.set_ylabel("kernel / its maximum (log scale)")
+        a.set_title("(b) the same on a log scale: the tails")
+    else:
+        a.set_ylim(0, 1.08)
+        a.set_ylabel("kernel / its maximum")
+        a.set_title("(a) the TOF kernels: same FWHM, different FWTM")
+        a.legend(loc="upper left")
 
-ax[1].plot(bins, pg, "o", ms=6, mfc="none", color=COLORS["blue"], label="1. Gaussian")
-ax[1].plot(bins, pgt, ".", ms=5, color=COLORS["purple"], label="2. Gaussian table")
-ax[1].plot(bins, pt, ".-", ms=4, color=COLORS["orange"], label="3. core + tail table")
-ax[1].set_xlabel("TOF bin")
-ax[1].set_ylabel("TOF sinogram value")
-ax[1].legend(loc="upper left")
-ax[1].set_title("(b) TOF projections of the LOR")
+ax[1, 0].plot(bins, pg, "o", ms=6, mfc="none", color=cg, label="1. Gaussian")
+ax[1, 0].plot(bins, pgt, ".", ms=5, color=COLORS["purple"], label="2. Gaussian table")
+ax[1, 0].plot(bins, pt, ".-", ms=4, color=ct, label="3. core + tail table")
+ax[1, 0].set_xlabel("TOF bin")
+ax[1, 0].set_ylabel("TOF sinogram value")
+ax[1, 0].legend(loc="upper left")
+ax[1, 0].set_title("(c) TOF projections of the LOR")
 
-ax[2].plot(bins, pgt - pg, ".-", color=COLORS["purple"], label="2. Gaussian table − 1.")
-ax[2].plot(bins, pt - pg, ".-", color=COLORS["orange"], label="3. core + tail − 1.")
-ax[2].axhline(0, color=COLORS["gray"], lw=0.8)
-ax[2].set_xlabel("TOF bin")
-ax[2].set_ylabel("difference to the Gaussian projection")
-ax[2].legend(loc="lower left")
-ax[2].set_title("(c) differences to 1.")
+ax[1, 1].plot(bins, pgt - pg, ".-", color=COLORS["purple"], label="2. Gaussian table − 1.")
+ax[1, 1].plot(bins, pt - pg, ".-", color=ct, label="3. core + tail − 1.")
+ax[1, 1].axhline(0, color=COLORS["gray"], lw=0.8)
+ax[1, 1].set_xlabel("TOF bin")
+ax[1, 1].set_ylabel("difference to the Gaussian projection")
+ax[1, 1].legend(loc="lower left")
+ax[1, 1].set_title("(d) differences to 1.")
 fig.show()
 
 # %%
 # - **1. and 2.** give the same projection (up to float32 rounding and the resolution of the
 #   table): a table of a Gaussian reproduces the Gaussian kernel.
-# - **3.** has the same FWHM, but its wide tails move counts from the peaks of the TOF
+# - **3.** has the same FWHM, but a wider FWTM (full width at tenth maximum): its tails
+#   move counts from the peaks of the TOF
 #   profile into the neighboring TOF bins (and further out). The sum over all TOF bins is
 #   the non-TOF projection, as for every kernel, as long as the TOF bins cover the kernel
 #   of every image sample: here, the 45 TOF bins (±180 mm around the LOR center) miss the
