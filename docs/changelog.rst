@@ -197,6 +197,13 @@ Added
   every example as a standalone script.
   (`#59 <https://github.com/KUL-recon-lab/libparallelproj/issues/59>`_)
 
+* **Test of all CUDA projectors with host, CUDA device and CUDA managed arrays**
+  (``tests/test_memory_types.py``, needs a GPU and CuPy): every projector, including the
+  tabulated-kernel and point projectors and ``tof_lm_sort_key``, synchronously and on a
+  side stream, compared with the results for host arrays; mixing device and managed main
+  arrays is rejected. Before, managed arrays were only tested for the non-TOF projectors.
+  (`#75 <https://github.com/KUL-recon-lab/libparallelproj/issues/75>`_)
+
 Changed
 ^^^^^^^
 
