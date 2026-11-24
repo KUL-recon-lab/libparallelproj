@@ -118,4 +118,5 @@ fig.show()
 # TOF sinogram, the arrays simply have one row per LOR. How the TOF weights are computed (and
 # how ``num_sigmas`` and the TOF bin width change them) is shown in
 # :ref:`sphx_glr_auto_examples_02_projector_properties_02_tof_kernel.py` (theory:
-# :doc:`/theory/tof`).
+# :doc:`/theory/tof`); kernels that are not Gaussian are shown in
+# :ref:`sphx_glr_auto_examples_01_getting_started_05_tof_tabulated_kernel.py`.

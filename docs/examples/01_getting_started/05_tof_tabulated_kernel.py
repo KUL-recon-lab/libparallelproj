@@ -1,0 +1,200 @@
+"""
+TOF Projections with a Tabulated TOF Kernel
+===========================================
+
+Instead of a Gaussian, the TOF projectors with the suffix ``_tab``
+(:func:`parallelproj_core.joseph3d_tof_sino_fwd_tab`,
+:func:`parallelproj_core.joseph3d_tof_sino_back_tab`, and the listmode versions) use any TOF
+kernel given as a **table of its cumulative distribution F(u)**:
+
+- ``tof_kernel_cdf``: F at n equidistant points from ``u_min`` to ``u_max`` (linearly
+  interpolated in between); u is the distance along the LOR from the true annihilation
+  point (spatial units, positive towards ``lor_end``). F does not need to be normalized.
+- ``tof_kernel_scale``: stretches the kernel (one value, or one per LOR).
+- the TOF bin width is not part of the table: the projectors integrate the kernel over
+  each TOF bin themselves.
+
+This example projects one LOR with
+
+1. the Gaussian kernel of :func:`parallelproj_core.joseph3d_tof_sino_fwd`,
+2. the **same Gaussian as a table** (gives the same projection),
+3. a **non-Gaussian kernel** with the same FWHM but wider tails.
+
+How to build the table from measured time differences is shown in
+:ref:`sphx_glr_auto_examples_02_projector_properties_03_tof_kernel_table.py`.
+"""
+
+# sphinx_gallery_start_ignore
+import pathlib, sys
+try:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+except NameError:  # run by sphinx-gallery: docs/conf.py adds docs/examples to the path
+    pass
+# sphinx_gallery_end_ignore
+import math
+
+import numpy as np
+import matplotlib.pyplot as plt
+import parallelproj_core
+from utils import COLORS, array_backend, disk_phantom, set_style, to_numpy
+
+xp, dev = array_backend()
+set_style()
+
+# %%
+# Image, one LOR and TOF parameters
+# ---------------------------------
+# The same as in
+# :ref:`sphx_glr_auto_examples_01_getting_started_02_tof_sinogram_projection.py`: the disk
+# phantom, one LOR close to both hot spots, 45 TOF bins of 8 mm, σ = 12 mm.
+
+image_np, image_origin_np, voxel_size_np, extent = disk_phantom()
+image = xp.asarray(image_np, device=dev)
+image_origin = xp.asarray(image_origin_np, device=dev)
+voxel_size = xp.asarray(voxel_size_np, device=dev)
+
+lor_start = xp.asarray([[-170.0, -55.0, 0.0]], dtype=xp.float32, device=dev)
+lor_end = xp.asarray([[170.0, 64.0, 0.0]], dtype=xp.float32, device=dev)
+
+tof_bin_width, num_tof_bins = 8.0, 45
+sigma = 12.0  # mm (FWHM 28.3 mm)
+tof_center_offset = xp.asarray([0.0], dtype=xp.float32, device=dev)
+tof_kernel_scale = xp.asarray([1.0], dtype=xp.float32, device=dev)
+
+# %%
+# 1. Gaussian kernel (no table)
+# -----------------------------
+
+p_gauss = xp.zeros((1, num_tof_bins), dtype=xp.float32, device=dev)
+parallelproj_core.joseph3d_tof_sino_fwd(lor_start, lor_end, image, image_origin, voxel_size, p_gauss, tof_bin_width,
+                                        xp.asarray([sigma], dtype=xp.float32, device=dev), tof_center_offset,
+                                        num_tof_bins, num_sigmas=3.0)
+
+# %%
+# 2. The same Gaussian as a table
+# -------------------------------
+# F(u) = Φ(u / σ), the cumulative standard normal distribution, on u = -3σ ... 3σ (the
+# support of the Gaussian above, which is truncated at 3σ), 601 points (0.12 mm apart).
+
+
+def tabulated_projection(cdf, u_min, u_max):
+    """TOF sinogram forward projection of the LOR with a tabulated kernel"""
+    p = xp.zeros((1, num_tof_bins), dtype=xp.float32, device=dev)
+    parallelproj_core.joseph3d_tof_sino_fwd_tab(lor_start, lor_end, image, image_origin, voxel_size, p,
+                                                tof_bin_width, tof_center_offset, num_tof_bins,
+                                                xp.asarray(cdf, dtype=xp.float32, device=dev), u_min, u_max,
+                                                tof_kernel_scale)
+    return p
+
+
+u_gauss = np.linspace(-3 * sigma, 3 * sigma, 601)
+cdf_gauss = np.array([0.5 * (1 + math.erf(u / (sigma * math.sqrt(2)))) for u in u_gauss])
+p_gauss_tab = tabulated_projection(cdf_gauss, float(u_gauss[0]), float(u_gauss[-1]))
+
+# %%
+# 3. A non-Gaussian kernel: same FWHM, wider tails
+# ------------------------------------------------
+# A Gaussian core plus a 3 times wider Gaussian "tail" (25 % of the events), e.g. events with a
+# poorer timing resolution. The width s of the core is chosen such that the kernel has the
+# same FWHM as the Gaussian above. The table covers ±9 s (the tail component up to 3 of its
+# standard deviations).
+
+
+def mixture_pdf(u, s):
+    g = lambda x, sd: np.exp(-0.5 * (x / sd) ** 2) / (sd * math.sqrt(2 * math.pi))
+    return 0.75 * g(u, s) + 0.25 * g(u, 3 * s)
+
+
+def fwhm(s):
+    """FWHM of the mixture with core width s (numerically)"""
+    u = np.linspace(0, 10 * s, 100001)
+    f = mixture_pdf(u, s)
+    return 2 * u[np.argmax(f < 0.5 * f[0])]
+
+
+fwhm_gauss = 2 * math.sqrt(2 * math.log(2)) * sigma
+s_lo, s_hi = 1.0, sigma  # bisection: the FWHM grows with s
+for _ in range(60):
+    s_mid = 0.5 * (s_lo + s_hi)
+    s_lo, s_hi = (s_mid, s_hi) if fwhm(s_mid) < fwhm_gauss else (s_lo, s_mid)
+s_core = 0.5 * (s_lo + s_hi)
+
+u_tail = np.linspace(-9 * s_core, 9 * s_core, 1201)
+cdf_tail = np.concatenate([[0.0], np.cumsum(0.5 * (mixture_pdf(u_tail[1:], s_core) + mixture_pdf(u_tail[:-1], s_core))
+                                            * np.diff(u_tail))])  # trapezoidal integration of the density
+p_tail = tabulated_projection(cdf_tail, float(u_tail[0]), float(u_tail[-1]))
+
+print(f"FWHM: Gaussian {fwhm_gauss:.2f} mm, core + tail {fwhm(s_core):.2f} mm (core s = {s_core:.2f} mm)")
+p_nontof = xp.zeros(1, dtype=xp.float32, device=dev)
+parallelproj_core.joseph3d_fwd(lor_start, lor_end, image, image_origin, voxel_size, p_nontof)
+print(f"non-TOF projection: {float(p_nontof[0]):.3f}")
+for name, p in [("Gaussian", p_gauss), ("Gaussian table", p_gauss_tab), ("core + tail table", p_tail)]:
+    print(f"{name:18s}: sum over TOF bins {float(xp.sum(p)):.3f}")
+print(f"max. |Gaussian table - Gaussian| / max. Gaussian: "
+      f"{float(xp.max(xp.abs(p_gauss_tab - p_gauss)) / xp.max(p_gauss)):.1e}")
+
+# %%
+# The back projection with a table
+# --------------------------------
+# :func:`parallelproj_core.joseph3d_tof_sino_back_tab` takes the same table and is the
+# adjoint of the forward projection: for an image x and TOF data y,
+# ⟨A x, y⟩ = ⟨x, Aᵀ y⟩.
+
+y = xp.asarray(np.random.default_rng(0).uniform(size=(1, num_tof_bins)), dtype=xp.float32, device=dev)
+back = xp.zeros(image.shape, dtype=xp.float32, device=dev)  # the back projection adds to it
+parallelproj_core.joseph3d_tof_sino_back_tab(lor_start, lor_end, back, image_origin, voxel_size, y, tof_bin_width,
+                                             tof_center_offset, num_tof_bins,
+                                             xp.asarray(cdf_tail, dtype=xp.float32, device=dev),
+                                             float(u_tail[0]), float(u_tail[-1]), tof_kernel_scale)
+print(f"<A x, y> = {float(xp.sum(p_tail * y)):.4f},  <x, A^T y> = {float(xp.sum(image * back)):.4f}")
+
+# %%
+uu = np.linspace(-80, 80, 1601)
+# both kernels normalized to their maximum: the same FWHM = the same width at 0.5
+k_gauss = np.where(np.abs(uu) <= 3 * sigma, np.exp(-0.5 * (uu / sigma) ** 2), np.nan)
+k_tail = np.where(np.abs(uu) <= 9 * s_core, mixture_pdf(uu, s_core) / mixture_pdf(0.0, s_core), np.nan)
+bins = np.arange(num_tof_bins)
+pg, pgt, pt = to_numpy(p_gauss)[0], to_numpy(p_gauss_tab)[0], to_numpy(p_tail)[0]
+
+fig, ax = plt.subplots(1, 3, figsize=(16, 4.4), layout="constrained")
+ax[0].semilogy(uu, k_gauss, color=COLORS["blue"], label=f"Gaussian, σ = {sigma:g} mm (truncated at 3σ)")
+ax[0].semilogy(uu, k_tail, color=COLORS["orange"], label=f"core + tail, same FWHM ({fwhm_gauss:.1f} mm)")
+ax[0].axhline(0.5, color=COLORS["gray"], lw=0.6, ls=":")
+for x in (-0.5 * fwhm_gauss, 0.5 * fwhm_gauss):
+    ax[0].axvline(x, color=COLORS["gray"], lw=0.6, ls=":")
+ax[0].text(78, 0.56, "half maximum", fontsize=8, color=COLORS["gray"], ha="right")
+ax[0].set_ylim(3e-4, 2)
+ax[0].set_xlabel("u: distance from the annihilation point [mm]")
+ax[0].set_ylabel("kernel / its maximum (log scale)")
+ax[0].legend(loc="lower center")
+ax[0].set_title("(a) the TOF kernels")
+
+ax[1].plot(bins, pg, "o", ms=6, mfc="none", color=COLORS["blue"], label="1. Gaussian")
+ax[1].plot(bins, pgt, ".", ms=5, color=COLORS["purple"], label="2. Gaussian table")
+ax[1].plot(bins, pt, ".-", ms=4, color=COLORS["orange"], label="3. core + tail table")
+ax[1].set_xlabel("TOF bin")
+ax[1].set_ylabel("TOF sinogram value")
+ax[1].legend(loc="upper left")
+ax[1].set_title("(b) TOF projections of the LOR")
+
+ax[2].plot(bins, pgt - pg, ".-", color=COLORS["purple"], label="2. Gaussian table − 1.")
+ax[2].plot(bins, pt - pg, ".-", color=COLORS["orange"], label="3. core + tail − 1.")
+ax[2].axhline(0, color=COLORS["gray"], lw=0.8)
+ax[2].set_xlabel("TOF bin")
+ax[2].set_ylabel("difference to the Gaussian projection")
+ax[2].legend(loc="lower left")
+ax[2].set_title("(c) differences to 1.")
+fig.show()
+
+# %%
+# - **1. and 2.** give the same projection (up to float32 rounding and the resolution of the
+#   table): a table of a Gaussian reproduces the Gaussian kernel.
+# - **3.** has the same FWHM, but its wide tails move counts from the peaks of the TOF
+#   profile into the neighboring TOF bins (and further out). The sum over all TOF bins is
+#   the non-TOF projection, as for every kernel, as long as the TOF bins cover the kernel
+#   of every image sample: here, the 45 TOF bins (±180 mm around the LOR center) miss the
+#   outermost part of the ±94 mm tails of the samples at the edge of the disk, so the sum
+#   is 0.01 % smaller.
+# - **Table range:** the support ``u_max - u_min`` should only cover the region where the
+#   kernel is not (practically) zero: the projectors handle TOF windows of up to 64 TOF bins
+#   (here: ±9 s = ±94 mm, i.e. 24 TOF bins of 8 mm).
