@@ -3,7 +3,7 @@
 auto_examples/
 gen_modules/
 _build/
-_build_doxygen/
+_build_doxygen*/
 _templates/
 sg_execution_times.rst
 

@@ -9,7 +9,14 @@ from sphinx_gallery.sorting import FileNameSortKey
 
 # Anchor all build-directory paths to conf.py's own location so sphinx-build
 # can be invoked from any working directory (e.g. the project root on RTD).
-_BUILD_DOXYGEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_build_doxygen")
+# The CMake build directory with the Doxygen XML and the parallelproj_core module
+# (default: docs/_build_doxygen, CMake preset "docs"). LIBPARALLELPROJ_DOCS_BUILD_DIR
+# selects another one, e.g. docs/_build_doxygen_cuda13 (CUDA build, `pixi run docs-gpu`);
+# relative paths are relative to the repository root.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_BUILD_DOXYGEN = os.path.join(
+    _REPO_ROOT, os.environ.get("LIBPARALLELPROJ_DOCS_BUILD_DIR", os.path.join("docs", "_build_doxygen"))
+)
 
 # Add the build directory to the path so we can import the Python module
 sys.path.insert(0, _BUILD_DOXYGEN)
@@ -52,15 +59,17 @@ extensions = [
 ]
 
 templates_path = ["_templates"]
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "examples/README.rst"]
+exclude_patterns = ["_build", "_build_doxygen*", "Thumbs.db", ".DS_Store", "examples/README.rst"]
 bibtex_bibfiles = ["refs.bib"]
 
 sphinx_gallery_conf = {
     "examples_dirs": ["examples"],
     "gallery_dirs": ["auto_examples"],
     # examples are executed when the docs are built, except those with "gpu" in the
-    # file name (no GPU on the docs build servers): they are shown without output
-    "filename_pattern": r"[\\/]\d{2,3}_(?![^\\/]*gpu)[^\\/]*\.py$",
+    # file name (no GPU on the docs build servers): they are shown without output.
+    # BUILD_ALL_EXAMPLES=1 (set by `pixi run docs-gpu`) executes all of them.
+    "filename_pattern": (r"[\\/]\d{2,3}_[^\\/]*\.py$" if os.environ.get("BUILD_ALL_EXAMPLES") == "1"
+                         else r"[\\/]\d{2,3}_(?![^\\/]*gpu)[^\\/]*\.py$"),
     "ignore_pattern": r"(^|[\\/])(gpu_)?utils\.py$",
     "plot_gallery": True,
     "within_subsection_order": FileNameSortKey,

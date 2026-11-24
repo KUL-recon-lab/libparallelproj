@@ -153,7 +153,20 @@ pixi run -e docs build-docs
 ```
 
 This runs the full chain: CMake configure → Doxygen XML → full project build → `sphinx-build`.
-The output is written to `docs/_build/html`.
+The output is written to `docs/_build/html`. This is a CPU build of `parallelproj_core` (as on
+Read the Docs), and the examples with `gpu` in their file name are not executed.
+
+**On a system with an NVIDIA GPU** (CUDA 13 driver; one GPU is enough):
+
+```bash
+pixi run docs-gpu          # docs with a CUDA build (preset docs-cuda13), executing ALL examples
+pixi run run-examples-gpu  # every example as a standalone script, pass/fail + run time
+```
+
+`docs-gpu` writes to `docs/_build/html-gpu`; the CUDA build lives in `docs/_build_doxygen_cuda13`.
+It first removes the generated gallery pages (`pixi run -e docs clean-gallery`), so all examples
+run again and no pages of renamed or removed examples remain.
+`pixi run -e docs run-examples` runs all examples as scripts with the CPU build.
 
 **Without pixi:** install the documentation dependencies and run:
 
