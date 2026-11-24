@@ -12,9 +12,13 @@ Installation
 
    Starting with version 2.0.0, ``libparallelproj`` focuses exclusively on the core projection functions and their APIs. The ``parallelproj-core`` package provides the minimal Python API to the core projectors using the stable Python ABI (python-abi3), ensuring compatibility across Python versions, without the need for recompilation.
 
-   Future versions of the existing ``parallelproj`` python package (v>= 2.0) will build upon ``parallelproj-core`` as the standard API to the projectors, providing higher-level tools for scanner geometry, sinogram handling, and image reconstruction.
+   The ``parallelproj`` python package (version 2.0 and later) builds upon ``parallelproj-core`` as the standard API to the projectors, providing higher-level tools for scanner geometry, sinogram handling, and image reconstruction.
 
-   The project consolidation provides a cleaner separation of concerns and improved maintainability. Version 2.0.0 and later are the recommended versions for all new projects and updates.
+   The project consolidation provides a cleaner separation of concerns and improved maintainability.
+
+.. note::
+
+   **Version 3.0** changes the C ABI (new trailing ``stream`` parameter of all projector functions, shared library ``libparallelproj.so.3``): programs built against 2.x have to be rebuilt, their source code compiles unchanged. Python code works unchanged. See "Upgrading from 2.x" in the :doc:`changelog`.
 
 
 Install pre-compiled package from conda-forge
@@ -32,13 +36,13 @@ C-API only
 
 		.. code-block:: bash
 
-			mamba create -n my_new_env -c conda-forge "libparallelproj>=2"
+			mamba create -n my_new_env -c conda-forge "libparallelproj>=3"
 
 	.. tab-item:: conda
 
 		.. code-block:: bash
 
-			conda create -n my_new_env -c conda-forge "libparallelproj>=2"
+			conda create -n my_new_env -c conda-forge "libparallelproj>=3"
 
 .. note::
 
@@ -52,19 +56,19 @@ C-API only
 
 		.. code-block:: bash
 
-			mamba create -n my_new_env -c conda-forge cuda-version=12.9 "libparallelproj>=2"
+			mamba create -n my_new_env -c conda-forge cuda-version=12.9 "libparallelproj>=3"
 
 	.. tab-item:: CUDA 13.x
 
 		.. code-block:: bash
 
-			mamba create -n my_new_env -c conda-forge cuda-version=13 "libparallelproj>=2"
+			mamba create -n my_new_env -c conda-forge cuda-version=13 "libparallelproj>=3"
 
 	.. tab-item:: CPU
 
 		.. code-block:: bash
 
-			mamba create -n my_new_env -c conda-forge "libparallelproj>=2=cpu*"
+			mamba create -n my_new_env -c conda-forge "libparallelproj>=3=cpu*"
 
 
 Python API (includes C-API)
