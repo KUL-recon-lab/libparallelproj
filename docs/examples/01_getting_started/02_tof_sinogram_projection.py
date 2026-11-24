@@ -116,4 +116,6 @@ fig.show()
 # The TOF profile shows where along the LOR the activity is: the plateau of the disk (value 1)
 # and the peak of the large hot spot (value 4) closer to ``lor_end``. For a whole
 # TOF sinogram, the arrays simply have one row per LOR. How the TOF weights are computed (and
-# how ``num_sigmas`` and the TOF bin width change them) is explained in :doc:`/theory/tof`.
+# how ``num_sigmas`` and the TOF bin width change them) is shown in
+# :ref:`sphx_glr_auto_examples_02_projector_properties_02_tof_kernel.py` (theory:
+# :doc:`/theory/tof`).

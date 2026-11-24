@@ -181,7 +181,9 @@ Changed
 
 * **Example gallery reorganized** into three sections: "Getting started" (non-TOF, TOF
   sinogram and TOF listmode projections with a 2D geometry, and a new example on the
-  conventions of the arguments), "What the projectors compute" and "PyTorch, GPUs and
+  conventions of the arguments), "What the projectors compute" (new examples on line
+  integrals and the adjointness of all projector pairs, and on the TOF kernel: truncation
+  with ``num_sigmas``, TOF bin width, sum over the TOF bins) and "PyTorch, GPUs and
   performance". Complete reconstructions are shown in the examples of parallelproj.
   (`#57 <https://github.com/KUL-recon-lab/libparallelproj/issues/57>`_)
 
