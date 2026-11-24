@@ -9,12 +9,15 @@ samples are distributed across all GPUs, projected with the TOF listmode project
 :func:`parallelproj_core.joseph3d_tof_lm_back`, and used in a training step with the
 Poisson listmode log-likelihood.
 
-Compared to the sinogram examples, three things are new:
+Compared to the sinogram example, four things are new:
 
 - the event lists of the samples have **different lengths**, so they cannot be stacked
   into one tensor: every sample keeps its own event tensors on its GPU,
 - the samples are assigned to the GPUs such that every GPU gets about the **same number
   of events** (the projection time is roughly proportional to the number of events),
+- the events of every sample are **sorted once** (see
+  :ref:`sphx_glr_auto_examples_03_pytorch_gpus_performance_04_tof_listmode_event_order.py`),
+  which makes the listmode projections on GPUs much faster,
 - the listmode data fidelity needs the **sensitivity image** (the back projection of all
   possible LORs), computed once per GPU.
 
@@ -28,6 +31,7 @@ Compared to the sinogram examples, three things are new:
 # %%
 import torch
 import parallelproj_core
+# sphinx_gallery_thumbnail_path = "_static/figures/lm_load_balancing.png"
 # sphinx_gallery_start_ignore
 # the helper modules (utils.py, gpu_utils.py) are in the parent directory (docs/examples)
 import pathlib, sys
@@ -103,7 +107,15 @@ print("events per sample:", [e["tof_bin"].shape[0] for e in events])
 # The time of a listmode projection is roughly proportional to the number of events.
 # Assigning "2 samples per GPU" could give one GPU much more work than another, and
 # all GPUs would wait for the slowest one. A simple greedy assignment (largest sample
-# first, to the GPU with the fewest events so far) balances the load.
+# first, to the GPU with the fewest events so far) balances the load:
+#
+# .. figure:: /_static/figures/lm_load_balancing.svg
+#    :width: 100%
+#    :alt: assignment of samples with different numbers of events to two GPUs
+#
+#    Six samples with 1.2 to 3.6 million events on two GPUs. (a) Alternating assignment:
+#    GPU 0 gets 9.5 million events, GPU 1 only 4.5 million, and the batch is done after
+#    9.5. (b) Greedy assignment: 6.9 and 7.1 million events, the batch is done after 7.1.
 
 order = sorted(range(batch_size), key=lambda b: -events[b]["tof_bin"].shape[0])
 assignment = {d: [] for d in devices}
@@ -122,6 +134,29 @@ for d in devices:
     for b in assignment[d]:
         ev = {k: v.to(d) for k, v in events[b].items()}
         samples.append((d, images[b].to(d), ev))
+
+# %%
+# Sort the events of every sample (once)
+# --------------------------------------
+# Sorting the events by :func:`parallelproj_core.tof_lm_sort_key` puts events whose TOF
+# bins are close to each other in the image next to each other in the event list, so the
+# GPU threads of a warp read and write the same image region. Every sample is sorted once,
+# on its GPU, before it is used (e.g. in every iteration or epoch). All per-event arrays
+# must be reordered consistently; the order of the events does not change the result of a
+# listmode reconstruction.
+
+
+def sort_events(ev, d):
+    c = per_gpu[d]
+    key = torch.zeros(ev["tof_bin"].shape[0], dtype=torch.int64, device=d)
+    parallelproj_core.tof_lm_sort_key(ev["lor_start"], ev["lor_end"], c["img_origin"], c["voxel_size"], key,
+                                      tof_bin_width, c["tof_center_offset"], ev["tof_bin"], num_tof_bins)
+    order = torch.argsort(key)
+    return {k: v[order].contiguous() for k, v in ev.items()}
+
+
+samples_unsorted = samples
+samples = [(d, x, sort_events(ev, d)) for d, x, ev in samples_unsorted]
 
 # %%
 # TOF listmode forward and back projection of one sample
@@ -182,6 +217,13 @@ rel_diff = max(
     float((a.cpu() - b.cpu()).abs().max() / b.cpu().abs().max()) for a, b in zip(res_sync, res_async)
 )
 print(f"max. relative difference synchronous vs. asynchronous: {rel_diff:.2e}")
+
+# %%
+# The same (asynchronous) with the events in their original, random order, to see the
+# gain from sorting:
+
+t_unsorted = best_time(lambda: ratio_backprojection(samples_unsorted, use_streams=True), devices)
+print(f"  asynchronous, events not sorted:     {t_unsorted:.3f} s  ->  sorting is {t_unsorted / t_async:.1f}x faster")
 
 # %%
 # Autograd layer with event lists

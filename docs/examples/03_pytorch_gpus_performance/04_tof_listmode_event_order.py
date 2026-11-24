@@ -26,7 +26,6 @@ This example shows
 """
 
 # %%
-import importlib.util
 import time
 
 import numpy as np
@@ -40,17 +39,10 @@ try:
 except NameError:  # run by sphinx-gallery: docs/conf.py adds docs/examples to the path
     pass
 # sphinx_gallery_end_ignore
-from utils import to_numpy
+from utils import COLORS, array_backend, set_style, to_numpy
 
-if parallelproj_core.cuda_enabled == 1 and importlib.util.find_spec("cupy") is not None:
-    import array_api_compat.cupy as xp
-
-    dev = xp.cuda.Device(0)
-else:
-    import array_api_compat.numpy as xp
-
-    dev = "cpu"
-
+xp, dev = array_backend()  # CuPy on the GPU (CUDA build) or NumPy on the CPU
+set_style()
 print(f"parallelproj_core {parallelproj_core.__version__}, using {xp.__name__} on {dev}")
 
 # %%
@@ -186,13 +178,14 @@ for k, (title, (s, e, tb)) in enumerate(
 ):
     c = tof_centers(s[start:start + 96, :], e[start:start + 96, :], tb[start:start + 96])
     for w in range(3):
-        ax[k].plot(c[32 * w:32 * (w + 1), 0], c[32 * w:32 * (w + 1), 1], "o", ms=4, label=f"warp {w + 1}")
-    ax[k].add_patch(plt.Circle((0, 0), phantom_radius, fill=False, color="0.5"))
-    ax[k].set_title(title)
+        ax[k].plot(c[32 * w:32 * (w + 1), 0], c[32 * w:32 * (w + 1), 1], "o", ms=4,
+                   color=[COLORS["blue"], COLORS["orange"], COLORS["green"]][w], label=f"warp {w + 1}")
+    ax[k].add_patch(plt.Circle((0, 0), phantom_radius, fill=False, color=COLORS["gray"]))
+    ax[k].set_title(f"({'ab'[k]}) {title}")
     ax[k].set_aspect("equal")
     ax[k].set_xlabel("x [mm]")
 ax[0].set_ylabel("y [mm]")
-ax[0].legend(loc="upper right", fontsize="small")
+ax[0].legend(loc="upper right")
 fig.show()
 
 # %%
