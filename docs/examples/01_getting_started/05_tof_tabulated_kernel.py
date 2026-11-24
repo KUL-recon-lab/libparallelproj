@@ -157,10 +157,20 @@ parallelproj_core.joseph3d_tof_sino_back_tab(lor_start, lor_end, back, image_ori
 print(f"<A x, y> = {float(xp.sum(p_tail * y)):.4f},  <x, A^T y> = {float(xp.sum(image * back)):.4f}")
 
 # %%
-uu = np.linspace(-80, 80, 1601)
-# both kernels normalized to their maximum: the same FWHM = the same width at 0.5
-k_gauss = np.where(np.abs(uu) <= 3 * sigma, np.exp(-0.5 * (uu / sigma) ** 2), np.nan)
-k_tail = np.where(np.abs(uu) <= 9 * s_core, mixture_pdf(uu, s_core) / mixture_pdf(0.0, s_core), np.nan)
+uu = np.linspace(-110, 110, 2201)  # covers the support of both kernels (+-3 sigma, +-9 s)
+# The kernels as the projectors use them: densities [1/mm] with integral 1 over their range
+# (the projectors normalize every kernel over its support: the Gaussian truncated at 3 sigma,
+# the table by F(u_max) - F(u_min)).
+gauss_norm = math.erf(3 / math.sqrt(2))  # integral of the Gaussian over -3 sigma ... 3 sigma
+k_gauss = np.where(np.abs(uu) <= 3 * sigma,
+                   np.exp(-0.5 * (uu / sigma) ** 2) / (sigma * math.sqrt(2 * math.pi) * gauss_norm), np.nan)
+tail_norm = cdf_tail[-1] - cdf_tail[0]  # integral of the core + tail density over its table range
+k_tail = np.where(np.abs(uu) <= 9 * s_core, mixture_pdf(uu, s_core) / tail_norm, np.nan)
+du = uu[1] - uu[0]
+print(f"integral of the kernels (as used by the projectors): Gaussian {np.nansum(k_gauss) * du:.4f}, "
+      f"core + tail {np.nansum(k_tail) * du:.4f}")
+max_gauss = 1 / (sigma * math.sqrt(2 * math.pi) * gauss_norm)
+max_tail = mixture_pdf(0.0, s_core) / tail_norm
 bins = np.arange(num_tof_bins)
 pg, pgt, pt = to_numpy(p_gauss)[0], to_numpy(p_gauss_tab)[0], to_numpy(p_tail)[0]
 cg, ct = COLORS["blue"], COLORS["orange"]
@@ -168,27 +178,29 @@ cg, ct = COLORS["blue"], COLORS["orange"]
 fig, ax = plt.subplots(2, 2, figsize=(13, 9.5), layout="constrained")
 for a, log in [(ax[0, 0], False), (ax[0, 1], True)]:
     a.plot(uu, k_gauss, color=cg, label=f"Gaussian, σ = {sigma:g} mm (truncated at 3σ)")
-    a.plot(uu, k_tail, color=ct, label="core + tail")
-    # FWHM (the same for both) and FWTM (different): horizontal bars at 0.5 and 0.1
-    a.hlines(0.5, -0.5 * fwhm_gauss, 0.5 * fwhm_gauss, color=COLORS["gray"], lw=1.5)
-    a.text(0, 0.53 if not log else 0.56, f"FWHM {fwhm_gauss:.1f} mm (both)", ha="center", va="bottom", fontsize=8.5,
+    a.plot(uu, k_tail, color=ct, label="core + tail (same FWHM)")
+    a.fill_between(uu, k_tail, color=ct, alpha=0.08, lw=0)
+    a.fill_between(uu, k_gauss, color=cg, alpha=0.08, lw=0)
+    # FWHM (the same for both) and FWTM (different): bars at half / a tenth of each kernel's
+    # own maximum, with ticks at their ends (in the color of the kernel)
+    for w_h, w_t, m, c in [(fwhm_gauss, fwtm_gauss, max_gauss, cg), (fwhm_gauss, fwtm_tail, max_tail, ct)]:
+        for w, frac in [(w_h, 0.5), (w_t, 0.1)]:
+            a.hlines(frac * m, -0.5 * w, 0.5 * w, color=c, lw=1.2)
+            a.plot([-0.5 * w, 0.5 * w], [frac * m, frac * m], "|", ms=10, mew=2, color=c)
+    a.text(45, 0.022 if not log else 0.02,
+           f"FWHM (at half maximum):\n{fwhm_gauss:.1f} mm both\n\nFWTM (at a tenth of the maximum):\n"
+           f"{fwtm_gauss:.1f} mm Gaussian\n{fwtm_tail:.1f} mm core + tail", va="center", fontsize=8.5,
            color=COLORS["gray"])
-    # FWTM bars, with ticks at their ends (in the color of the kernel)
-    for w, c, lw in [(fwtm_tail, ct, 1.2), (fwtm_gauss, cg, 1.2)]:
-        a.hlines(0.1, -0.5 * w, 0.5 * w, color=c, lw=lw)
-        a.plot([-0.5 * w, 0.5 * w], [0.1, 0.1], "|", ms=12, mew=2, color=c)
-    a.text(42, 0.3 if log else 0.28, f"FWTM (at 0.1):\n{fwtm_gauss:.1f} mm Gaussian\n{fwtm_tail:.1f} mm core + tail",
-           va="center", fontsize=8.5, color=COLORS["gray"])
     a.set_xlabel("u: distance from the annihilation point [mm]")
     if log:
         a.set_yscale("log")
-        a.set_ylim(3e-4, 2)
-        a.set_ylabel("kernel / its maximum (log scale)")
+        a.set_ylim(1e-5, 0.1)
+        a.set_ylabel("kernel density [1/mm] (log scale)")
         a.set_title("(b) the same on a log scale: the tails")
     else:
-        a.set_ylim(0, 1.08)
-        a.set_ylabel("kernel / its maximum")
-        a.set_title("(a) the TOF kernels: same FWHM, different FWTM")
+        a.set_ylim(0, 0.039)
+        a.set_ylabel("kernel density [1/mm]")
+        a.set_title("(a) the TOF kernels: area 1, same FWHM, different FWTM")
         a.legend(loc="upper left")
 
 ax[1, 0].plot(bins, pg, "o", ms=6, mfc="none", color=cg, label="1. Gaussian")
@@ -211,13 +223,14 @@ fig.show()
 # %%
 # - **1. and 2.** give the same projection (up to float32 rounding and the resolution of the
 #   table): a table of a Gaussian reproduces the Gaussian kernel.
-# - **3.** has the same FWHM, but a wider FWTM (full width at tenth maximum): its tails
-#   move counts from the peaks of the TOF
-#   profile into the neighboring TOF bins (and further out). The sum over all TOF bins is
+# - **3.** has the same FWHM, but a wider FWTM (full width at tenth maximum). Both kernels
+#   have the area 1 (the projectors normalize every kernel over its support), so the kernel
+#   with tails has a lower peak: its tails move counts from the peaks of the TOF profile
+#   into the neighboring TOF bins (and further out). The sum over all TOF bins is
 #   the non-TOF projection, as for every kernel, as long as the TOF bins cover the kernel
 #   of every image sample: here, the 45 TOF bins (±180 mm around the LOR center) miss the
-#   outermost part of the ±94 mm tails of the samples at the edge of the disk, so the sum
+#   outermost part of the ±101 mm tails of the samples at the edge of the disk, so the sum
 #   is 0.01 % smaller.
 # - **Table range:** the support ``u_max - u_min`` should only cover the region where the
 #   kernel is not (practically) zero: the projectors handle TOF windows of up to 64 TOF bins
-#   (here: ±9 s = ±94 mm, i.e. 24 TOF bins of 8 mm).
+#   (here: ±9 s = ±101 mm, i.e. 25 TOF bins of 8 mm).
